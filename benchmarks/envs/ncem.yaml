@@ -1,0 +1,12 @@
+name: ncem
+channels:
+  - defaults
+dependencies:
+  - python=3.8
+  - pip
+  - pip:
+      - ncem
+      - pandas
+      - scanpy
+      - matplotlib
+      - numpy

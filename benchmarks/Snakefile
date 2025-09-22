@@ -1,0 +1,538 @@
+# Snakefile for running the baseline models
+
+"""
+Workflow Structure:
+
+ +-------------------------------------------------------------------------------------------------------------------------------- generate_dataset
+ |                                                                                                                                       |
+ |                                               +---------------------------------------------------------------+-----------------------+-------------------+-------------------------------------------+
+ |                                               |                                                               |                                           |                                           |
+ |                                               v                                                               v                                           v                                           v
+ |                                        train_amici_model                                              train_gitiii_model                       train_ncem_model (niche size: 10, 15, 20)      run_nichede_gene_task_model (niche size: 10, 15, 20)
+ |                                               |                                                               |                                           |                                           |
+ |                                               +--> run_amici_gene_task                                        +--> run_gitiii_gene_task                   +--> run_ncem_gene_task                     |
+ |                                               |     |                                                         |     |                                           |                                     |
+ |                                               |     +--> run_amici_gene_task_pr                               |     +--> run_gitiii_gene_task_pr                +--> run_ncem_gene_task_pr            +--> run_nichede_gene_task_pr
+ |                                               |     |              |                                          |     |            |                              |          |                          |        |
+ |                                               |     |              +------------------------------------------------|------------+------------------------------|----------+--------------------------|--------+-----> plot_gene_task_pr_curves --> plot_gene_task_boxplots
+ |                                               |     |                                                         |     |                                           |                                     |
+ +-- run_ground_truth_genes ---------------------------+---------------------------------------------------------------+-------------------------------------------+-------------------------------------+
+ |                                               |                                                               |
+ |                                               +--> run_amici_neighbor_interaction_task                        +--> run_gitiii_neighbor_interaction_task
+ |                                               |     |                                                         |     |
+ |                                               |     +--> run_amici_neighbor_interaction_task_pr               |     +--> run_gitiii_neighbor_interaction_task_pr
+ |                                               |     |            |                                            |     |          |
+ |                                               |     |            +--------------------------------------------------|----------+-----> plot_neighbor_interaction_task_pr_curves --> plot_neighbor_interaction_task_boxplots
+ |                                               |     |                                                         |     |
+ +-- run_ground_truth_neighbor_interactions -----------+---------------------------------------------------------------+
+ |                                               |                                                               |
+ |                                               +--> run_amici_receiver_subtype_task                            +--> run_gitiii_receiver_subtype_task
+ |                                                     |                                                               |
+ |                                                     +--> run_amici_receiver_subtype_task_pr                         +--> run_gitiii_receiver_subtype_task_pr
+ |                                                     |            |                                                  |          |
+ |                                                     |            +--------------------------------------------------|----------+-----> plot_receiver_subtype_task_pr_curves --> plot_receiver_subtype_task_boxplots
+ |                                                     |                                                               |
+ +-- run_ground_truth_receiver_subtypes ---------------+---------------------------------------------------------------+
+"""
+
+import os
+import itertools
+
+configfile: "benchmark_config.yaml"
+
+def get_gene_task_done_files(datasets_to_run):
+    done_files = []
+    for dataset in datasets_to_run:
+        dataset_config = config["datasets"][dataset]
+        # Generate all combinations of seeds and interaction names using itertools.product
+        for seed in dataset_config["seeds"]:
+            done_files.append(expand("results/{dataset}_{seed}/gene_task_done.txt", dataset=dataset, seed=seed))
+    return done_files
+
+def get_neighbor_interaction_task_done_files(datasets_to_run):
+    done_files = []
+    for dataset in datasets_to_run:
+        dataset_config = config["datasets"][dataset]
+        # Generate all combinations of seeds and interaction names using itertools.product
+        for seed in dataset_config["seeds"]:
+            done_files.append(expand("results/{dataset}_{seed}/neighbor_interaction_task_done.txt", dataset=dataset, seed=seed))
+    return done_files
+
+def get_receiver_subtype_task_done_files(datasets_to_run):
+    done_files = []
+    for dataset in datasets_to_run:
+        dataset_config = config["datasets"][dataset]
+        # Generate all combinations of seeds and interaction names using itertools.product
+        for seed in dataset_config["seeds"]:
+            done_files.append(expand("results/{dataset}_{seed}/receiver_subtype_task_done.txt", dataset=dataset, seed=seed))
+    return done_files
+
+def get_boxplot_done_files(datasets_to_run):
+    done_files = []
+    for dataset in datasets_to_run:
+        done_files.append(expand("results/{dataset}/gene_boxplots_done.txt", dataset=dataset))
+        done_files.append(expand("results/{dataset}/neighbor_interaction_boxplots_done.txt", dataset=dataset))
+        done_files.append(expand("results/{dataset}/receiver_subtype_boxplots_done.txt", dataset=dataset))
+    return done_files
+
+def get_length_scale_boxplot_done_files(datasets_to_run):
+    done_files = []
+    for dataset in datasets_to_run:
+        dataset_config = config["datasets"][dataset]
+        for seed in dataset_config["seeds"]:
+            done_files.append(expand("results/{dataset}_{seed}/length_scale_boxplots_done.txt", dataset=dataset, seed=seed))
+    return done_files
+
+def get_ncem_gene_task_pr_files(dataset):
+    pr_files = []
+    dataset_config = config["datasets"][dataset]
+    for seed in dataset_config["seeds"]:
+        for ncem_niche_size in dataset_config["ncem_niche_sizes"]:
+            pr_files.extend(expand("results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_pr.csv", dataset=dataset, seed=seed, ncem_niche_size=ncem_niche_size))
+    return pr_files
+
+def get_nichede_gene_task_pr_files(dataset):
+    pr_files = []
+    dataset_config = config["datasets"][dataset]
+    for seed in dataset_config["seeds"]:
+        for nichede_niche_size in dataset_config["nichede_niche_sizes"]:
+            pr_files.extend(expand("results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_pr.csv", dataset=dataset, seed=seed, nichede_niche_size=nichede_niche_size))
+    return pr_files
+
+def get_labels_key(dataset):
+    return config["datasets"][dataset]["labels_key"]
+
+rule all:
+    input:
+        get_gene_task_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        ),
+        get_neighbor_interaction_task_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        ),
+        get_receiver_subtype_task_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        ),
+        get_boxplot_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        ),
+        get_length_scale_boxplot_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        ),
+
+rule generate_dataset:
+    conda:
+        "amici"
+    output:
+        os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    script:
+        "generate_dataset.py"
+
+rule run_ground_truth_genes:
+    conda:
+        "envs/basic.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/ground_truth_genes.csv",
+    script:
+        "gene_task/generate_gt_gene_scores.py"
+
+rule run_ground_truth_neighbor_interactions:
+    conda:
+        "amici"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv"
+    script:
+        "neighbor_interaction_task/generate_gt_neighbor_interaction_scores.py"
+
+rule run_ground_truth_receiver_subtypes:
+    conda:
+        "envs/basic.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv"
+    script:
+        "receiver_subtype_task/generate_gt_receiver_subtype_scores.py"
+
+# Train the AMICI, NCEM, GITIII and CGCom models
+rule train_amici_model:
+    conda:
+        "amici"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
+        "results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt",
+        "results/{dataset}_{seed}/amici_{dataset}_{seed}_mse_loss.txt"
+    script:
+        "train_amici_model.py"
+
+rule train_ncem_model:
+    conda:
+        "envs/ncem.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt",
+    params:
+        labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
+    shell:
+        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size}"
+
+rule train_gitiii_model:
+    conda:
+        "envs/gitiii.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/saved_models/GRIT_best.pth",
+    script:
+        "train_gitiii_model.py"
+
+rule train_cgcom_model:
+    conda:
+        "envs/cgcom.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt",
+    script:
+        "train_cgcom_model.py"
+
+# Run AMICI model for gene and neighbor interaction tasks
+rule run_amici_gene_task:
+    conda:
+        "amici"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
+        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+    output:
+        "results/{dataset}_{seed}/amici_gene_task_scores.csv",
+    script:
+        "gene_task/generate_amici_scores.py"
+
+rule run_amici_neighbor_interaction_task:
+    conda:
+        "amici"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
+        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+    output:
+        "results/{dataset}_{seed}/amici_neighbor_interaction_scores.csv",
+    script:
+        "neighbor_interaction_task/generate_amici_scores.py"
+
+rule run_amici_receiver_subtype_task:
+    conda:
+        "amici"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
+        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+    output:
+        "results/{dataset}_{seed}/amici_receiver_subtype_scores.csv",
+    script:
+        "receiver_subtype_task/generate_amici_scores.py"
+
+# Run NCEM model for gene and neighbor interaction tasks
+rule run_ncem_gene_task:
+    conda:
+        "envs/ncem.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        ncem_all_train_done_path="results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt"
+    output:
+        "results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv"
+    script:
+        "gene_task/generate_ncem_scores.py"
+
+# Run NicheDE model for gene task only
+rule run_nichede_gene_task_model:
+    conda:
+        "envs/nichede.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    output:
+        "results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv",
+    script:
+        "gene_task/generate_nichede_scores.R"
+
+# Run GITIII model for gene and neighbor interaction tasks
+rule run_gitiii_gene_task:
+    conda:
+        "envs/gitiii.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
+    output:
+        "results/{dataset}_{seed}/gitiii_gene_task_scores.csv"
+    script:
+        "gene_task/generate_gitiii_scores.py"
+
+rule run_gitiii_neighbor_interaction_task:
+    conda:
+        "envs/gitiii.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
+    output:
+        "results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+    script:
+        "neighbor_interaction_task/generate_gitiii_scores.py"
+
+rule run_gitiii_receiver_subtype_task:
+    conda:
+        "envs/gitiii.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
+    output:
+        "results/{dataset}_{seed}/gitiii_receiver_subtype_scores.csv"
+    script:
+        "receiver_subtype_task/generate_gitiii_scores.py"
+
+rule run_cgcom_neighbor_interaction_task:
+    conda:
+        "envs/cgcom.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"
+    output:
+        "results/{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv"
+    script:
+        "neighbor_interaction_task/generate_cgcom_scores.py"
+
+rule run_cgcom_receiver_subtype_task:
+    conda:
+        "envs/cgcom.yaml"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"
+    output:
+        "results/{dataset}_{seed}/cgcom_receiver_subtype_scores.csv"
+    script:
+        "receiver_subtype_task/generate_cgcom_scores.py"
+
+# Run PR curves for AMICI model for gene and neighbor interaction tasks
+rule run_amici_gene_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
+        amici_scores_path="results/{dataset}_{seed}/amici_gene_task_scores.csv"
+    output:
+        "results/{dataset}_{seed}/amici_gene_task_pr.csv",
+    script:
+        "gene_task/generate_amici_pr.py"
+
+rule run_amici_neighbor_interaction_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv",
+        amici_scores_path="results/{dataset}_{seed}/amici_neighbor_interaction_scores.csv",
+        gitiii_scores_path="results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+    output:
+        "results/{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv",
+    script:
+        "neighbor_interaction_task/generate_amici_pr.py"
+
+rule run_amici_receiver_subtype_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv",
+        amici_scores_path="results/{dataset}_{seed}/amici_receiver_subtype_scores.csv",
+    output:
+        "results/{dataset}_{seed}/amici_receiver_subtype_task_pr.csv",
+    script:
+        "receiver_subtype_task/generate_amici_pr.py"
+
+# Run PR curves for NCEM model for gene and neighbor interaction tasks
+rule run_ncem_gene_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
+        ncem_scores_path="results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv"
+    output:
+        "results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_pr.csv",
+    script:
+        "gene_task/generate_ncem_pr.py"
+
+# Run PR curves for NicheDE model for gene task only
+rule run_nichede_gene_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
+        nichede_scores_path="results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv"
+    output:
+        "results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_pr.csv",
+    script:
+        "gene_task/generate_nichede_pr.py"
+
+# Run PR curves for GITIII model for gene task, neighbor interaction task and receiver subtype task
+rule run_gitiii_gene_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
+        gitiii_scores_path="results/{dataset}_{seed}/gitiii_gene_task_scores.csv"
+    output:
+        "results/{dataset}_{seed}/gitiii_gene_task_pr.csv",
+    script:
+        "gene_task/generate_gitiii_pr.py"
+
+rule run_gitiii_neighbor_interaction_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv",
+        gitiii_scores_path="results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+    output:
+        "results/{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",
+    script:
+        "neighbor_interaction_task/generate_gitiii_pr.py"
+
+rule run_gitiii_receiver_subtype_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv",
+        gitiii_scores_path="results/{dataset}_{seed}/gitiii_receiver_subtype_scores.csv"
+    output:
+        "results/{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv",
+    script:
+        "receiver_subtype_task/generate_gitiii_pr.py"
+
+# Run PR curves for CGCom model for neighbor and receiver interaction tasks
+rule run_cgcom_neighbor_interaction_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv",
+        cgcom_scores_path="results/{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv"
+    output:
+        "results/{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",
+    script:
+        "neighbor_interaction_task/generate_cgcom_pr.py"
+
+rule run_cgcom_receiver_subtype_task_pr:
+    conda:
+        "envs/basic.yaml"
+    input:
+        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv",
+        cgcom_scores_path="results/{dataset}_{seed}/cgcom_receiver_subtype_scores.csv"
+    output:
+        "results/{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv",
+    script:
+        "receiver_subtype_task/generate_cgcom_pr.py"
+
+# Plot PR curves for all models for gene task
+rule plot_gene_task_pr_curves:
+    conda:
+        "envs/basic.yaml"
+    input:
+        amici_pr_path="results/{dataset}_{seed}/amici_gene_task_pr.csv",
+        ncem_pr_paths=lambda wildcards: get_ncem_gene_task_pr_files(wildcards.dataset),
+        nichede_pr_paths=lambda wildcards: get_nichede_gene_task_pr_files(wildcards.dataset),
+        gitiii_pr_path="results/{dataset}_{seed}/gitiii_gene_task_pr.csv",
+        gt_genes_path="results/{dataset}_{seed}/ground_truth_genes.csv"
+    output:
+        "results/{dataset}_{seed}/baseline_pr_curves_gene_task.png",
+        "results/{dataset}_{seed}/gene_task_done.txt"
+    script:
+        "gene_task/plot_pr_curves.py"
+
+# Plot PR curves for all models for neighbor interaction task
+rule plot_neighbor_interaction_task_pr_curves:
+    conda:
+        "envs/basic.yaml"
+    input:
+        amici_pr_path="results/{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv",
+        gitiii_pr_path="results/{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",
+        cgcom_pr_path="results/{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",
+        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv"
+    output:
+        "results/{dataset}_{seed}/baseline_pr_curves_neighbor_interaction_task.png",
+        "results/{dataset}_{seed}/neighbor_interaction_task_done.txt",
+    script:
+        "neighbor_interaction_task/plot_pr_curves.py"
+
+# Plot PR curves for all models for receiver subtype task
+rule plot_receiver_subtype_task_pr_curves:
+    conda:
+        "envs/basic.yaml"
+    input:
+        amici_pr_path="results/{dataset}_{seed}/amici_receiver_subtype_task_pr.csv",
+        gitiii_pr_path="results/{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv",
+        cgcom_pr_path="results/{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv",
+        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv"
+    output:
+        "results/{dataset}_{seed}/baseline_pr_curves_receiver_subtype_task.png",
+        "results/{dataset}_{seed}/receiver_subtype_task_done.txt",
+    script:
+        "receiver_subtype_task/plot_pr_curves.py"
+
+# Plot boxplots for the length scale for the AMICI model only
+rule plot_amici_length_scale_boxplots:
+    conda:
+        "amici"
+    input:
+        adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
+        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
+        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+    output:
+        "results/{dataset}_{seed}/length_scale_distribution.png",
+        "results/{dataset}_{seed}/length_scale_boxplots_done.txt"
+    script:
+        "length_scale_task/plot_kde.py"
+
+# Plot boxplots for the PR curves for the gene task
+rule plot_gene_task_boxplots:
+    conda:
+        "envs/basic.yaml"
+    input:
+        get_gene_task_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        )
+    output:
+        "results/{dataset}/baseline_auprc_boxplots_gene_task.png",
+        "results/{dataset}/gene_boxplots_done.txt"
+    script:
+        "gene_task/plot_boxplots.py"
+
+# Plot boxplots for the PR curves for the neighbor interaction task
+rule plot_neighbor_interaction_task_boxplots:
+    conda:
+        "envs/basic.yaml"
+    input:
+        get_neighbor_interaction_task_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        )
+    output:
+        "results/{dataset}/baseline_auprc_boxplots_neighbor_interaction_task.png",
+        "results/{dataset}/neighbor_interaction_boxplots_done.txt"
+    script:
+        "neighbor_interaction_task/plot_boxplots.py"
+
+# Plot boxplots for the PR curves for the receiver subtype task
+rule plot_receiver_subtype_task_boxplots:
+    conda:
+        "envs/basic.yaml"
+    input:
+        get_receiver_subtype_task_done_files(
+            config.get("datasets_to_run", list(config["datasets"].keys()))
+        )
+    output:
+        "results/{dataset}/baseline_auprc_boxplots_receiver_subtype_task.png",
+        "results/{dataset}/receiver_subtype_boxplots_done.txt"
+    script:
+        "receiver_subtype_task/plot_boxplots.py"

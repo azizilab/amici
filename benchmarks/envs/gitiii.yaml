@@ -1,0 +1,14 @@
+name: gitiii
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - gitiii
+      - einops
+      - torch==2.3.0
+      - anndata
+      - numpy
+      - pandas
+      - scipy

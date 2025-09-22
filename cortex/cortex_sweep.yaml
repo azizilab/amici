@@ -1,0 +1,37 @@
+method: grid
+program: cortex_sweep_main.py
+parameters:
+  end_attention_penalty:
+    values:
+      - 1.0e-3
+      - 1.0e-2
+  attention_penalty_schedule:
+    values:
+      - [10, 20]
+      - [10, 30]
+      - [10, 40]
+  seed:
+    values:
+      - 4
+      - 7
+      - 13
+      - 18
+      - 21
+      - 22
+  value_l1_penalty_coef:
+    values:
+      - 1.0e-5
+      - 1.0e-3
+  batch_size:
+    values:
+      - 512
+      - 256
+  lr:
+    values:
+      - 1.0e-3
+  n_neighbors:
+    values:
+      - 50
+  penalty_flavor_params:
+    values:
+      - log

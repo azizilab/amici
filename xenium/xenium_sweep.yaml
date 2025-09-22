@@ -1,0 +1,39 @@
+method: grid
+program: xenium_sweep_main.py
+parameters:
+  end_attention_penalty:
+    values:
+      - 1.0e-3
+      # - 1.0e-2
+  attention_penalty_schedule:
+    values:
+      # - [5, 15]
+      - [10, 20]
+  seed:
+    values:
+      - 4
+      - 7
+      - 13
+      - 18
+      - 21
+      - 22
+      - 33
+      - 38
+      - 40
+      - 42
+  value_l1_penalty_coef:
+    values:
+      - 1.0e-5
+      # - 1.0e-3
+  batch_size:
+    values:
+      - 512
+  lr:
+    values:
+      - 1.0e-3
+  n_neighbors:
+    values:
+      - 50
+  penalty_flavor_params:
+    values:
+      - linear

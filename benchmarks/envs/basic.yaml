@@ -1,0 +1,16 @@
+name: gt_genes
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - scanpy
+      - anndata
+      - numpy<2
+      - pandas
+      - leidenalg
+      - scikit-misc
+      - igraph
+      - scipy<=1.12.0
+      - scvi-tools==1.2.2

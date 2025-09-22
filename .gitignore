@@ -1,0 +1,42 @@
+**/data/
+**/*saved_models/
+**/*figures/
+**/wandb/
+**/checkpoints/
+**/benchmarks/results**/
+**.pth
+**.csv
+!src/
+!tests/
+!.github/
+node_modules/
+
+# Temp files
+.DS_Store
+*~
+buck-out/
+
+# Compiled files
+.venv/
+__pycache__/
+.mypy_cache/
+.ruff_cache/
+.snakemake/
+
+# Distribution / packaging
+/build/
+/dist/
+/*.egg-info/
+
+# Tests and coverage
+/.pytest_cache/
+/.cache/
+/data/
+
+# docs
+/docs/generated/
+/docs/_build/
+
+# IDEs
+/.idea/
+/.vscode/

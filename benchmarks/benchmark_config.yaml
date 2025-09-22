@@ -1,0 +1,21 @@
+dir_path: "data/"
+datasets:
+  3ct_dataset_2way:
+    seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
+    labels_key: "leiden"
+    subtype_labels_key: "subtype"
+    ncem_niche_sizes: [10, 15, 20]
+    nichede_niche_sizes: [20, 200, 500]
+    gt_interactions:
+      interaction_1:
+        sender: "0"
+        receiver: "2"
+        interaction_subtype: "2_sub1"
+        neutral_subtype: "2_sub0"
+        length_scale: 10
+      interaction_2:
+        sender: "3"
+        receiver: "0"
+        interaction_subtype: "0_sub1"
+        neutral_subtype: "0_sub0"
+        length_scale: 20
