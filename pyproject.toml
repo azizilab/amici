@@ -2,6 +2,9 @@
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/amici"]
+
 [project]
 name = "amici-st"
 version = "0.1.0"
@@ -15,7 +18,7 @@ authors = [
 ]
 maintainers = [
     {name = "Justin Hong", email = "justin.hong@columbia.edu"},
-    {name = "Khushi Desai", email = "khushipdesai@gmail.com"},
+    {name = "Khushi Desai", email = "kpd2137@gmail.com"},
 ]
 urls.Source = "https://github.com/azizilab/amici"
 urls.Home-page = "https://github.com/azizilab/amici"
