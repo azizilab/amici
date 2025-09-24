@@ -14,21 +14,29 @@ Cross-attention-based cell-cell interaction inference from ST data.
 You need to have Python 3.10 or newer installed on your system. If you don't have
 Python installed, we recommend installing [Mambaforge](https://github.com/conda-forge/miniforge#mambaforge).
 
-<!--
 1) Install the latest release of `amici-st` from `PyPI <https://pypi.org/project/amici-st/>`_:
 
 ```bash
 pip install amici-st
 ```
--->
 
-Install the latest development version via the following command:
+Or install the latest development version via the following command:
 
 ```bash
 pip install git+https://github.com/azizilab/amici.git@main
 ```
 
-We plan on releasing AMICI on PyPI in the near future.
+2) Import `amici`
+
+```python
+import anndata
+from amici import AMICI
+
+adata = anndata.read_h5ad("./adata.h5ad")
+AMICI.setup_anndata(adata, labels_key="cell_type", coord_obsm_key="spatial")
+model = AMICI(adata, **model_params)
+model.train()
+```
 
 ## Documentation
 
