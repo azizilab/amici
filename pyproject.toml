@@ -3,7 +3,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = "amici"
+name = "amici-st"
 version = "0.1.0"
 description = "Cross-attention-based cell-cell interaction inference from ST data."
 readme = "README.md"
@@ -17,8 +17,8 @@ maintainers = [
     {name = "Justin Hong", email = "justin.hong@columbia.edu"},
     {name = "Khushi Desai", email = "khushipdesai@gmail.com"},
 ]
-urls.Source = "https://github.com/justjhong/amici"
-urls.Home-page = "https://github.com/justjhong/amici"
+urls.Source = "https://github.com/azizilab/amici"
+urls.Home-page = "https://github.com/azizilab/amici"
 dependencies = [
     "anndata",
     "jax==0.4.23",
