@@ -1,4 +1,4 @@
-# AMICI
+# AMICI: Attention Mechanism Interpretation of Cell-cell Interactions
 
 [![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
 
@@ -6,6 +6,8 @@
 [cc-by-nc-shield]: https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg
 
 Cross-attention-based cell-cell interaction inference from ST data.
+
+<img width="839" height="366" alt="amici_framework" src="https://github.com/user-attachments/assets/13b05cb1-d59a-4ef1-8abe-858c8414448e" />
 
 ## Installation
 
