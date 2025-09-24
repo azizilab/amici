@@ -2,6 +2,12 @@
 build-backend = "hatchling.build"
 requires = ["hatchling"]
 
+[tool.hatch.build]
+include = [
+    "src/amici/*.py",
+    "src/amici/**/*.py",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/amici"]
 
@@ -43,6 +49,8 @@ dependencies = [
     "openchord",
     # for debug logging (referenced from the issue template)
     "session-info",
+    # due to transformer-lens dependency
+    "pytest",
 ]
 
 [project.optional-dependencies]
@@ -65,7 +73,6 @@ doc = [
     "pandas",
 ]
 test = [
-    "pytest",
     "coverage",
 ]
 

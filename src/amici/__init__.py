@@ -6,4 +6,4 @@ from ._module import AMICIModule
 
 __all__ = ["AMICI", "AMICIModule", "NN_REGISTRY_KEYS"]
 
-__version__ = version("amici")
+__version__ = version("amici-st")
