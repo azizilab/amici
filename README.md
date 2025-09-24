@@ -44,7 +44,20 @@ Documentation and tutorials are coming soon!
 
 ## Citation
 
-> t.b.a
+If you find our work useful, please cite our preprint: https://www.biorxiv.org/content/10.1101/2025.09.22.677860v1
+
+_AMICI: Attention Mechanism Interpretation of Cell-cell Interactions_
+
+```
+@article{Hong2025.09.22.677860,
+    title = {AMICI: Attention Mechanism Interpretation of Cell-cell Interactions},
+    author = {Hong, Justin and Desai, Khushi and Nguyen, Tu Duyen and Nazaret, Achille and Levy, Nathan and Ergen, Can and Plitas, George and Azizi, Elham},
+    doi = {10.1101/2025.09.22.677860},
+	journal = {bioRxiv},
+	publisher = {Cold Spring Harbor Laboratory},
+	year = {2025},
+}
+```
 
 ## Disclaimer
 
