@@ -77,7 +77,16 @@ class AMICIAblationModule:
         cell_types = [cell_type] if cell_type is not None else adata.obs[_labels_key].unique()
 
         ablation_dfs = []
+        # Pre-compute cell type subset once
+        if ablated_neighbor_ct_sub is not None:
+            cell_type_sub = ablated_neighbor_ct_sub
+        elif ablated_neighbor_indices is not None:
+            cell_type_sub = ["ablated_indices"]
+        else:
+            cell_type_sub = _cell_types
+
         for cell_type in cell_types:
+            # Get base residuals once per cell type
             base_residuals, _ = cls._get_ct_residuals_for_ablated_head(
                 model,
                 cell_type,
@@ -86,13 +95,14 @@ class AMICIAblationModule:
                 ablated_neighbor_ct=None,
                 head_idx=head_idx,
             )
+
+            # Pre-compute cell count for z-value calculation
+            n_cells = len(adata[adata.obs[_labels_key] == cell_type])
+            sqrt_n_minus_2 = np.sqrt(n_cells - 2) if n_cells > 2 else 0
+
             ablation_residuals = {}
-            if ablated_neighbor_ct_sub is not None:
-                cell_type_sub = ablated_neighbor_ct_sub
-            elif ablated_neighbor_indices is not None:
-                cell_type_sub = ["ablated_indices"]
-            else:
-                cell_type_sub = _cell_types
+            gene_exp = None
+
             for ablated_neighbor_ct in cell_type_sub:
                 if ablated_neighbor_ct == "ablated_indices":
                     ablated_residuals, gene_exp = cls._get_ct_residuals_for_ablated_head(
@@ -112,45 +122,84 @@ class AMICIAblationModule:
                         ablated_neighbor_ct=ablated_neighbor_ct,
                         head_idx=head_idx,
                     )
-                ablation_residuals[f"{ablated_neighbor_ct}_ablation"] = (ablated_residuals**2 - base_residuals**2).mean(
-                    axis=0
-                )
+
+                # Vectorized calculations
+                base_squared = base_residuals.values**2
+                ablated_squared = ablated_residuals.values**2
+                ablation_residuals[f"{ablated_neighbor_ct}_ablation"] = (ablated_squared - base_squared).mean(axis=0)
+
                 # neighbor contribution = full prediction - prediction w/o neighbor ct
-                diff_residuals = base_residuals - ablated_residuals
+                diff_residuals = base_residuals.values - ablated_residuals.values
                 ablation_residuals[f"{ablated_neighbor_ct}_diff"] = diff_residuals.mean(axis=0)
 
                 if compute_z_value:
-                    z_scores = []
-                    for i in range(len(adata.var_names)):
-                        r = torch.corrcoef(
-                            torch.stack(
-                                (
-                                    torch.tensor(diff_residuals.abs().values[:, i]),
-                                    torch.tensor(gene_exp.values[:, i]),
-                                )
-                            )
-                        )[0, 1]
-                        n = len(adata[adata.obs[_labels_key] == cell_type])
-                        z_value = (r * ((n - 2) ** 0.5) / (1 - r**2) ** 0.5).numpy()
-                        if np.isnan(z_value) or np.isinf(z_value) or r == 1:
-                            z_value = 0
-                        z_scores.append(z_value)
-                    ablation_residuals[f"{ablated_neighbor_ct}_z_value"] = z_scores
-                    p_vals = 1 - norm.cdf(z_scores)
+                    diff_abs = np.abs(diff_residuals)
+                    gene_exp_values = gene_exp.values
+                    n_genes = diff_abs.shape[1]
 
-                    # Use statsmodels for Benjamini-Hochberg correction
+                    # Convert to torch tensors for vectorized correlation computation
+                    diff_abs_tensor = torch.tensor(diff_abs.T, dtype=torch.float32)  # Shape: (n_genes, n_cells)
+                    gene_exp_tensor = torch.tensor(gene_exp_values.T, dtype=torch.float32)  # Shape: (n_genes, n_cells)
+
+                    # Stack all genes for batch correlation computation
+                    # Shape: (2*n_genes, n_cells) - alternating diff_abs and gene_exp for each gene
+                    stacked_tensor = torch.stack([diff_abs_tensor, gene_exp_tensor], dim=1).reshape(2 * n_genes, -1)
+
+                    # Compute correlation matrix for all genes at once
+                    with torch.no_grad():
+                        corr_matrix = torch.corrcoef(stacked_tensor)
+
+                    # Extract correlations between diff_abs and gene_exp for each gene
+                    # Correlations are at positions [0,1], [2,3], [4,5], etc.
+                    correlation_indices = torch.arange(0, 2 * n_genes, 2)
+                    correlations = corr_matrix[correlation_indices, correlation_indices + 1]
+
+                    correlations = torch.where(
+                        torch.isnan(correlations) | torch.isinf(correlations),
+                        torch.zeros_like(correlations),
+                        correlations,
+                    )
+
+                    # Vectorized z-value calculation
+                    valid_mask = (torch.abs(correlations) < 1) & torch.tensor(sqrt_n_minus_2 > 0)
+
+                    z_scores = torch.zeros_like(correlations)
+                    if valid_mask.any():
+                        valid_corr = correlations[valid_mask]
+                        z_values_valid = valid_corr * sqrt_n_minus_2 / torch.sqrt(1 - valid_corr**2)
+
+                        z_values_valid = torch.where(
+                            torch.isnan(z_values_valid) | torch.isinf(z_values_valid),
+                            torch.zeros_like(z_values_valid),
+                            z_values_valid,
+                        )
+                        z_scores[valid_mask] = z_values_valid
+
+                    z_scores = z_scores.numpy()
+
+                    ablation_residuals[f"{ablated_neighbor_ct}_z_value"] = z_scores
+
+                    # Vectorized p-value calculations
+                    p_vals = 1 - norm.cdf(np.abs(z_scores))
+
+                    # Benjamini-Hochberg correction
                     _, adj_p_vals, _, _ = multipletests(p_vals, method="fdr_bh")
 
-                    nl10_pval_adj = -np.log10(adj_p_vals + 1e-8)  # Avoid log(0)
-                    nl10_pval = -np.log10(p_vals + 1e-8)  # Avoid log(0)
+                    # Vectorized log calculations with epsilon to avoid log(0)
+                    epsilon = 1e-8
+                    nl10_pval = -np.log10(np.maximum(p_vals, epsilon))
+                    nl10_pval_adj = -np.log10(np.maximum(adj_p_vals, epsilon))
 
-                    ablation_residuals[f"{ablated_neighbor_ct}_nl10_pval"] = nl10_pval
-                    ablation_residuals[f"{ablated_neighbor_ct}_nl10_pval_adj"] = nl10_pval_adj
+                    ablation_residuals[f"{ablated_neighbor_ct}_pval"] = p_vals.tolist()
+                    ablation_residuals[f"{ablated_neighbor_ct}_pval_adj"] = adj_p_vals.tolist()
+                    ablation_residuals[f"{ablated_neighbor_ct}_nl10_pval"] = nl10_pval.tolist()
+                    ablation_residuals[f"{ablated_neighbor_ct}_nl10_pval_adj"] = nl10_pval_adj.tolist()
                     _z_computed = True
+
             res_df = pd.DataFrame(ablation_residuals)
 
             res_df["gene_variance"] = gene_exp.values.var(axis=0)
-            res_df["gene"] = adata.var_names
+            res_df["gene"] = adata.var_names.tolist()
             res_df["head_idx"] = head_idx
             res_df["cell_type"] = cell_type
             ablation_dfs.append(res_df)
@@ -288,10 +337,43 @@ class AMICIAblationModule:
 
         return residuals_df, gene_exp_df
 
-    def save(self, save_path: str):
-        """Save ablation scores to file"""
-        self._ablation_scores_df.to_csv(save_path)
+    def save_object(self, save_path: str):
+        """Save the entire AMICIAblationModule object to a pickle file
+
+        Args:
+            save_path (str): Path to save the object (should end with .pkl)
+
+        Returns
+        -------
+            AMICIAblationModule: Self for method chaining
+        """
+        import pickle
+
+        with open(save_path, "wb") as f:
+            pickle.dump(self, f)
         return self
+
+    @classmethod
+    def load_object(cls, save_path: str) -> "AMICIAblationModule":
+        """Load a previously saved AMICIAblationModule object from a pickle file
+
+        Args:
+            save_path (str): Path to the saved object file
+
+        Returns
+        -------
+            AMICIAblationModule: The loaded ablation module object
+        """
+        import pickle
+
+        with open(save_path, "rb") as f:
+            obj = pickle.load(f)
+
+        # Type check to ensure we loaded the right object
+        if not isinstance(obj, cls):
+            raise TypeError(f"Loaded object is not an instance of {cls.__name__}")
+
+        return obj
 
     def plot_neighbor_ablation_scores(
         self,
