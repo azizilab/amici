@@ -77,12 +77,12 @@ class AMICICounterfactualAttentionModule:
         labels_cat_val = labels_cat_list.index(cell_type)
         labels_tensor = torch.tensor(labels_cat_val).unsqueeze(0).unsqueeze(0).to(model.device)
 
-        counterfactual_base_attn_scores = []
-        counterfactual_pos_coefs = []
-        neighbor_labels = []
+        counterfactual_attention_dfs = []
+        batch_start_idx = 0
+
         for neighbor_tensors in scdl:
             batch_neighbor_labels = neighbor_tensors[REGISTRY_KEYS.LABELS_KEY].cpu().detach().numpy().flatten()
-            neighbor_labels.append(batch_neighbor_labels)
+            batch_size = len(batch_neighbor_labels)
             nn_X = neighbor_tensors[REGISTRY_KEYS.X_KEY].unsqueeze(0).to(model.device)
 
             inf_outputs = model.module.inference(
@@ -100,39 +100,44 @@ class AMICICounterfactualAttentionModule:
             gen_attn_scores = gen_outputs["attention_scores"][0, :, :-1].T  # n_cells x n_heads
             gen_pos_coefs = gen_outputs["pos_coefs"][0, :]  # n_cells x n_heads
 
-            counterfactual_base_attn_scores.append(gen_attn_scores)
-            counterfactual_pos_coefs.append(gen_pos_coefs)
+            batch_attn_scores = gen_attn_scores.cpu().detach().numpy()
+            batch_pos_coefs = gen_pos_coefs.cpu().detach().numpy()
+            n_heads = batch_attn_scores.shape[1]
 
-        counterfactual_base_attn_scores = torch.cat(counterfactual_base_attn_scores, axis=0)
-        counterfactual_pos_coefs = torch.cat(counterfactual_pos_coefs, axis=0)
-        neighbor_labels = np.concatenate(neighbor_labels, axis=0)
+            # Get the indices for this batch
+            batch_indices = indices[batch_start_idx : batch_start_idx + batch_size]
 
-        n_heads = counterfactual_base_attn_scores.shape[1]
-        base_attn_df = pd.DataFrame(
-            counterfactual_base_attn_scores.cpu().detach().numpy(),
-            columns=range(n_heads),
-        ).melt(var_name="head_idx", value_name="base_attention_score")
+            batch_base_attn_df = pd.DataFrame(
+                batch_attn_scores,
+                columns=range(n_heads),
+            ).melt(var_name="head_idx", value_name="base_attention_score")
 
-        pos_coef_df = pd.DataFrame(counterfactual_pos_coefs.cpu().detach().numpy(), columns=range(n_heads)).melt(
-            var_name="head_idx", value_name="position_coefficient"
-        )
-        counterfactual_attention_df = pd.DataFrame(
-            {
-                "query_label": cell_type,
-                "neighbor_idx": repeat(np.array(indices), "n -> (h n)", h=n_heads),
-                "neighbor_label": repeat(
-                    np.array(labels_cat_list)[neighbor_labels],
-                    "n -> (h n)",
-                    h=n_heads,
-                ),
-                "head_idx": base_attn_df["head_idx"],
-                "base_attention_score": base_attn_df["base_attention_score"],
-                "position_coefficient": pos_coef_df["position_coefficient"],
-                "dummy_attention_score": model.module.attention_dummy_score,
-                "distance_kernel_unit_scale": model.module.distance_kernel_unit_scale,
-            }
-        )
-        # Filter out attention to own cell type (not trained)
+            batch_pos_coef_df = pd.DataFrame(batch_pos_coefs, columns=range(n_heads)).melt(
+                var_name="head_idx", value_name="position_coefficient"
+            )
+
+            batch_counterfactual_attention_df = pd.DataFrame(
+                {
+                    "query_label": cell_type,
+                    "neighbor_idx": repeat(np.array(batch_indices), "n -> (h n)", h=n_heads),
+                    "neighbor_label": repeat(
+                        np.array(labels_cat_list)[batch_neighbor_labels],
+                        "n -> (h n)",
+                        h=n_heads,
+                    ),
+                    "head_idx": batch_base_attn_df["head_idx"],
+                    "base_attention_score": batch_base_attn_df["base_attention_score"],
+                    "position_coefficient": batch_pos_coef_df["position_coefficient"],
+                    "dummy_attention_score": model.module.attention_dummy_score,
+                    "distance_kernel_unit_scale": model.module.distance_kernel_unit_scale,
+                }
+            )
+
+            counterfactual_attention_dfs.append(batch_counterfactual_attention_df)
+            batch_start_idx += batch_size
+
+        counterfactual_attention_df = pd.concat(counterfactual_attention_dfs, axis=0, ignore_index=True)
+
         counterfactual_attention_df = counterfactual_attention_df[
             counterfactual_attention_df["neighbor_label"] != cell_type
         ]
