@@ -190,8 +190,6 @@ class AMICIAblationModule:
                     nl10_pval = -np.log10(np.maximum(p_vals, epsilon))
                     nl10_pval_adj = -np.log10(np.maximum(adj_p_vals, epsilon))
 
-                    ablation_residuals[f"{ablated_neighbor_ct}_pval"] = p_vals.tolist()
-                    ablation_residuals[f"{ablated_neighbor_ct}_pval_adj"] = adj_p_vals.tolist()
                     ablation_residuals[f"{ablated_neighbor_ct}_nl10_pval"] = nl10_pval.tolist()
                     ablation_residuals[f"{ablated_neighbor_ct}_nl10_pval_adj"] = nl10_pval_adj.tolist()
                     _z_computed = True
@@ -921,7 +919,7 @@ class AMICIAblationModule:
             ct_data = self._ablation_scores_df[self._ablation_scores_df["cell_type"] == ct]
             pval_cols = [f"{ct_name}_nl10_pval_adj" for ct_name in cell_types if ct_name != ct]
             diff_cols = [f"{ct_name}_diff" for ct_name in cell_types if ct_name != ct]
-            for col, diff_col in zip(pval_cols, diff_cols):
+            for col, diff_col in zip(pval_cols, diff_cols, strict=False):
                 neighbor_ct = col.replace("_nl10_pval_adj", "")
                 j = np.where(cell_types == neighbor_ct)[0][0]
                 weight = ((ct_data[col] > -np.log10(significance_threshold)) & (ct_data[diff_col] > 0)).sum()
