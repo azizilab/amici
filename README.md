@@ -40,7 +40,7 @@ model.train()
 
 ## Documentation
 
-Documentation and tutorials are coming soon!
+Find a tutorial on basic usage of AMICI here: [Basic Usage Tutorial](examples/basic_usage.ipynb)
 
 ## Citation
 
