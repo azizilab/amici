@@ -90,7 +90,8 @@ ogp_site_name = "AMICI Documentation"
 
 # Myst settings
 source_suffix = {
-    '.rst': None,
-    '.md': 'myst_nb',
-    '.ipynb': 'myst_nb',
+    ".rst": "restructuredtext",
+    ".ipynb": "myst-nb",
+    ".myst": "myst-nb",
 }
+

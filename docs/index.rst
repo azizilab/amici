@@ -24,10 +24,9 @@ Cross-attention-based cell-cell interaction inference from spatial transcriptomi
    :maxdepth: 2
    :caption: Contents:
 
-   installation
-   quickstart
-   tutorial
+   examples/basic_usage.ipynb
    api/index
+   changelog.md
 
 Installation
 ------------
