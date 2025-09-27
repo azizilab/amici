@@ -1,3 +1,4 @@
+import pickle
 from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
@@ -180,7 +181,7 @@ class AMICIAblationModule:
                     ablation_residuals[f"{ablated_neighbor_ct}_z_value"] = z_scores
 
                     # Vectorized p-value calculations
-                    p_vals = 1 - norm.cdf(np.abs(z_scores))
+                    p_vals = 1 - norm.cdf(z_scores)
 
                     # Benjamini-Hochberg correction
                     _, adj_p_vals, _, _ = multipletests(p_vals, method="fdr_bh")
@@ -345,8 +346,6 @@ class AMICIAblationModule:
         -------
             AMICIAblationModule: Self for method chaining
         """
-        import pickle
-
         with open(save_path, "wb") as f:
             pickle.dump(self, f)
         return self
@@ -362,8 +361,6 @@ class AMICIAblationModule:
         -------
             AMICIAblationModule: The loaded ablation module object
         """
-        import pickle
-
         with open(save_path, "rb") as f:
             obj = pickle.load(f)
 
