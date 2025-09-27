@@ -502,7 +502,7 @@ class AMICICounterfactualAttentionModule:
                     hue="sender_type",
                     ax=axes[idx],
                 )
-                axes[idx].set_xlabel(f"Length Scale (distance where attention ≤ {attention_threshold})")
+                axes[idx].set_xlabel("Distance")
                 axes[idx].set_ylabel("Density")
                 axes[idx].set_xlim(0, max_length_scale)
                 axes[idx].set_title(f"Head {head_idx}")
@@ -530,23 +530,20 @@ class AMICICounterfactualAttentionModule:
 
             plt.tight_layout(rect=(0, 0, 0.85, 1))  # leave space on right for legend
         else:
-            # Create boxplot using hue for sender types and dodge=True for side-by-side plotting
-            sns.boxplot(
+            sns.violinplot(
                 data=length_scale_df,
-                x="head_idx",
-                y="length_scale",
+                y="head_idx",
+                x="length_scale",
                 hue="sender_type",
                 hue_order=sender_types_order,
                 palette=palette if palette is not None else "tab10",  # Use provided palette or default
-                dodge=True,
-                fliersize=0.05,
             )
 
             # Set labels based on the provided head_idxs list
-            plt.xticks(ticks=range(len(head_idxs)), labels=[f"Head {h}" for h in head_idxs])
+            plt.yticks(ticks=range(len(head_idxs)), labels=[f"Head {h}" for h in head_idxs])
 
             plt.xlabel("Attention Head")
-            plt.ylabel(f"Length Scale (distance where attention ≤ {attention_threshold})")
+            plt.ylabel("Distance")
             plt.ylim(-0.5, max_length_scale)
             plt.legend(title="Sender Type", bbox_to_anchor=(1.05, 1), loc="upper left")
 

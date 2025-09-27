@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Added
+
+- Tutorial notebook to run AMICI.
+
 ### Changed
 
 - Vector and memory optimization for ablation and counterfactual modules.
