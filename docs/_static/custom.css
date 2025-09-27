@@ -1,0 +1,97 @@
+/* Custom CSS for AMICI documentation */
+
+/* Card styling for index page */
+.intro-card {
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    height: 100%;
+}
+
+.intro-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.intro-card .card-img-top {
+    padding: 1rem;
+    object-fit: contain;
+}
+
+/* Custom button styling */
+.custom-button {
+    margin-top: auto;
+    padding: 0.5rem;
+}
+
+.custom-button a {
+    background-color: #007bff;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    text-decoration: none;
+    display: inline-block;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.custom-button a:hover {
+    background-color: #0056b3;
+    text-decoration: none;
+    color: white;
+}
+
+/* Badge styling for notebooks */
+img[alt*="notebook"] {
+    margin: 0.2rem;
+}
+
+/* API reference quick links styling */
+.api-quicklinks {
+    background-color: #f8f9fa;
+    border-left: 4px solid #007bff;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.api-quicklinks h4 {
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+/* Code block improvements */
+.highlight {
+    border-radius: 0.375rem;
+}
+
+/* Note and warning admonition styling */
+.admonition {
+    border-radius: 0.375rem;
+}
+
+.admonition.note {
+    border-left: 4px solid #17a2b8;
+}
+
+.admonition.warning {
+    border-left: 4px solid #ffc107;
+}
+
+/* Tutorial navigation improvements */
+.tutorial-nav {
+    display: flex;
+    justify-content: space-between;
+    margin: 2rem 0;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+}
+
+.tutorial-nav a {
+    color: #007bff;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.tutorial-nav a:hover {
+    text-decoration: underline;
+}
