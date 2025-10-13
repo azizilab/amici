@@ -1,9 +1,9 @@
 # AMICI: Attention Mechanism Interpretation of Cell-cell Interactions
 
-[![CC BY-NC 4.0][cc-by-nc-shield]][cc-by-nc]
+[![CC BY-NC-ND 4.0][cc-by-nc-nd-shield]][cc-by-nc-nd]
 
-[cc-by-nc]: https://creativecommons.org/licenses/by-nc/4.0/
-[cc-by-nc-shield]: https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey.svg
+[cc-by-nc-d]: https://creativecommons.org/licenses/by-nc-nd/4.0/
+[cc-by-nc-nd-shield]: https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-lightgrey.svg
 
 Cross-attention-based cell-cell interaction inference from ST data.
 
@@ -64,6 +64,6 @@ _AMICI: Attention Mechanism Interpretation of Cell-cell Interactions_
 ## Disclaimer
 
 This work is licensed under a
-[Creative Commons Attribution-NonCommercial 4.0 International License][cc-by-nc].
+[Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 International License][cc-by-nc-nd].
 
 Justin Hong, Khushi Desai, and Elham Azizi are inventors on a provisional patent application having U.S. Serial No. 63/884,704, filed on September 19, 2025, by The Trustees of Columbia University in the City of New York directed to the subject matter of the manuscript associated with this repository.
