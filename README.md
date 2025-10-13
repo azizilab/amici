@@ -2,7 +2,7 @@
 
 [![CC BY-NC-ND 4.0][cc-by-nc-nd-shield]][cc-by-nc-nd]
 
-[cc-by-nc-d]: https://creativecommons.org/licenses/by-nc-nd/4.0/
+[cc-by-nc-nd]: https://creativecommons.org/licenses/by-nc-nd/4.0/
 [cc-by-nc-nd-shield]: https://img.shields.io/badge/License-CC%20BY--NC--ND%204.0-lightgrey.svg
 
 Cross-attention-based cell-cell interaction inference from ST data.
