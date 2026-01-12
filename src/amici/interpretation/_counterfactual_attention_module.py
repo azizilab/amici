@@ -382,7 +382,7 @@ class AMICICounterfactualAttentionModule:
         self,
         head_idxs: list[int],
         sender_types: list[str],
-        attention_threshold: float = 0.1,
+        attention_threshold: float = 0.5,
         sample_threshold: float = 0.02,
     ):
         """
@@ -391,8 +391,8 @@ class AMICICounterfactualAttentionModule:
         Args:
             head_idxs (list[int]): The head indices to analyze.
             sender_types (list[str]): The sender cell types to analyze.
-            attention_threshold (float, optional): The attention threshold below which we consider the length scale. Defaults to 0.1.
-            sample_threshold (float, optional): The threshold for the number of samples to consider for the correction. Defaults to 0.02.
+            attention_threshold (float, optional): The attention threshold below which we consider the length scale.
+            sample_threshold (float, optional): The threshold for the number of samples to consider for the correction.
 
         Returns
         -------
@@ -412,12 +412,15 @@ class AMICICounterfactualAttentionModule:
                 ]
 
                 base_attention_score = head_counterfactual_attention_df["base_attention_score"].to_numpy()
+                dummy_attention_score = head_counterfactual_attention_df["dummy_attention_score"].to_numpy()
                 pos_coef = head_counterfactual_attention_df["position_coefficient"].to_numpy()
                 distance_kernel_unit_scale = head_counterfactual_attention_df["distance_kernel_unit_scale"].to_numpy()
 
                 # Calculate the length scales with attention threshold
                 length_scales = (distance_kernel_unit_scale / pos_coef) * (
-                    np.log((1 - attention_threshold) / attention_threshold) + base_attention_score - 3
+                    np.log((1 - attention_threshold) / attention_threshold)
+                    + base_attention_score
+                    - dummy_attention_score
                 )
 
                 length_scale_per_head = pd.DataFrame(
@@ -437,117 +440,209 @@ class AMICICounterfactualAttentionModule:
         length_scale_df = self._correct_length_scale_artifacts(length_scale_df, sample_threshold)
         return length_scale_df
 
+    def _compute_length_scale_bootstrap_ci(
+        self,
+        length_scale_df: pd.DataFrame,
+        confidence_level: float = 0.95,
+        n_bootstrap: int = 10000,
+        random_state: int | None = 42,
+        statistic: str = "mean",
+    ) -> pd.DataFrame:
+        """
+        Compute bootstrap confidence intervals for length scales per head and sender type.
+
+        Args:
+            length_scale_df: DataFrame containing length scales.
+            confidence_level: The confidence level for the interval.
+            n_bootstrap: Number of bootstrap resamples.
+            random_state: Random seed for reproducibility.
+            statistic: The statistic to bootstrap, either "mean" or "median".
+
+        Returns
+        -------
+            pd.DataFrame: DataFrame with columns:
+                - head_idx: The attention head index
+                - sender_type: The sender cell type
+                - statistic: The statistic used ("mean" or "median")
+                - point_estimate: The point estimate (mean or median)
+                - ci_lower: Lower bound of the bootstrap confidence interval
+                - ci_upper: Upper bound of the bootstrap confidence interval
+                - n_samples: Number of samples used
+        """
+        if statistic not in ("mean", "median"):
+            raise ValueError(f"statistic must be 'mean' or 'median', got '{statistic}'")
+
+        stat_func = np.mean if statistic == "mean" else np.median
+        rng = np.random.default_rng(random_state)
+        results = []
+
+        for (head_idx, sender_type), group in length_scale_df.groupby(["head_idx", "sender_type"]):
+            length_scales = group["length_scale"].to_numpy()
+            n = len(length_scales)
+
+            if n == 0:
+                continue
+
+            # Bootstrap resampling
+            bootstrap_stats = np.empty(n_bootstrap)
+            for i in range(n_bootstrap):
+                resample_idx = rng.integers(0, n, size=n)
+                bootstrap_stats[i] = stat_func(length_scales[resample_idx])
+
+            # Compute percentile confidence interval
+            alpha = 1 - confidence_level
+            ci_lower = np.percentile(bootstrap_stats, 100 * alpha / 2)
+            ci_upper = np.percentile(bootstrap_stats, 100 * (1 - alpha / 2))
+
+            results.append(
+                {
+                    "head_idx": head_idx,
+                    "sender_type": sender_type,
+                    "statistic": statistic,
+                    "point_estimate": stat_func(length_scales),
+                    "ci_lower": ci_lower,
+                    "ci_upper": ci_upper,
+                    "n_samples": n,
+                }
+            )
+
+        return pd.DataFrame(results)
+
     def plot_length_scale_distribution(
         self,
         head_idxs: list[int],
         sender_types: list[str],
-        attention_threshold: float = 0.1,
+        attention_threshold: float = 0.5,
         max_length_scale: float = 50,
         sample_threshold: float = 0.02,
         palette: dict | None = None,
-        plot_kde: bool = False,
         show: bool = True,
         save_png: bool = False,
         save_svg: bool = False,
         save_dir: str = "./figures",
+        show_ci: bool = False,
+        confidence_level: float = 0.95,
+        n_bootstrap: int = 10000,
+        ci_statistic: str = "mean",
     ):
         """Plot the distribution of length scales for each head and sender cell types based on counterfactual attention patterns.
 
         Args:
             head_idxs (list[int]): The head indices to analyze.
             sender_types (list[str]): The sender cell types to analyze.
-            attention_threshold (float, optional): The attention threshold below which we consider the length scale. Defaults to 0.1.
-            max_length_scale (float, optional): The maximum length scale to consider for the plot. Defaults to 50.
-            sample_threshold (float, optional): The threshold for the number of samples to consider for the correction. Defaults to 0.02.
-            palette (dict, optional): Dictionary mapping sender cell types to colors. If None, uses default seaborn palette.
-            plot_kde (bool, optional): Whether to plot the KDE of the length scales. Defaults to False and plots boxplot.
-            show (bool, optional): Whether to display the plot. Defaults to True.
-            save_png (bool, optional): Whether to save the plot as a PNG file. Defaults to False.
-            save_svg (bool, optional): Whether to save the plot as an SVG file. Defaults to False.
-            save_dir (str, optional): The directory to save the plot files. Defaults to "./figures".
+            attention_threshold (float, optional): The attention threshold.
+            max_length_scale (float, optional): The maximum length scale for the plot.
+            sample_threshold (float, optional): The sample threshold for correction.
+            palette (dict, optional): Dictionary mapping sender cell types to colors.
+            show (bool, optional): Whether to display the plot.
+            save_png (bool, optional): Whether to save the plot as a PNG file.
+            save_svg (bool, optional): Whether to save the plot as an SVG file.
+            save_dir (str, optional): The directory to save the plot files.
+            show_ci (bool, optional): Whether to overlay bootstrap confidence intervals.
+            confidence_level (float, optional): Confidence level for bootstrap CI.
+            n_bootstrap (int, optional): Number of bootstrap resamples.
+            ci_statistic (str, optional): Statistic for bootstrap CI.
+
+        Returns
+        -------
+            tuple: (length_scale_df, ci_df) if show_ci=True, else length_scale_df
         """
         cell_type = self._counterfactual_attention_df["query_label"].unique()[0]
         length_scale_df = self._calculate_length_scales(head_idxs, sender_types, attention_threshold, sample_threshold)
 
-        # Plot the distributions
-        plt.figure(figsize=(12, 6))
+        # Compute bootstrap CIs if requested
+        ci_df = None
+        if show_ci:
+            ci_df = self._compute_length_scale_bootstrap_ci(
+                length_scale_df=length_scale_df,
+                confidence_level=confidence_level,
+                n_bootstrap=n_bootstrap,
+                statistic=ci_statistic,
+            )
 
-        # Find out the order of the sender types based on the median length scale
+        fig, ax = plt.subplots(figsize=(12, 6))
+
         median_length_scale = length_scale_df.groupby(["sender_type", "head_idx"])["length_scale"].median()
         max_per_sender = median_length_scale.groupby("sender_type").max()
-        sender_types_order = max_per_sender.sort_values(ascending=False).index
+        sender_types_order = list(max_per_sender.sort_values(ascending=False).index)
 
-        if plot_kde:
-            # Calculate number of rows and columns for subplot grid
-            n_heads = len(head_idxs)
-            n_cols = min(3, n_heads)  # Max 3 columns
-            n_rows = (n_heads + n_cols - 1) // n_cols  # Ceiling division
+        if palette is None:
+            color_palette = sns.color_palette("tab10", n_colors=len(sender_types_order))
+            palette = {st: color_palette[i] for i, st in enumerate(sender_types_order)}
 
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows))
-            plt.suptitle(f"Length Scale Distribution by Head and Sender Type for {cell_type}")
+        sns.boxplot(
+            data=length_scale_df,
+            x="head_idx",
+            y="length_scale",
+            hue="sender_type",
+            hue_order=sender_types_order,
+            palette=palette,
+            dodge=True,
+            fliersize=0.05,
+            ax=ax,
+        )
 
-            if n_rows == 1 and n_cols == 1:
-                axes = np.array([axes])  # Make axes iterable for single subplot
-            axes = axes.flatten()
+        if show_ci and ci_df is not None:
+            n_sender_types = len(sender_types_order)
+            box_width = 0.8 / n_sender_types
+            bracket_offset = (box_width / 2) + 0.08
 
-            for idx, head_idx in enumerate(head_idxs):
-                length_scale_df_head = length_scale_df[length_scale_df["head_idx"] == head_idx]
-                if len(length_scale_df_head) == 0:
-                    continue
+            for i, head_idx in enumerate(head_idxs):
+                for j, sender_type in enumerate(sender_types_order):
+                    ci_row = ci_df[(ci_df["head_idx"] == head_idx) & (ci_df["sender_type"] == sender_type)]
+                    if len(ci_row) == 0:
+                        continue
 
-                sns.kdeplot(
-                    data=length_scale_df_head,
-                    x="length_scale",
-                    palette=palette or "tab10",
-                    hue="sender_type",
-                    ax=axes[idx],
-                )
-                axes[idx].set_xlabel("Distance")
-                axes[idx].set_ylabel("Density")
-                axes[idx].set_xlim(0, max_length_scale)
-                axes[idx].set_title(f"Head {head_idx}")
+                    ci_lower = ci_row["ci_lower"].values[0]
+                    ci_upper = ci_row["ci_upper"].values[0]
 
-            # Remove any empty subplots
-            for idx in range(len(head_idxs), len(axes)):
-                fig.delaxes(axes[idx])
+                    x_center = i + (j - (n_sender_types - 1) / 2) * box_width
+                    x_bracket = x_center + bracket_offset
 
-            # Remove legends from individual subplots to avoid duplicates
-            for ax in axes:
-                if ax.get_legend() is not None:
-                    ax.legend_.remove()
+                    bracket_cap_width = 0.06
+                    line_width = 1.0
+                    bracket_color = "black"
 
-            # Handle KDE plot legend separately
-            handles_all = [mpatches.Patch(color=palette[ct], label=ct) for ct in sender_types]
-            labels_all = sender_types
-            fig.legend(
-                handles_all,
-                labels_all,
-                title="Sender Type",
-                bbox_to_anchor=(1.02, 0.98),
-                loc="upper left",
-                borderaxespad=0.0,
-            )
+                    ax.plot(
+                        [x_bracket, x_bracket],
+                        [ci_lower, ci_upper],
+                        color=bracket_color,
+                        linewidth=line_width,
+                        solid_capstyle="butt",
+                        zorder=10,
+                    )
+                    ax.plot(
+                        [x_bracket - bracket_cap_width, x_bracket],
+                        [ci_lower, ci_lower],
+                        color=bracket_color,
+                        linewidth=line_width,
+                        solid_capstyle="butt",
+                        zorder=10,
+                    )
+                    ax.plot(
+                        [x_bracket - bracket_cap_width, x_bracket],
+                        [ci_upper, ci_upper],
+                        color=bracket_color,
+                        linewidth=line_width,
+                        solid_capstyle="butt",
+                        zorder=10,
+                    )
 
-            plt.tight_layout(rect=(0, 0, 0.85, 1))  # leave space on right for legend
-        else:
-            sns.violinplot(
-                data=length_scale_df,
-                y="head_idx",
-                x="length_scale",
-                hue="sender_type",
-                hue_order=sender_types_order,
-                palette=palette if palette is not None else "tab10",  # Use provided palette or default
-            )
+        # Set labels based on the provided head_idxs list
+        ax.set_xticks(range(len(head_idxs)))
+        ax.set_xticklabels([f"Head {h}" for h in head_idxs])
 
-            # Set labels based on the provided head_idxs list
-            plt.yticks(ticks=range(len(head_idxs)), labels=[f"Head {h}" for h in head_idxs])
-
-            plt.xlabel("Attention Head")
-            plt.ylabel("Distance")
-            plt.ylim(-0.5, max_length_scale)
-            plt.legend(title="Sender Type", bbox_to_anchor=(1.05, 1), loc="upper left")
-
-            plt.title(f"Length Scale Distribution by Head and Sender Type for {cell_type}")
+        ax.set_xlabel("Attention Head")
+        ylabel = f"Length Scale (distance where attention ≤ {attention_threshold})"
+        if show_ci:
+            ylabel += f"\n(brackets: {ci_statistic} {int(confidence_level*100)}% CI)"
+        ax.set_ylabel(ylabel)
+        ax.set_ylim(-0.5, max_length_scale)
+        ax.set_title(f"Length Scale Distribution by Head and Sender Type for {cell_type}")
+        ax.grid(True, alpha=0.3)
+        # Adjust legend position
+        ax.legend(title="Sender Type", bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.tight_layout()
 
         if save_png:
             plt.savefig(f"{save_dir}/length_scale_distribution_{cell_type}.png")
@@ -556,3 +651,7 @@ class AMICICounterfactualAttentionModule:
         if show:
             plt.show()
         plt.close()
+
+        if show_ci:
+            return length_scale_df, ci_df
+        return length_scale_df
