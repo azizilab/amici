@@ -8,6 +8,7 @@ from amici import AMICI
 
 from sklearn.cluster import KMeans
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score, silhouette_score
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -136,117 +137,33 @@ AMICI.setup_anndata(
     n_neighbors=50,
 )
 
-# %% Get the attention patterns
+# %% Get the attention patterns and compute hub analysis
 attention_patterns = model.get_attention_patterns()
-# Aggregate as the max across all heads
-attention_scores_df = attention_patterns._attention_patterns_df.groupby(["cell_idx"]).max()
-attention_scores_df = attention_scores_df.drop(columns=["head"]).reset_index().set_index(["cell_idx"])
 
 # %%
 #############################################################################
 # HUB ANALYSIS WITH COMPOSITION OF HIGH ATTENTION CELL TYPES AS INTERACTION COMPOSITION VECTOR
 #############################################################################
-# Classify the neighbor cells of each cell as high interacting or low interacting based on 90% quantile
 quantile = 0.9
-
-# Extract just the neighbor attention scores (excluding the label column)
-neighbor_cols = [col for col in attention_scores_df.columns if col.startswith('neighbor_')]
-attention_matrix = attention_scores_df[neighbor_cols].values
-
-print(f"Attention matrix shape: {attention_matrix.shape}")
-
-# Get neighbor cell types matrix
-neighbor_ct_labels = np.array(adata.obs[labels_key][adata.obsm["_nn_idx"].flatten()]).reshape(-1, 50)
-
-print(f"Neighbor cell types matrix shape: {neighbor_ct_labels.shape}")
-
-# Initialize result dataframe
-cell_types = adata.obs[labels_key].unique()
-high_interacting_counts = pd.DataFrame(
-    0, 
-    index=adata.obs_names, 
-    columns=cell_types
-)
-
-print("Computing high interaction thresholds and counts per cell type...")
-
-interaction_thresholds = {}
-for cell_type in cell_types:
-    receiver_cell_type_idxs = adata[adata.obs[labels_key] == cell_type].obs_names
-    
-    # Extract attention scores to neighbors of this cell type from all senders
-    attention_to_receiver = attention_scores_df.loc[receiver_cell_type_idxs]
-    attention_scores = attention_to_receiver.drop(columns=["label"]).values.flatten()
-    
-    # Compute 90th percentile threshold (excluding zeros)
-    interaction_threshold = np.quantile(attention_scores[attention_scores > 0], quantile)
-    interaction_thresholds[cell_type] = interaction_threshold
-    print(f"{cell_type} threshold (per receiver cell type): {interaction_threshold:.4f}")
-
-# %% For each cell type, compute threshold and count high interacting neighbors
-# Melt the attention scores and then take value counts for the cell type count -> get the vectors per receiver cell type
-for cell_type in cell_types:
-    print(f"Processing {cell_type}...")
-
-    receiver_cell_type_idxs = adata[adata.obs[labels_key] == cell_type].obs_names
-    attention_to_receiver = attention_scores_df.loc[receiver_cell_type_idxs]
-    receiver_nn_obs_names = attention_patterns._nn_idxs_df.loc[receiver_cell_type_idxs]
-    receiver_nn_labels = pd.DataFrame(adata.obs[labels_key].loc[np.array(receiver_nn_obs_names).flatten()]).rename(columns={labels_key: "neighbor_label"})
-    
-    attention_to_receiver_melted = pd.melt(
-        attention_to_receiver.reset_index(),
-        id_vars=["index", "label"],
-        value_vars=[f"neighbor_{i}" for i in range(model.n_neighbors)],
-        var_name="neighbor_col",
-        value_name="attention_score",
-    )
-
-    melted_nn_obs_names = pd.melt(
-        receiver_nn_obs_names.reset_index(),
-        id_vars="index",
-        value_vars=[f"neighbor_{i}" for i in range(model.n_neighbors)],
-        var_name="neighbor_col",
-        value_name="neighbor_idx",
-    )
-
-    merged_attention_scores = pd.merge(
-        attention_to_receiver_melted, melted_nn_obs_names, on=["neighbor_col", "index"], how="inner"
-    ).drop(columns=["neighbor_col"]).rename(columns={"index": "receiver_idx"}).merge(
-        receiver_nn_labels.reset_index(),
-        right_on="index",
-        left_on="neighbor_idx",
-        how="left"
-    )
-
-    threshold = interaction_thresholds[cell_type]
-    high_interacting_scores = merged_attention_scores[merged_attention_scores["attention_score"] > threshold]
-    high_interacting_counts_cell_type = high_interacting_scores[["receiver_idx", "neighbor_label"]].groupby(["receiver_idx"]).value_counts()
-    high_interacting_counts_cell_type = high_interacting_counts_cell_type.reset_index().pivot(columns="neighbor_label", index="receiver_idx", values="count")
-    high_interacting_counts.loc[high_interacting_counts_cell_type.index, high_interacting_counts_cell_type.columns] = high_interacting_counts_cell_type
-
-# %% Use the high interacting counts as the composition vector for each cell
-# Transform so the composition vectors add up to 1
-high_interacting_counts_norm = high_interacting_counts.div(high_interacting_counts.sum(axis=1), axis=0)
-high_interacting_counts_norm = high_interacting_counts_norm.fillna(0)
 
 def find_optimal_clusters(data, min_clusters=2, max_clusters=12, random_state=42):
     """Find optimal number of clusters using silhouette analysis."""
     silhouette_scores = []
     cluster_range = range(min_clusters, max_clusters + 1)
-    
+
     for k in cluster_range:
         kmeans = KMeans(n_clusters=k, random_state=random_state)
         cluster_labels = kmeans.fit_predict(data)
         silhouette_avg = silhouette_score(data, cluster_labels)
         silhouette_scores.append(silhouette_avg)
         print(f"For k={k}, silhouette score = {silhouette_avg:.4f}")
-    
+
     # Find optimal k
     optimal_k = cluster_range[np.argmax(silhouette_scores)]
     best_score = max(silhouette_scores)
-    
+
     print(f"\nOptimal number of clusters: {optimal_k} (silhouette score: {best_score:.4f})")
-    
+
     # Plot silhouette scores
     plt.figure(figsize=(10, 6))
     plt.plot(cluster_range, silhouette_scores, 'bo-')
@@ -258,18 +175,26 @@ def find_optimal_clusters(data, min_clusters=2, max_clusters=12, random_state=42
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
-    
+
     return optimal_k, best_score
+
+# First compute hub analysis without clustering to get composition vectors for optimal k search
+high_interacting_counts_norm_no_cluster = attention_patterns.compute_communication_hubs(
+    attention_quantile_threshold=quantile,
+    n_clusters=2,  # temporary, will recompute with optimal k
+    random_state=seed
+).drop(columns=["hub_cluster"])
 
 # Find optimal number of clusters for hub clustering
 print("Finding optimal number of clusters for hub clustering...")
-optimal_k_hub, _ = find_optimal_clusters(high_interacting_counts_norm, random_state=seed)
-# optimal_k_hub = 10
+optimal_k_hub, _ = find_optimal_clusters(high_interacting_counts_norm_no_cluster, random_state=seed)
 
-# Perform final clustering with optimal k
-kmeans_hub = KMeans(n_clusters=optimal_k_hub, random_state=seed)
-kmeans_hub.fit(high_interacting_counts_norm)
-high_interacting_counts_norm["hub_cluster"] = kmeans_hub.labels_
+# Use the factored-out hub analysis method from AMICIAttentionModule with optimal k
+high_interacting_counts_norm = attention_patterns.compute_communication_hubs(
+    attention_quantile_threshold=quantile,
+    n_clusters=optimal_k_hub,
+    random_state=seed
+)
 adata.obs["hub_cluster"] = high_interacting_counts_norm.loc[adata.obs_names, "hub_cluster"]
 
 # %% Plot the cells on spatial plot colored by the hub clusters
@@ -575,4 +500,172 @@ fig.update_layout(
 )
 fig.show()
 
+# %% Grid search over quantile thresholds and number of clusters
+# Define parameter ranges
+quantile_thresholds = [0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+n_clusters_range = [4, 6, 8, 10, 12, 14, 16]
+
+# File paths for cached results
+grid_search_cache_dir = "data/xenium_sample1/grid_search_cache"
+hub_results_cache_dir = os.path.join(grid_search_cache_dir, "hub_results")
+os.makedirs(grid_search_cache_dir, exist_ok=True)
+os.makedirs(hub_results_cache_dir, exist_ok=True)
+ari_cache_path = os.path.join(grid_search_cache_dir, "hub_grid_search_ari.csv")
+ami_cache_path = os.path.join(grid_search_cache_dir, "hub_grid_search_ami.csv")
+
+# Dictionary to store hub results (loaded from cache or computed)
+hub_results_dict = {}
+
+# Check if cached results exist
+if os.path.exists(ari_cache_path) and os.path.exists(ami_cache_path):
+    print("Loading cached grid search results...")
+    ari_df = pd.read_csv(ari_cache_path, index_col=0)
+    ami_df = pd.read_csv(ami_cache_path, index_col=0)
+    ari_results = ari_df.values
+    ami_results = ami_df.values
+
+    # Load hub results from cache
+    print("Loading cached hub results...")
+    for n_clusters in n_clusters_range:
+        for q_threshold in quantile_thresholds:
+            hub_cache_path = os.path.join(
+                hub_results_cache_dir,
+                f"hub_q{q_threshold}_k{n_clusters}.csv"
+            )
+            if os.path.exists(hub_cache_path):
+                hub_results_dict[(q_threshold, n_clusters)] = pd.read_csv(hub_cache_path, index_col=0)
+
+    print("Cached results loaded!")
+else:
+    # Store results
+    ari_results = np.zeros((len(n_clusters_range), len(quantile_thresholds)))
+    ami_results = np.zeros((len(n_clusters_range), len(quantile_thresholds)))
+
+    # Get cell type labels for comparison
+    cell_type_labels = adata.obs[labels_key].values
+
+    print("Running grid search over quantile thresholds and number of clusters...")
+    total_combinations = len(n_clusters_range) * len(quantile_thresholds)
+    with tqdm(total=total_combinations, desc="Grid search") as pbar:
+        for i, n_clusters in enumerate(n_clusters_range):
+            for j, q_threshold in enumerate(quantile_thresholds):
+                pbar.set_postfix(n_clusters=n_clusters, quantile=q_threshold)
+
+                # Compute hub analysis with current parameters
+                hub_result = attention_patterns.compute_communication_hubs(
+                    attention_quantile_threshold=q_threshold,
+                    n_clusters=n_clusters,
+                    random_state=seed
+                )
+
+                # Store hub result
+                hub_results_dict[(q_threshold, n_clusters)] = hub_result
+
+                # Save hub result to cache
+                hub_cache_path = os.path.join(
+                    hub_results_cache_dir,
+                    f"hub_q{q_threshold}_k{n_clusters}.csv"
+                )
+                hub_result.to_csv(hub_cache_path)
+
+                # Get hub cluster labels
+                hub_labels = hub_result.loc[adata.obs_names, "hub_cluster"].values
+
+                # Compute ARI and AMI against cell type labels
+                ari_results[i, j] = adjusted_rand_score(hub_labels, cell_type_labels)
+                ami_results[i, j] = adjusted_mutual_info_score(hub_labels, cell_type_labels)
+
+                pbar.update(1)
+
+    print("Grid search complete!")
+
+    # Convert to DataFrames for easier plotting and saving
+    ari_df = pd.DataFrame(
+        ari_results,
+        index=[str(k) for k in n_clusters_range],
+        columns=[str(q) for q in quantile_thresholds]
+    )
+    ami_df = pd.DataFrame(
+        ami_results,
+        index=[str(k) for k in n_clusters_range],
+        columns=[str(q) for q in quantile_thresholds]
+    )
+
+    # Save metrics results to cache
+    ari_df.to_csv(ari_cache_path)
+    ami_df.to_csv(ami_cache_path)
+    print(f"Results saved to {grid_search_cache_dir}/")
+
 # %%
+# plot ARI and AMI between every pair of parameters
+ari_matrix = np.zeros((len(hub_results_dict), len(hub_results_dict)))
+ami_matrix = np.zeros((len(hub_results_dict), len(hub_results_dict)))
+for i, k1 in enumerate(hub_results_dict.keys()):
+    for j, k2 in enumerate(hub_results_dict.keys()):
+        ari = adjusted_rand_score(hub_results_dict[k1].loc[adata.obs_names, "hub_cluster"].values, hub_results_dict[k2].loc[adata.obs_names, "hub_cluster"].values)
+        ami = adjusted_mutual_info_score(hub_results_dict[k1].loc[adata.obs_names, "hub_cluster"].values, hub_results_dict[k2].loc[adata.obs_names, "hub_cluster"].values)
+        ari_matrix[i, j] = ari
+        ami_matrix[i, j] = ami
+
+# %%
+# Plot heatmaps for a fixed quantile threshold (0.9): rows/columns = cluster numbers, values = ARI/AMI between clusterings
+import matplotlib.ticker as mticker
+
+fixed_quantile = 0.9
+fixed_q_key = [k for k in hub_results_dict.keys() if np.isclose(k[0], fixed_quantile)]
+if not fixed_q_key:
+    print(f"No clustering results for quantile threshold {fixed_quantile}")
+else:
+    # Make a list of available cluster numbers for this quantile
+    q_k_set = sorted([k[1] for k in fixed_q_key])
+    n = len(q_k_set)
+    ari_mat = np.zeros((n, n))
+    ami_mat = np.zeros((n, n))
+    for i, k1 in enumerate(q_k_set):
+        for j, k2 in enumerate(q_k_set):
+            hub_labels_1 = hub_results_dict[(fixed_quantile, k1)].loc[adata.obs_names, "hub_cluster"].values
+            hub_labels_2 = hub_results_dict[(fixed_quantile, k2)].loc[adata.obs_names, "hub_cluster"].values
+            ari_mat[i, j] = adjusted_rand_score(hub_labels_1, hub_labels_2)
+            ami_mat[i, j] = adjusted_mutual_info_score(hub_labels_1, hub_labels_2)
+
+    fig, ax = plt.subplots(1,2, figsize=(14, 6))
+    im0 = sns.heatmap(ari_mat, annot=True, fmt=".2f", xticklabels=q_k_set, yticklabels=q_k_set, ax=ax[0], cmap="Blues", vmin=0, vmax=1)
+    ax[0].set_title(f"ARI between cluster numbers (q={fixed_quantile})")
+    ax[0].set_xlabel("n_clusters")
+    ax[0].set_ylabel("n_clusters")
+    im1 = sns.heatmap(ami_mat, annot=True, fmt=".2f", xticklabels=q_k_set, yticklabels=q_k_set, ax=ax[1], cmap="Purples", vmin=0, vmax=1)
+    ax[1].set_title(f"AMI between cluster numbers (q={fixed_quantile})")
+    ax[1].set_xlabel("n_clusters")
+    ax[1].set_ylabel("n_clusters")
+    plt.tight_layout()
+    plt.savefig(f"figures/xenium_hub_grid_search_heatmaps_q{fixed_quantile}.png", dpi=300, bbox_inches='tight')
+    plt.savefig(f"figures/xenium_hub_grid_search_heatmaps_q{fixed_quantile}.svg", dpi=300, bbox_inches='tight')
+    plt.show()
+
+# For a fixed number of clusters (e.g. 10), plot heatmap with quantile thresholds as rows/columns
+fixed_n_clusters = 10
+fixed_k_key = [k for k in hub_results_dict.keys() if k[1] == fixed_n_clusters]
+q_set = sorted([k[0] for k in fixed_k_key])
+n = len(q_set)
+ari_mat_q = np.zeros((n, n))
+ami_mat_q = np.zeros((n, n))
+for i, q1 in enumerate(q_set):
+    for j, q2 in enumerate(q_set):
+        hub_labels_1 = hub_results_dict[(q1, fixed_n_clusters)].loc[adata.obs_names, "hub_cluster"].values
+        hub_labels_2 = hub_results_dict[(q2, fixed_n_clusters)].loc[adata.obs_names, "hub_cluster"].values
+        ari_mat_q[i, j] = adjusted_rand_score(hub_labels_1, hub_labels_2)
+        ami_mat_q[i, j] = adjusted_mutual_info_score(hub_labels_1, hub_labels_2)
+
+fig, ax = plt.subplots(1,2, figsize=(14, 6))
+im0 = sns.heatmap(ari_mat_q, annot=True, fmt=".2f", xticklabels=np.round(q_set,3), yticklabels=np.round(q_set,3), ax=ax[0], cmap="Blues", vmin=0, vmax=1)
+ax[0].set_title(f"ARI for varying quantile thresholds (n_clusters={fixed_n_clusters})")
+ax[0].set_xlabel("quantile_threshold")
+ax[0].set_ylabel("quantile_threshold")
+im1 = sns.heatmap(ami_mat_q, annot=True, fmt=".2f", xticklabels=np.round(q_set,3), yticklabels=np.round(q_set,3), ax=ax[1], cmap="Purples", vmin=0, vmax=1)
+ax[1].set_title(f"AMI for varying quantile thresholds (n_clusters={fixed_n_clusters})")
+ax[1].set_xlabel("quantile_threshold")
+ax[1].set_ylabel("quantile_threshold")
+plt.tight_layout()
+plt.savefig(f"figures/xenium_hub_grid_search_heatmaps_k{fixed_n_clusters}.png", dpi=300, bbox_inches='tight')
+plt.savefig(f"figures/xenium_hub_grid_search_heatmaps_k{fixed_n_clusters}.svg", dpi=300, bbox_inches='tight')
+plt.show()

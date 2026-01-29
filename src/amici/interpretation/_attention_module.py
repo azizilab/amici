@@ -10,6 +10,7 @@ import wandb
 from anndata import AnnData
 from einops import einsum, rearrange
 from scvi import REGISTRY_KEYS
+from sklearn.cluster import KMeans
 from tqdm import tqdm
 
 from amici._constants import NN_REGISTRY_KEYS
@@ -165,6 +166,174 @@ class AMICIAttentionModule:
         """Save attention patterns to file"""
         self._attention_patterns_df.to_csv(save_path)
         return self
+
+    def compute_communication_hubs(
+        self,
+        attention_quantile_threshold: float = 0.9,
+        n_clusters: int | None = None,
+        random_state: int = 42,
+    ) -> pd.DataFrame:
+        """
+        Compute hub analysis by clustering cells based on their high-interacting neighbor composition.
+
+        This method:
+        1. Aggregates attention scores by taking the max across all heads
+        2. For each receiver cell type, computes a threshold as the specified quantile
+           of attention scores to receivers of that type
+        3. For each cell, counts the cell types of neighbors with attention scores
+           above the threshold
+        4. Normalizes these counts to create composition vectors
+        5. Clusters the composition vectors using KMeans
+
+        Args:
+            attention_quantile_threshold: The quantile threshold for classifying high-interacting neighbors.
+                Defaults to 0.9 (90th percentile).
+            n_clusters: Number of clusters for KMeans. If None, will use silhouette
+                analysis to find the optimal number of clusters (2-12 range).
+            random_state: Random state for KMeans clustering.
+
+        Returns:
+            pd.DataFrame: A DataFrame indexed by cell obs_names with the following columns:
+                - One column per cell type containing the normalized count of high-interacting
+                  neighbors of that type
+                - 'hub_cluster': The assigned hub cluster label
+        """
+        # Get number of neighbors from column names
+        neighbor_cols = [col for col in self._attention_patterns_df.columns if col.startswith('neighbor_')]
+        n_neighbors = len(neighbor_cols)
+
+        # Aggregate attention scores by max across all heads
+        attention_scores_df = self._attention_patterns_df.groupby(["cell_idx"]).max()
+        attention_scores_df = attention_scores_df.drop(columns=["head"]).reset_index().set_index(["cell_idx"])
+
+        # Get cell types
+        cell_types = self._adata.obs[self._labels_key].unique()
+
+        # Initialize result dataframe for high interacting counts
+        high_interacting_counts = pd.DataFrame(
+            0.0,
+            index=self._adata.obs_names,
+            columns=cell_types
+        )
+
+        # Compute interaction thresholds per receiver cell type
+        interaction_thresholds = {}
+        for cell_type in cell_types:
+            receiver_cell_type_idxs = self._adata[self._adata.obs[self._labels_key] == cell_type].obs_names
+
+            # Extract attention scores to neighbors of this cell type from all senders
+            attention_to_receiver = attention_scores_df.loc[
+                attention_scores_df.index.isin(receiver_cell_type_idxs)
+            ]
+            attention_scores = attention_to_receiver.drop(columns=["label"]).values.flatten()
+
+            # Compute quantile threshold (excluding zeros)
+            non_zero_scores = attention_scores[attention_scores > 0]
+            if len(non_zero_scores) > 0:
+                interaction_threshold = np.quantile(non_zero_scores, q=attention_quantile_threshold)
+            else:
+                interaction_threshold = 0.0
+            interaction_thresholds[cell_type] = interaction_threshold
+
+        # For each cell type, compute high interacting neighbor counts
+        for cell_type in cell_types:
+            receiver_cell_type_idxs = self._adata[self._adata.obs[self._labels_key] == cell_type].obs_names
+            attention_to_receiver = attention_scores_df.loc[
+                attention_scores_df.index.isin(receiver_cell_type_idxs)
+            ]
+            receiver_nn_obs_names = self._nn_idxs_df.loc[
+                self._nn_idxs_df.index.isin(receiver_cell_type_idxs)
+            ]
+
+            # Get neighbor labels
+            receiver_nn_labels = pd.DataFrame(
+                self._adata.obs[self._labels_key].loc[np.array(receiver_nn_obs_names).flatten()]
+            ).rename(columns={self._labels_key: "neighbor_label"})
+
+            # Melt attention scores
+            attention_to_receiver_melted = pd.melt(
+                attention_to_receiver.reset_index(),
+                id_vars=["cell_idx", "label"],
+                value_vars=[f"neighbor_{i}" for i in range(n_neighbors)],
+                var_name="neighbor_col",
+                value_name="attention_score",
+            )
+
+            # Melt neighbor obs names
+            melted_nn_obs_names = pd.melt(
+                receiver_nn_obs_names.reset_index(),
+                id_vars="index",
+                value_vars=[f"neighbor_{i}" for i in range(n_neighbors)],
+                var_name="neighbor_col",
+                value_name="neighbor_idx",
+            )
+
+            # Merge attention scores with neighbor info
+            merged_attention_scores = pd.merge(
+                attention_to_receiver_melted,
+                melted_nn_obs_names,
+                left_on=["neighbor_col", "cell_idx"],
+                right_on=["neighbor_col", "index"],
+                how="inner"
+            ).drop(columns=["neighbor_col", "index"]).rename(
+                columns={"cell_idx": "receiver_idx"}
+            ).merge(
+                receiver_nn_labels.reset_index(),
+                right_on="index",
+                left_on="neighbor_idx",
+                how="left"
+            )
+
+            # Filter by threshold and count
+            threshold = interaction_thresholds[cell_type]
+            high_interacting_scores = merged_attention_scores[
+                merged_attention_scores["attention_score"] > threshold
+            ]
+
+            if len(high_interacting_scores) > 0:
+                high_interacting_counts_cell_type = (
+                    high_interacting_scores[["receiver_idx", "neighbor_label"]]
+                    .groupby(["receiver_idx"])
+                    .value_counts()
+                )
+                high_interacting_counts_cell_type = (
+                    high_interacting_counts_cell_type
+                    .reset_index()
+                    .pivot(columns="neighbor_label", index="receiver_idx", values="count")
+                )
+                # Update the high_interacting_counts DataFrame
+                for col in high_interacting_counts_cell_type.columns:
+                    if col in high_interacting_counts.columns:
+                        high_interacting_counts.loc[
+                            high_interacting_counts_cell_type.index, col
+                        ] = high_interacting_counts_cell_type[col]
+
+        # Normalize to get composition vectors
+        row_sums = high_interacting_counts.sum(axis=1)
+        high_interacting_counts_norm = high_interacting_counts.div(row_sums, axis=0)
+        high_interacting_counts_norm = high_interacting_counts_norm.fillna(0)
+
+        # Determine number of clusters if not specified
+        if n_clusters is None:
+            from sklearn.metrics import silhouette_score
+
+            best_score = -1
+            best_k = 2
+            for k in range(2, 13):
+                kmeans = KMeans(n_clusters=k, random_state=random_state)
+                cluster_labels = kmeans.fit_predict(high_interacting_counts_norm)
+                score = silhouette_score(high_interacting_counts_norm, cluster_labels)
+                if score > best_score:
+                    best_score = score
+                    best_k = k
+            n_clusters = best_k
+
+        # Perform KMeans clustering
+        kmeans = KMeans(n_clusters=n_clusters, random_state=random_state)
+        kmeans.fit(high_interacting_counts_norm)
+        high_interacting_counts_norm["hub_cluster"] = kmeans.labels_
+
+        return high_interacting_counts_norm
 
     def _bin_attention_scores(
         self,
