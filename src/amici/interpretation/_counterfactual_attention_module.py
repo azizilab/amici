@@ -13,6 +13,7 @@ from anndata import AnnData
 from einops import rearrange, repeat
 from scvi import REGISTRY_KEYS
 
+from amici._constants import NN_REGISTRY_KEYS
 from ._utils import _get_compute_method_kwargs
 
 if TYPE_CHECKING:
@@ -69,6 +70,16 @@ class AMICICounterfactualAttentionModule:
         adata = model._validate_anndata(adata)
         if indices is None:
             indices = list(range(adata.n_obs))
+
+        # filter down to only neighbor indices that show up in at least one neighborhood of the query cell type
+        cell_type_indices = np.arange(adata.n_obs)[adata.obs[_labels_key] == cell_type]
+        filter_scdl = model._make_data_loader(adata=adata, indices=cell_type_indices, batch_size=batch_size)
+        neighbor_indices = set()
+        for tensors in filter_scdl:
+            batch_neighbor_indices = tensors[NN_REGISTRY_KEYS.NN_IDX_KEY].cpu().detach().numpy().flatten()
+            neighbor_indices.update(batch_neighbor_indices)
+        indices = [idx for idx in indices if idx in neighbor_indices]
+
         scdl = model._make_data_loader(adata=adata, indices=indices, batch_size=batch_size)
 
         labels_cat_list = model.adata_manager.get_state_registry(REGISTRY_KEYS.LABELS_KEY).categorical_mapping.tolist()
