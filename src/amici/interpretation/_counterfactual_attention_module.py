@@ -13,6 +13,7 @@ from anndata import AnnData
 from einops import rearrange, repeat
 from scvi import REGISTRY_KEYS
 
+from amici._constants import NN_REGISTRY_KEYS
 from ._utils import _get_compute_method_kwargs
 
 if TYPE_CHECKING:
