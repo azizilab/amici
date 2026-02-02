@@ -51,6 +51,8 @@ dependencies = [
     "session-info",
     # due to transformer-lens dependency
     "pytest",
+    # transformer-lens 1.14.0 uses transformers.TRANSFORMERS_CACHE, removed in v5
+    "transformers<5",
 ]
 
 [project.optional-dependencies]
