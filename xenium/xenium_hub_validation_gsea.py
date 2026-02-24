@@ -13,7 +13,7 @@ from tqdm import tqdm
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# %% Constants, palettes, paths, focus cell types
+# %% Constants, palettes, paths, cell type categories
 CELL_TYPE_PALETTE = {
     "CD8+_T_Cells": "#56B4E9",
     "CD4+_T_Cells": "#009E4E",
@@ -33,7 +33,27 @@ CELL_TYPE_PALETTE = {
     "Endothelial": "#277987",
 }
 
-FOCUS_CELL_TYPES = ["Invasive_Tumor", "DCIS_1", "DCIS_2"]
+# Cell type categories and their assigned gene set libraries
+TUMOR_CELL_TYPES = ["Invasive_Tumor", "DCIS_1", "DCIS_2"]
+IMMUNE_CELL_TYPES = ["CD8+_T_Cells", "CD4+_T_Cells", "IRF7+_DCs", "LAMP3+_DCs",
+                     "Macrophages_1", "Macrophages_2", "B_Cells", "Mast_Cells"]
+STROMAL_CELL_TYPES = ["Stromal", "Myoepi_ACTA2+", "Myoepi_KRT15+",
+                      "Perivascular-Like", "Endothelial"]
+
+CT_GENE_SETS = {}
+for _ct in TUMOR_CELL_TYPES:
+    CT_GENE_SETS[_ct] = "MSigDB_Hallmark_2020"
+for _ct in IMMUNE_CELL_TYPES + STROMAL_CELL_TYPES:
+    CT_GENE_SETS[_ct] = "GO_Biological_Process_2023"
+
+ALL_CELL_TYPES = TUMOR_CELL_TYPES + IMMUNE_CELL_TYPES + STROMAL_CELL_TYPES
+
+# Bar chart panel groups: (panel_title, cell_type_list)
+BAR_CHART_PANELS = [
+    ("Tumor (Hallmark)", TUMOR_CELL_TYPES),
+    ("Immune (GO BP)", IMMUNE_CELL_TYPES),
+    ("Stromal (GO BP)", STROMAL_CELL_TYPES),
+]
 
 # Matched parameters: same k for hub and composition
 k = 10
@@ -52,10 +72,6 @@ comp_path = f"data/xenium_sample1/grid_search_cache/composition_results/composit
 fig_dir = "figures/hub_validation_gsea"
 os.makedirs(fig_dir, exist_ok=True)
 
-# Gene set libraries for GSEA
-PRIMARY_GENE_SETS = "MSigDB_Hallmark_2020"
-FALLBACK_GENE_SETS = "GO_Biological_Process_2023"
-
 # Method display names and colors
 METHOD_CONFIG = {
     "hub_cluster": {"label": "Hub clusters", "color": "#1f77b4"},
@@ -66,6 +82,9 @@ print(f"Parameters: k={k}, q={q}, seed={seed}")
 print(f"Hub path:  {hub_path}")
 print(f"Comp path: {comp_path}")
 print(f"Figures:   {fig_dir}/")
+print(f"Tumor cell types ({len(TUMOR_CELL_TYPES)}): MSigDB_Hallmark_2020")
+print(f"Immune cell types ({len(IMMUNE_CELL_TYPES)}): GO_Biological_Process_2023")
+print(f"Stromal cell types ({len(STROMAL_CELL_TYPES)}): GO_Biological_Process_2023")
 
 # %% Load adata and cluster assignments
 adata = sc.read_h5ad(f"./data/xenium_sample1/xenium_sample1_filtered_{data_date}.h5ad")
@@ -89,19 +108,19 @@ n_hub_na = adata.obs["hub_cluster"].isna().sum()
 n_comp_na = adata.obs["composition_cluster"].isna().sum()
 print(f"Hub NaN: {n_hub_na}, Composition NaN: {n_comp_na}")
 
-# Print cell counts per focus cell type
-for ct in FOCUS_CELL_TYPES:
+# Print cell counts per cell type
+for ct in ALL_CELL_TYPES:
     n = (adata.obs[labels_key] == ct).sum()
     print(f"  {ct}: {n} cells")
 
-# %% Compute DEGs via scanpy rank_genes_groups for each focus cell type x method
+# %% Compute DEGs via scanpy rank_genes_groups for each cell type x method
 deg_results = {}  # (cell_type, method, cluster_id) -> DataFrame
 
-for ct in FOCUS_CELL_TYPES:
+for ct in ALL_CELL_TYPES:
     ct_mask = adata.obs[labels_key] == ct
     ct_adata = adata[ct_mask].copy()
     print(f"\n{'='*60}")
-    print(f"Cell type: {ct} ({ct_adata.shape[0]} cells)")
+    print(f"Cell type: {ct} ({ct_adata.shape[0]} cells) -> {CT_GENE_SETS[ct]}")
     print(f"{'='*60}")
 
     for method in ["hub_cluster", "composition_cluster"]:
@@ -137,6 +156,14 @@ print(f"\nTotal DEG result sets: {len(deg_results)}")
 # %% Run GSEA with gseapy.prerank for each (cell_type, method, cluster)
 gsea_all_results = []  # list of dicts for summary DataFrame
 
+
+def parse_matched_size(tag_pct):
+    try:
+        return int(str(tag_pct).split("/")[1])
+    except (IndexError, ValueError):
+        return np.nan
+
+
 for (ct, method, clust), deg_df in tqdm(deg_results.items(), desc="Running GSEA"):
     # Build ranked gene list: gene names as index, Wilcoxon scores as values
     ranked = deg_df.set_index("names")["scores"].dropna()
@@ -147,53 +174,46 @@ for (ct, method, clust), deg_df in tqdm(deg_results.items(), desc="Running GSEA"
         print(f"  Skipping {ct}/{method}/cluster {clust}: only {len(ranked)} genes")
         continue
 
-    # Try primary gene sets (Hallmark), then fallback (GO BP) if too sparse
-    for gene_set_name in [PRIMARY_GENE_SETS, FALLBACK_GENE_SETS]:
-        try:
-            pre_res = gp.prerank(
-                rnk=ranked,
-                gene_sets=gene_set_name,
-                min_size=5,
-                max_size=500,
-                permutation_num=1000,
-                seed=seed,
-                no_plot=True,
-                verbose=False,
-            )
-            res_df = pre_res.res2d
-            if res_df is None or len(res_df) == 0:
-                continue
-
-            # Ensure numeric columns
-            for col in ["NES", "FDR q-val", "FWER p-val", "NOM p-val"]:
-                if col in res_df.columns:
-                    res_df[col] = pd.to_numeric(res_df[col], errors="coerce")
-
-            # Parse matched_size from "Tag %" column (format: "hits/matched_size")
-            def parse_matched_size(tag_pct):
-                try:
-                    return int(str(tag_pct).split("/")[1])
-                except (IndexError, ValueError):
-                    return np.nan
-
-            for _, row in res_df.iterrows():
-                matched_size = parse_matched_size(row.get("Tag %", ""))
-                gsea_all_results.append({
-                    "cell_type": ct,
-                    "method": method,
-                    "cluster": clust,
-                    "gene_set_library": gene_set_name,
-                    "pathway": row.get("Term", row.name),
-                    "nes": row.get("NES", np.nan),
-                    "fdr": row.get("FDR q-val", np.nan),
-                    "matched_size": matched_size,
-                    "lead_genes": row.get("Lead_genes", ""),
-                })
-
-        except Exception as e:
-            print(f"  GSEA failed for {ct}/{method}/cluster {clust} "
-                  f"({gene_set_name}): {type(e).__name__}: {e}")
+    # Use the gene set library assigned to this cell type
+    gene_set_name = CT_GENE_SETS[ct]
+    try:
+        pre_res = gp.prerank(
+            rnk=ranked,
+            gene_sets=gene_set_name,
+            min_size=5,
+            max_size=500,
+            permutation_num=1000,
+            seed=seed,
+            no_plot=True,
+            verbose=False,
+        )
+        res_df = pre_res.res2d
+        if res_df is None or len(res_df) == 0:
             continue
+
+        # Ensure numeric columns
+        for col in ["NES", "FDR q-val", "FWER p-val", "NOM p-val"]:
+            if col in res_df.columns:
+                res_df[col] = pd.to_numeric(res_df[col], errors="coerce")
+
+        for _, row in res_df.iterrows():
+            matched_size = parse_matched_size(row.get("Tag %", ""))
+            gsea_all_results.append({
+                "cell_type": ct,
+                "method": method,
+                "cluster": clust,
+                "gene_set_library": gene_set_name,
+                "pathway": row.get("Term", row.name),
+                "nes": row.get("NES", np.nan),
+                "fdr": row.get("FDR q-val", np.nan),
+                "matched_size": matched_size,
+                "lead_genes": row.get("Lead_genes", ""),
+            })
+
+    except Exception as e:
+        print(f"  GSEA failed for {ct}/{method}/cluster {clust} "
+              f"({gene_set_name}): {type(e).__name__}: {e}")
+        continue
 
 # Build summary DataFrame
 gsea_df = pd.DataFrame(gsea_all_results)
@@ -219,46 +239,43 @@ print("=" * 70)
 
 summary_rows = []
 
-for gene_set_lib in gsea_df["gene_set_library"].unique():
+for ct in ALL_CELL_TYPES:
+    gene_set_lib = CT_GENE_SETS[ct]
     lib_df = gsea_df[gsea_df["gene_set_library"] == gene_set_lib]
-    print(f"\n--- Gene set library: {gene_set_lib} ---")
 
-    for ct in FOCUS_CELL_TYPES:
-        for method in ["hub_cluster", "composition_cluster"]:
-            subset = lib_df[(lib_df["cell_type"] == ct) & (lib_df["method"] == method)]
-            n_sig = subset["significant"].sum()
-            n_total = len(subset)
-            # Count unique significant pathways (across clusters)
-            unique_sig_pathways = subset.loc[subset["significant"], "pathway"].nunique()
+    for method in ["hub_cluster", "composition_cluster"]:
+        subset = lib_df[(lib_df["cell_type"] == ct) & (lib_df["method"] == method)]
+        n_sig = subset["significant"].sum()
+        n_total = len(subset)
+        unique_sig_pathways = subset.loc[subset["significant"], "pathway"].nunique()
 
-            summary_rows.append({
-                "gene_set_library": gene_set_lib,
-                "cell_type": ct,
-                "method": method,
-                "method_label": METHOD_CONFIG[method]["label"],
-                "n_significant_tests": int(n_sig),
-                "n_total_tests": n_total,
-                "n_unique_sig_pathways": unique_sig_pathways,
-            })
+        summary_rows.append({
+            "gene_set_library": gene_set_lib,
+            "cell_type": ct,
+            "method": method,
+            "method_label": METHOD_CONFIG[method]["label"],
+            "n_significant_tests": int(n_sig),
+            "n_total_tests": n_total,
+            "n_unique_sig_pathways": unique_sig_pathways,
+        })
 
-            print(f"  {ct:20s} | {METHOD_CONFIG[method]['label']:25s} | "
-                  f"{unique_sig_pathways:3d} unique sig pathways "
-                  f"({n_sig}/{n_total} tests)")
+        print(f"  {ct:20s} | {METHOD_CONFIG[method]['label']:25s} | "
+              f"{unique_sig_pathways:3d} unique sig pathways "
+              f"({n_sig}/{n_total} tests) [{gene_set_lib}]")
 
 summary_df = pd.DataFrame(summary_rows)
 
 # Print head-to-head comparison
 print("\n--- Head-to-head comparison (unique significant pathways) ---")
-for gene_set_lib in summary_df["gene_set_library"].unique():
-    lib_summary = summary_df[summary_df["gene_set_library"] == gene_set_lib]
-    print(f"\n  {gene_set_lib}:")
-    for ct in FOCUS_CELL_TYPES:
-        hub_n = lib_summary.loc[
-            (lib_summary["cell_type"] == ct) & (lib_summary["method"] == "hub_cluster"),
+for panel_title, ct_list in BAR_CHART_PANELS:
+    print(f"\n  {panel_title}:")
+    for ct in ct_list:
+        hub_n = summary_df.loc[
+            (summary_df["cell_type"] == ct) & (summary_df["method"] == "hub_cluster"),
             "n_unique_sig_pathways"
         ].values
-        comp_n = lib_summary.loc[
-            (lib_summary["cell_type"] == ct) & (lib_summary["method"] == "composition_cluster"),
+        comp_n = summary_df.loc[
+            (summary_df["cell_type"] == ct) & (summary_df["method"] == "composition_cluster"),
             "n_unique_sig_pathways"
         ].values
         hub_n = hub_n[0] if len(hub_n) > 0 else 0
@@ -267,32 +284,30 @@ for gene_set_lib in summary_df["gene_set_library"].unique():
         print(f"    {ct:20s}: Hub={hub_n:3d}  Comp={comp_n:3d}  -> {winner}")
 
 # %% Stacked bar chart: two bars per cell type (hub, comp), each split into unique + shared
-fig, axes = plt.subplots(1, len(gsea_df["gene_set_library"].unique()),
-                         figsize=(7 * len(gsea_df["gene_set_library"].unique()), 5),
+fig, axes = plt.subplots(1, len(BAR_CHART_PANELS),
+                         figsize=(6 * len(BAR_CHART_PANELS), 6),
                          squeeze=False)
 
 hub_color = METHOD_CONFIG["hub_cluster"]["color"]
 comp_color = METHOD_CONFIG["composition_cluster"]["color"]
-# Lighter versions for the "shared" segment
 hub_shared_color = "#7fbce6"
 comp_shared_color = "#ffbf7f"
 
-for ax_idx, gene_set_lib in enumerate(gsea_df["gene_set_library"].unique()):
+for ax_idx, (panel_title, ct_list) in enumerate(BAR_CHART_PANELS):
     ax = axes[0, ax_idx]
-    lib_df = gsea_df[gsea_df["gene_set_library"] == gene_set_lib]
 
     hub_unique_vals = []
     hub_shared_vals = []
     comp_unique_vals = []
     comp_shared_vals = []
 
-    for ct in FOCUS_CELL_TYPES:
-        ct_lib = lib_df[lib_df["cell_type"] == ct]
-        hub_sig = set(ct_lib[
-            (ct_lib["method"] == "hub_cluster") & (ct_lib["significant"])
+    for ct in ct_list:
+        ct_gsea_sub = gsea_df[gsea_df["cell_type"] == ct]
+        hub_sig = set(ct_gsea_sub[
+            (ct_gsea_sub["method"] == "hub_cluster") & (ct_gsea_sub["significant"])
         ]["pathway"].unique())
-        comp_sig = set(ct_lib[
-            (ct_lib["method"] == "composition_cluster") & (ct_lib["significant"])
+        comp_sig = set(ct_gsea_sub[
+            (ct_gsea_sub["method"] == "composition_cluster") & (ct_gsea_sub["significant"])
         ]["pathway"].unique())
 
         shared = hub_sig & comp_sig
@@ -301,7 +316,7 @@ for ax_idx, gene_set_lib in enumerate(gsea_df["gene_set_library"].unique()):
         comp_unique_vals.append(len(comp_sig - hub_sig))
         comp_shared_vals.append(len(shared))
 
-    x = np.arange(len(FOCUS_CELL_TYPES))
+    x = np.arange(len(ct_list))
     width = 0.35
 
     # Hub bar: unique (bottom, dark) + shared (top, light)
@@ -330,7 +345,7 @@ for ax_idx, gene_set_lib in enumerate(gsea_df["gene_set_library"].unique()):
                         ha="center", va="center", fontsize=9, fontweight="bold", color="#333333")
 
     # Total label on top of each bar
-    for i in range(len(FOCUS_CELL_TYPES)):
+    for i in range(len(ct_list)):
         hub_total = hub_unique_vals[i] + hub_shared_vals[i]
         comp_total = comp_unique_vals[i] + comp_shared_vals[i]
         if hub_total > 0:
@@ -342,14 +357,13 @@ for ax_idx, gene_set_lib in enumerate(gsea_df["gene_set_library"].unique()):
 
     ax.set_xlabel("Cell type", fontsize=12)
     ax.set_ylabel("Significant pathways\n(FDR < 0.25)", fontsize=12)
-    ax.set_title(gene_set_lib.replace("_", " "), fontsize=13, fontweight="bold")
+    ax.set_title(panel_title, fontsize=13, fontweight="bold")
     ax.set_xticks(x)
-    ct_labels = [ct.replace("_", " ") for ct in FOCUS_CELL_TYPES]
-    ax.set_xticklabels(ct_labels, fontsize=11)
-    # Deduplicate "Shared" in legend
+    ct_labels = [ct.replace("_", " ") for ct in ct_list]
+    ax.set_xticklabels(ct_labels, fontsize=9, rotation=45, ha="right")
+    # Deduplicate legend
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
-    # Rename to cleaner labels
     clean_labels = {"Hub unique": "Hub unique", "Shared": "Shared",
                     "Comp unique": "Comp unique", "Shared ": "Shared"}
     deduped = {}
@@ -357,7 +371,7 @@ for ax_idx, gene_set_lib in enumerate(gsea_df["gene_set_library"].unique()):
         clean = clean_labels.get(lbl, lbl)
         if clean not in deduped:
             deduped[clean] = hdl
-    ax.legend(deduped.values(), deduped.keys(), fontsize=10, frameon=True)
+    ax.legend(deduped.values(), deduped.keys(), fontsize=9, frameon=True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.set_ylim(bottom=0)
@@ -372,7 +386,7 @@ fig.savefig(os.path.join(fig_dir, "gsea_sig_pathways_barplot.svg"),
 print(f"Saved stacked bar chart to {fig_dir}/gsea_sig_pathways_barplot.png/.svg")
 plt.show()
 
-# %% Butterfly/mirror bar charts for all focus cell types
+# %% Butterfly/mirror bar charts for all cell types
 from matplotlib.patches import Patch
 
 
@@ -385,24 +399,21 @@ def clean_pathway_name(name):
     return name
 
 
-for focus_ct in FOCUS_CELL_TYPES:
+for focus_ct in ALL_CELL_TYPES:
     print(f"\n{'='*60}")
     print(f"Butterfly chart for: {focus_ct}")
     print(f"{'='*60}")
 
-    # Use Hallmark results preferentially; fall back to GO BP if too sparse
-    hallmark_ct = gsea_df[
-        (gsea_df["cell_type"] == focus_ct) & (gsea_df["gene_set_library"] == PRIMARY_GENE_SETS)
-    ]
-    if len(hallmark_ct) > 0 and hallmark_ct["significant"].sum() > 0:
-        butterfly_lib = PRIMARY_GENE_SETS
-    else:
-        butterfly_lib = FALLBACK_GENE_SETS
-        print(f"  Hallmark too sparse for {focus_ct}, using {FALLBACK_GENE_SETS}")
+    # Use the gene set library assigned to this cell type
+    butterfly_lib = CT_GENE_SETS[focus_ct]
 
     ct_gsea = gsea_df[
         (gsea_df["cell_type"] == focus_ct) & (gsea_df["gene_set_library"] == butterfly_lib)
     ]
+
+    if len(ct_gsea) == 0:
+        print(f"  No GSEA results for {focus_ct}, skipping.")
+        continue
 
     # Aggregate: for each pathway x method, take the cluster with the lowest FDR
     # (most significant result), so significance counts match the bar chart.
@@ -454,10 +465,10 @@ for focus_ct in FOCUS_CELL_TYPES:
 
     y_positions = np.arange(len(pathways_sorted))
 
-    hub_color = METHOD_CONFIG["hub_cluster"]["color"]
-    comp_color = METHOD_CONFIG["composition_cluster"]["color"]
-    hub_faded = mcolors.to_rgba(hub_color, alpha=0.3)
-    comp_faded = mcolors.to_rgba(comp_color, alpha=0.3)
+    hub_color_bf = METHOD_CONFIG["hub_cluster"]["color"]
+    comp_color_bf = METHOD_CONFIG["composition_cluster"]["color"]
+    hub_faded = mcolors.to_rgba(hub_color_bf, alpha=0.3)
+    comp_faded = mcolors.to_rgba(comp_color_bf, alpha=0.3)
 
     for i, pw in enumerate(pathways_sorted):
         # Hub bars extend to the LEFT (negative x)
@@ -465,13 +476,12 @@ for focus_ct in FOCUS_CELL_TYPES:
             h_nes = hub_data.loc[pw, "nes"]
             h_fdr = hub_data.loc[pw, "fdr"]
             h_sig = hub_data.loc[pw, "significant"]
-            color = hub_color if h_sig else hub_faded
+            color = hub_color_bf if h_sig else hub_faded
             ax.barh(i, -abs(h_nes), height=0.7, color=color,
                     edgecolor="black" if h_sig else "gray",
                     linewidth=0.8 if h_sig else 0.4)
             sign_str = "+" if h_nes > 0 else "-" if h_nes < 0 else ""
             label = f"{sign_str}{abs(h_nes):.2f} (q={h_fdr:.2f})"
-            # Place annotation inside the bar to avoid overlapping y-axis labels
             ax.text(-abs(h_nes) / 2, i, label,
                     ha="center", va="center", fontsize=6.5,
                     color="white" if h_sig else "#444444", fontweight="bold")
@@ -481,13 +491,12 @@ for focus_ct in FOCUS_CELL_TYPES:
             c_nes = comp_data.loc[pw, "nes"]
             c_fdr = comp_data.loc[pw, "fdr"]
             c_sig = comp_data.loc[pw, "significant"]
-            color = comp_color if c_sig else comp_faded
+            color = comp_color_bf if c_sig else comp_faded
             ax.barh(i, abs(c_nes), height=0.7, color=color,
                     edgecolor="black" if c_sig else "gray",
                     linewidth=0.8 if c_sig else 0.4)
             sign_str = "+" if c_nes > 0 else "-" if c_nes < 0 else ""
             label = f"{sign_str}{abs(c_nes):.2f} (q={c_fdr:.2f})"
-            # Place annotation inside the bar
             ax.text(abs(c_nes) / 2, i, label,
                     ha="center", va="center", fontsize=6.5,
                     color="white" if c_sig else "#444444", fontweight="bold")
@@ -501,17 +510,17 @@ for focus_ct in FOCUS_CELL_TYPES:
                  fontsize=13, fontweight="bold")
 
     legend_elements = [
-        Patch(facecolor=hub_color, edgecolor="black", label="Hub (FDR < 0.25)"),
+        Patch(facecolor=hub_color_bf, edgecolor="black", label="Hub (FDR < 0.25)"),
         Patch(facecolor=hub_faded, edgecolor="gray", label="Hub (n.s.)"),
-        Patch(facecolor=comp_color, edgecolor="black", label="Composition (FDR < 0.25)"),
+        Patch(facecolor=comp_color_bf, edgecolor="black", label="Composition (FDR < 0.25)"),
         Patch(facecolor=comp_faded, edgecolor="gray", label="Composition (n.s.)"),
     ]
     ax.legend(handles=legend_elements, loc="lower right", fontsize=9, frameon=True)
 
     ax.text(-0.02, 1.02, "Hub clusters", transform=ax.transAxes,
-            ha="right", fontsize=11, fontweight="bold", color=hub_color)
+            ha="right", fontsize=11, fontweight="bold", color=hub_color_bf)
     ax.text(1.02, 1.02, "Composition clusters", transform=ax.transAxes,
-            ha="left", fontsize=11, fontweight="bold", color=comp_color)
+            ha="left", fontsize=11, fontweight="bold", color=comp_color_bf)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -532,82 +541,79 @@ print("PATHWAYS SIGNIFICANT IN HUB CLUSTERS BUT NOT COMPOSITION CLUSTERS")
 print("(Unique biological signals captured by attention-based interaction)")
 print("=" * 70)
 
-for gene_set_lib in gsea_df["gene_set_library"].unique():
-    lib_df = gsea_df[gsea_df["gene_set_library"] == gene_set_lib]
-    print(f"\n--- {gene_set_lib} ---")
+for ct in ALL_CELL_TYPES:
+    gene_set_lib = CT_GENE_SETS[ct]
+    ct_lib = gsea_df[(gsea_df["cell_type"] == ct) & (gsea_df["gene_set_library"] == gene_set_lib)]
 
-    for ct in FOCUS_CELL_TYPES:
-        ct_lib = lib_df[lib_df["cell_type"] == ct]
+    if len(ct_lib) == 0:
+        continue
 
-        # Get significant pathways for hub
-        hub_sig = ct_lib[
-            (ct_lib["method"] == "hub_cluster") & (ct_lib["significant"])
-        ]["pathway"].unique()
+    # Get significant pathways for hub
+    hub_sig = ct_lib[
+        (ct_lib["method"] == "hub_cluster") & (ct_lib["significant"])
+    ]["pathway"].unique()
 
-        # Get significant pathways for composition
-        comp_sig = ct_lib[
-            (ct_lib["method"] == "composition_cluster") & (ct_lib["significant"])
-        ]["pathway"].unique()
+    # Get significant pathways for composition
+    comp_sig = ct_lib[
+        (ct_lib["method"] == "composition_cluster") & (ct_lib["significant"])
+    ]["pathway"].unique()
 
-        # Unique to hub
-        hub_only = set(hub_sig) - set(comp_sig)
-        # Unique to composition
-        comp_only = set(comp_sig) - set(hub_sig)
-        # Shared
-        shared = set(hub_sig) & set(comp_sig)
+    # Unique to hub
+    hub_only = set(hub_sig) - set(comp_sig)
+    # Unique to composition
+    comp_only = set(comp_sig) - set(hub_sig)
+    # Shared
+    shared = set(hub_sig) & set(comp_sig)
 
-        print(f"\n  {ct}:")
-        print(f"    Hub-significant:  {len(hub_sig)} pathways")
-        print(f"    Comp-significant: {len(comp_sig)} pathways")
-        print(f"    Shared:           {len(shared)} pathways")
-        print(f"    Hub-only:         {len(hub_only)} pathways")
-        print(f"    Comp-only:        {len(comp_only)} pathways")
+    print(f"\n  {ct} [{gene_set_lib}]:")
+    print(f"    Hub-significant:  {len(hub_sig)} pathways")
+    print(f"    Comp-significant: {len(comp_sig)} pathways")
+    print(f"    Shared:           {len(shared)} pathways")
+    print(f"    Hub-only:         {len(hub_only)} pathways")
+    print(f"    Comp-only:        {len(comp_only)} pathways")
 
-        if len(hub_only) > 0:
-            print(f"\n    Hub-only pathways (unique to attention-based clustering):")
-            # Get full details for hub-only pathways
-            hub_details = ct_lib[
-                (ct_lib["method"] == "hub_cluster") &
-                (ct_lib["pathway"].isin(hub_only))
-            ].sort_values("fdr")
+    if len(hub_only) > 0:
+        print(f"\n    Hub-only pathways (unique to attention-based clustering):")
+        hub_details = ct_lib[
+            (ct_lib["method"] == "hub_cluster") &
+            (ct_lib["pathway"].isin(hub_only))
+        ].sort_values("fdr")
 
-            # Aggregate: best result per pathway
-            for pw in sorted(hub_only):
-                pw_rows = hub_details[hub_details["pathway"] == pw]
-                best_idx = pw_rows["fdr"].idxmin()
-                row = pw_rows.loc[best_idx]
-                # Check if composition tested this pathway at all
-                comp_pw = ct_lib[
-                    (ct_lib["method"] == "composition_cluster") &
-                    (ct_lib["pathway"] == pw)
-                ]
-                if len(comp_pw) > 0:
-                    comp_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
-                    comp_info = f"comp NES={comp_best['nes']:.2f}, FDR={comp_best['fdr']:.3f}"
-                else:
-                    comp_info = "not tested in composition"
+        for pw in sorted(hub_only):
+            pw_rows = hub_details[hub_details["pathway"] == pw]
+            best_idx = pw_rows["fdr"].idxmin()
+            row = pw_rows.loc[best_idx]
+            comp_pw = ct_lib[
+                (ct_lib["method"] == "composition_cluster") &
+                (ct_lib["pathway"] == pw)
+            ]
+            if len(comp_pw) > 0:
+                comp_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
+                comp_info = f"comp NES={comp_best['nes']:.2f}, FDR={comp_best['fdr']:.3f}"
+            else:
+                comp_info = "not tested in composition"
 
-                matched_str = f"{int(row['matched_size'])}" if pd.notna(row['matched_size']) else "?"
-                print(f"      {pw}")
-                print(f"        Hub:  NES={row['nes']:.2f}, FDR={row['fdr']:.3f}, "
-                      f"matched={matched_str} genes "
-                      f"(cluster {row['cluster']})")
-                print(f"        Comp: {comp_info}")
+            matched_str = f"{int(row['matched_size'])}" if pd.notna(row['matched_size']) else "?"
+            print(f"      {pw}")
+            print(f"        Hub:  NES={row['nes']:.2f}, FDR={row['fdr']:.3f}, "
+                  f"matched={matched_str} genes "
+                  f"(cluster {row['cluster']})")
+            print(f"        Comp: {comp_info}")
 
-        if len(shared) > 0:
-            print(f"\n    Shared significant pathways:")
-            for pw in sorted(shared):
-                hub_pw = ct_lib[
-                    (ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)
-                ]
-                comp_pw = ct_lib[
-                    (ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)
-                ]
-                h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
-                c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
-                print(f"      {pw}")
-                print(f"        Hub:  NES={h_best['nes']:.2f}, FDR={h_best['fdr']:.3f}")
-                print(f"        Comp: NES={c_best['nes']:.2f}, FDR={c_best['fdr']:.3f}")
+    if len(shared) > 0:
+        print(f"\n    Shared significant pathways:")
+        for pw in sorted(shared):
+            hub_pw = ct_lib[
+                (ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)
+            ]
+            comp_pw = ct_lib[
+                (ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)
+            ]
+            h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
+            c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
+            print(f"      {pw}")
+            print(f"        Hub:  NES={h_best['nes']:.2f}, FDR={h_best['fdr']:.3f}")
+            print(f"        Comp: NES={c_best['nes']:.2f}, FDR={c_best['fdr']:.3f}")
 
 print("\n" + "=" * 70)
 print("NOTE: 250-gene Xenium panel limits overlap with hallmark gene sets.")
@@ -620,35 +626,38 @@ with open(md_path, "w") as f:
     f.write("# GSEA: Hub vs Composition Cluster DEGs\n\n")
     f.write(f"**Parameters**: q={q}, k={k}, seed={seed}\n\n")
     f.write(f"**FDR threshold**: {FDR_THRESHOLD}\n\n")
-    f.write(f"**Gene set libraries**: {PRIMARY_GENE_SETS}, {FALLBACK_GENE_SETS}\n\n")
+    f.write("**Gene set assignment**:\n")
+    f.write("- Tumor cell types: MSigDB_Hallmark_2020\n")
+    f.write("- Immune cell types: GO_Biological_Process_2023\n")
+    f.write("- Stromal cell types: GO_Biological_Process_2023\n\n")
 
-    # Summary table per gene set library
+    # Summary table per panel group
     f.write("## Significant Pathways per Cell Type (FDR < 0.25)\n\n")
-    for gene_set_lib in summary_df["gene_set_library"].unique():
-        lib_summary = summary_df[summary_df["gene_set_library"] == gene_set_lib]
-        f.write(f"### {gene_set_lib}\n\n")
+    for panel_title, ct_list in BAR_CHART_PANELS:
+        f.write(f"### {panel_title}\n\n")
         f.write("| Cell Type | Method | Unique Sig Pathways | Sig Tests / Total |\n")
         f.write("|-----------|--------|--------------------:|------------------:|\n")
-        for _, row in lib_summary.iterrows():
-            f.write(f"| {row['cell_type']} | {row['method_label']} "
-                    f"| {row['n_unique_sig_pathways']} "
-                    f"| {row['n_significant_tests']}/{row['n_total_tests']} |\n")
+        for ct in ct_list:
+            ct_summary = summary_df[summary_df["cell_type"] == ct]
+            for _, row in ct_summary.iterrows():
+                f.write(f"| {row['cell_type']} | {row['method_label']} "
+                        f"| {row['n_unique_sig_pathways']} "
+                        f"| {row['n_significant_tests']}/{row['n_total_tests']} |\n")
         f.write("\n")
 
     # Head-to-head
     f.write("## Head-to-Head Comparison\n\n")
-    for gene_set_lib in summary_df["gene_set_library"].unique():
-        lib_summary = summary_df[summary_df["gene_set_library"] == gene_set_lib]
-        f.write(f"### {gene_set_lib}\n\n")
+    for panel_title, ct_list in BAR_CHART_PANELS:
+        f.write(f"### {panel_title}\n\n")
         f.write("| Cell Type | Hub | Comp | Winner |\n")
         f.write("|-----------|----:|-----:|--------|\n")
-        for ct in FOCUS_CELL_TYPES:
-            hub_n = lib_summary.loc[
-                (lib_summary["cell_type"] == ct) & (lib_summary["method"] == "hub_cluster"),
+        for ct in ct_list:
+            hub_n = summary_df.loc[
+                (summary_df["cell_type"] == ct) & (summary_df["method"] == "hub_cluster"),
                 "n_unique_sig_pathways"
             ].values
-            comp_n = lib_summary.loc[
-                (lib_summary["cell_type"] == ct) & (lib_summary["method"] == "composition_cluster"),
+            comp_n = summary_df.loc[
+                (summary_df["cell_type"] == ct) & (summary_df["method"] == "composition_cluster"),
                 "n_unique_sig_pathways"
             ].values
             hub_n = hub_n[0] if len(hub_n) > 0 else 0
@@ -659,74 +668,74 @@ with open(md_path, "w") as f:
 
     # Detailed pathway comparison
     f.write("## Pathway Details per Cell Type\n\n")
-    for gene_set_lib in gsea_df["gene_set_library"].unique():
-        lib_df = gsea_df[gsea_df["gene_set_library"] == gene_set_lib]
-        f.write(f"### {gene_set_lib}\n\n")
+    for ct in ALL_CELL_TYPES:
+        gene_set_lib = CT_GENE_SETS[ct]
+        ct_lib = gsea_df[(gsea_df["cell_type"] == ct) & (gsea_df["gene_set_library"] == gene_set_lib)]
+        if len(ct_lib) == 0:
+            continue
 
-        for ct in FOCUS_CELL_TYPES:
-            ct_lib = lib_df[lib_df["cell_type"] == ct]
-            hub_sig = set(ct_lib[
-                (ct_lib["method"] == "hub_cluster") & (ct_lib["significant"])
-            ]["pathway"].unique())
-            comp_sig = set(ct_lib[
-                (ct_lib["method"] == "composition_cluster") & (ct_lib["significant"])
-            ]["pathway"].unique())
+        hub_sig = set(ct_lib[
+            (ct_lib["method"] == "hub_cluster") & (ct_lib["significant"])
+        ]["pathway"].unique())
+        comp_sig = set(ct_lib[
+            (ct_lib["method"] == "composition_cluster") & (ct_lib["significant"])
+        ]["pathway"].unique())
 
-            hub_only = sorted(hub_sig - comp_sig)
-            comp_only = sorted(comp_sig - hub_sig)
-            shared = sorted(hub_sig & comp_sig)
+        hub_only = sorted(hub_sig - comp_sig)
+        comp_only = sorted(comp_sig - hub_sig)
+        shared = sorted(hub_sig & comp_sig)
 
-            f.write(f"#### {ct}\n\n")
-            f.write(f"- Hub-significant: {len(hub_sig)} pathways\n")
-            f.write(f"- Comp-significant: {len(comp_sig)} pathways\n")
-            f.write(f"- Shared: {len(shared)}, Hub-only: {len(hub_only)}, Comp-only: {len(comp_only)}\n\n")
+        f.write(f"### {ct} ({gene_set_lib})\n\n")
+        f.write(f"- Hub-significant: {len(hub_sig)} pathways\n")
+        f.write(f"- Comp-significant: {len(comp_sig)} pathways\n")
+        f.write(f"- Shared: {len(shared)}, Hub-only: {len(hub_only)}, Comp-only: {len(comp_only)}\n\n")
 
-            if len(hub_only) > 0:
-                f.write("**Hub-only pathways**:\n\n")
-                f.write("| Pathway | Hub NES | Hub FDR | Comp NES | Comp FDR |\n")
-                f.write("|---------|--------:|--------:|---------:|---------:|\n")
-                for pw in hub_only:
-                    hub_pw = ct_lib[(ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)]
-                    h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
-                    comp_pw = ct_lib[(ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)]
-                    if len(comp_pw) > 0:
-                        c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
-                        f.write(f"| {pw} | {h_best['nes']:.2f} | {h_best['fdr']:.3f} "
-                                f"| {c_best['nes']:.2f} | {c_best['fdr']:.3f} |\n")
-                    else:
-                        f.write(f"| {pw} | {h_best['nes']:.2f} | {h_best['fdr']:.3f} "
-                                f"| - | - |\n")
-                f.write("\n")
-
-            if len(shared) > 0:
-                f.write("**Shared pathways**:\n\n")
-                f.write("| Pathway | Hub NES | Hub FDR | Comp NES | Comp FDR |\n")
-                f.write("|---------|--------:|--------:|---------:|---------:|\n")
-                for pw in shared:
-                    hub_pw = ct_lib[(ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)]
-                    comp_pw = ct_lib[(ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)]
-                    h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
+        if len(hub_only) > 0:
+            f.write("**Hub-only pathways**:\n\n")
+            f.write("| Pathway | Hub NES | Hub FDR | Comp NES | Comp FDR |\n")
+            f.write("|---------|--------:|--------:|---------:|---------:|\n")
+            for pw in hub_only:
+                hub_pw = ct_lib[(ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)]
+                h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
+                comp_pw = ct_lib[(ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)]
+                if len(comp_pw) > 0:
                     c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
                     f.write(f"| {pw} | {h_best['nes']:.2f} | {h_best['fdr']:.3f} "
                             f"| {c_best['nes']:.2f} | {c_best['fdr']:.3f} |\n")
-                f.write("\n")
+                else:
+                    f.write(f"| {pw} | {h_best['nes']:.2f} | {h_best['fdr']:.3f} "
+                            f"| - | - |\n")
+            f.write("\n")
 
-            if len(comp_only) > 0:
-                f.write("**Comp-only pathways**:\n\n")
-                f.write("| Pathway | Comp NES | Comp FDR | Hub NES | Hub FDR |\n")
-                f.write("|---------|--------:|--------:|---------:|---------:|\n")
-                for pw in comp_only:
-                    comp_pw = ct_lib[(ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)]
-                    c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
-                    hub_pw = ct_lib[(ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)]
-                    if len(hub_pw) > 0:
-                        h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
-                        f.write(f"| {pw} | {c_best['nes']:.2f} | {c_best['fdr']:.3f} "
-                                f"| {h_best['nes']:.2f} | {h_best['fdr']:.3f} |\n")
-                    else:
-                        f.write(f"| {pw} | {c_best['nes']:.2f} | {c_best['fdr']:.3f} "
-                                f"| - | - |\n")
-                f.write("\n")
+        if len(shared) > 0:
+            f.write("**Shared pathways**:\n\n")
+            f.write("| Pathway | Hub NES | Hub FDR | Comp NES | Comp FDR |\n")
+            f.write("|---------|--------:|--------:|---------:|---------:|\n")
+            for pw in shared:
+                hub_pw = ct_lib[(ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)]
+                comp_pw = ct_lib[(ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)]
+                h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
+                c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
+                f.write(f"| {pw} | {h_best['nes']:.2f} | {h_best['fdr']:.3f} "
+                        f"| {c_best['nes']:.2f} | {c_best['fdr']:.3f} |\n")
+            f.write("\n")
+
+        if len(comp_only) > 0:
+            f.write("**Comp-only pathways**:\n\n")
+            f.write("| Pathway | Comp NES | Comp FDR | Hub NES | Hub FDR |\n")
+            f.write("|---------|--------:|--------:|---------:|---------:|\n")
+            for pw in comp_only:
+                comp_pw = ct_lib[(ct_lib["method"] == "composition_cluster") & (ct_lib["pathway"] == pw)]
+                c_best = comp_pw.loc[comp_pw["fdr"].idxmin()]
+                hub_pw = ct_lib[(ct_lib["method"] == "hub_cluster") & (ct_lib["pathway"] == pw)]
+                if len(hub_pw) > 0:
+                    h_best = hub_pw.loc[hub_pw["fdr"].idxmin()]
+                    f.write(f"| {pw} | {c_best['nes']:.2f} | {c_best['fdr']:.3f} "
+                            f"| {h_best['nes']:.2f} | {h_best['fdr']:.3f} |\n")
+                else:
+                    f.write(f"| {pw} | {c_best['nes']:.2f} | {c_best['fdr']:.3f} "
+                            f"| - | - |\n")
+            f.write("\n")
 
     f.write("---\n\n")
     f.write("**Note**: 250-gene Xenium panel limits overlap with hallmark gene sets. "
