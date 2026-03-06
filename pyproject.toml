@@ -40,7 +40,7 @@ dependencies = [
     "pooch", # missing dep for scvi-tools
     "einops",
     "xarray",
-    "transformer-lens==1.14.0",
+    "transformer-lens",
     "wandb",
     "numpy",
     # visualization

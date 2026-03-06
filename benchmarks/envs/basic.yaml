@@ -14,3 +14,4 @@ dependencies:
       - igraph
       - scipy<=1.12.0
       - scvi-tools==1.2.2
+      - einops
