@@ -12,12 +12,7 @@ from gitiii_benchmark_utils import convert_adata_to_csv
 
 
 def train_single_run(converted_df_path, gene_names, lr, distance_threshold, run_seed, run_dir, run_results_path):
-    """
-    Train a single GITIII model run in a dedicated subdirectory.
-
-    Returns the best validation MSE (val_loss_interaction) for this run,
-    read from record_GRIT.csv which GITIII writes after every epoch.
-    """
+    """Train a single GITIII run and return the best validation MSE, loading from cache if available."""
     if os.path.exists(run_results_path):
         with open(run_results_path) as f:
             cached = json.load(f)
@@ -52,7 +47,6 @@ def train_single_run(converted_df_path, gene_names, lr, distance_threshold, run_
     estimator.preprocess_dataset()
     estimator.train()
 
-    # GITIII writes record_GRIT.csv to cwd (run_dir) with a val_loss_interaction column per epoch
     records_path = os.path.join(run_dir, "record_GRIT.csv")
     val_mse = pd.read_csv(records_path)["val_loss_interaction"].min()
     print(f"  best val_mse={val_mse:.6f}")
@@ -76,13 +70,11 @@ def main():
     converted_df_path = f"../../../data/{dataset_path.split('/')[-1].split('.')[0]}_converted.csv"
 
     convert_adata_to_csv(adata, labels_key, models_dir, converted_df_path)
-    # convert_adata_to_csv does os.chdir(models_dir); resolve df path then return to root
     abs_converted_df_path = os.path.abspath(converted_df_path)
     os.chdir(project_root)
 
     gene_names = adata.var_names.tolist()
 
-    # Hyperparameter grid
     learning_rates = [1e-3, 1e-4, 1e-5]
     distance_thresholds = [50, 80, 120]
     run_seeds = [42, 22, 38]
@@ -107,7 +99,6 @@ def main():
             run_results_path,
         )
 
-        # Cache result so the run can be skipped on resume
         if not os.path.exists(run_results_path):
             with open(run_results_path, "w") as f:
                 json.dump({"val_mse": val_mse}, f)
@@ -129,7 +120,6 @@ def main():
         f"seed={best_seed_val}, val_mse={best_val_mse:.6f}"
     )
 
-    # Copy best model files to models_dir so downstream scoring scripts find them
     for fname in os.listdir(best_run_dir):
         src = os.path.join(best_run_dir, fname)
         dst = os.path.join(models_dir, fname)
@@ -140,7 +130,6 @@ def main():
         elif os.path.isfile(src) and not fname.endswith("_results.json"):
             shutil.copy2(src, dst)
 
-    # Save best hyperparameters
     with open(os.path.join(models_dir, "gitiii_best_params.json"), "w") as f:
         json.dump(
             {

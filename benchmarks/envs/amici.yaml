@@ -2,10 +2,13 @@ name: amici
 channels:
   - conda-forge
 dependencies:
-  - python=3.12
+  - python=3.11
   - pip
   - pip:
-      - git+https://github.com/azizilab/amici.git@main
+      - "-e ../../.."
       - pytest
       - pandas
       - scanpy
+      - scikit-misc
+      - igraph
+      - leidenalg

@@ -14,11 +14,7 @@ from ncem_benchmark_utils import get_model_parameters, plot_ncem_loss_curves, tr
 def train_single_run(
     adata, labels_key, exp_params, model_params, train_params, run_model_path, run_model_args_path, run_results_path
 ):
-    """
-    Train a single NCEM model run, evaluate on the test set, and cache results to disk.
-
-    Returns the test gaussian reconstruction loss and the model history.
-    """
+    """Train a single NCEM run, evaluate on the test set, and return the reconstruction loss and history, loading from cache if available."""
     if os.path.exists(run_results_path):
         with open(run_results_path) as f:
             cached = json.load(f)
@@ -42,7 +38,6 @@ def train_single_run(
     test_recons = float(eval_test["gaussian_reconstruction_loss"])
     print(f"  Test reconstruction loss: {test_recons:.4f}")
 
-    # Cache results so we can resume without retraining
     with open(run_results_path, "w") as f:
         json.dump(
             {
@@ -56,16 +51,7 @@ def train_single_run(
 
 
 def main(input_path, labels_key, dataset, seed, niche_size):
-    """
-    Train the NCEM model with hyperparameter sweep, keeping the best run.
-
-    Args:
-        input_path: The path to the input adata object.
-        labels_key: The key to the labels in the adata object.
-        dataset: The dataset to train the model on.
-        seed: The seed to use for the model.
-        niche_size: The niche size (radius) for the model.
-    """
+    """Train the NCEM model with a hyperparameter sweep over lr, l1_coef, and seed, keeping the best run."""
     adata = sc.read_h5ad(input_path)
     if "spatial" not in adata.uns:
         adata.uns["spatial"] = adata.obsm["spatial"].copy()
@@ -78,7 +64,6 @@ def main(input_path, labels_key, dataset, seed, niche_size):
         print(f"Model path {model_path} and model args path {model_args_path} already exist, skipping")
         return
 
-    # Hyperparameter grid
     learning_rates = [0.5, 0.05, 0.005]
     l1_coefs = [0.0, 1e-4, 1e-3]
     run_seeds = [22, 38, 17, 11, 42, 33, 18]
@@ -132,14 +117,12 @@ def main(input_path, labels_key, dataset, seed, niche_size):
         f"Best run {best_run_id}: lr={best_lr}, l1_coef={best_l1_coef}, seed={best_seed}, test_recons={best_test_recons:.4f}"
     )
 
-    # Copy best model checkpoint files to final output paths
     for suffix in [".data-00000-of-00001", ".index"]:
         src = best_run_model_path + suffix
         if os.path.exists(src):
             shutil.copy(src, model_path + suffix)
     shutil.copy(best_run_model_args_path, model_args_path)
 
-    # Save best model hyperparameters
     with open(f"results/{dataset}_{seed}/ncem_{niche_size}_model_params.json", "w") as f:
         json.dump(
             {
@@ -151,7 +134,6 @@ def main(input_path, labels_key, dataset, seed, niche_size):
             f,
         )
 
-    # Plot the loss curves for the best run
     plot_ncem_loss_curves(
         best_model_history,
         niche_size,
