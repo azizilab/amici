@@ -122,7 +122,7 @@ rule all:
 
 rule generate_dataset:
     conda:
-        "amici"
+        "envs/amici.yaml"
     output:
         os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     script:
@@ -140,7 +140,7 @@ rule run_ground_truth_genes:
 
 rule run_ground_truth_neighbor_interactions:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
@@ -161,7 +161,7 @@ rule run_ground_truth_receiver_subtypes:
 # Train the AMICI, NCEM, GITIII and CGCom models
 rule train_amici_model:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
@@ -206,7 +206,7 @@ rule train_cgcom_model:
 # Run AMICI model for gene and neighbor interaction tasks
 rule run_amici_gene_task:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
@@ -218,7 +218,7 @@ rule run_amici_gene_task:
 
 rule run_amici_neighbor_interaction_task:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
@@ -230,7 +230,7 @@ rule run_amici_neighbor_interaction_task:
 
 rule run_amici_receiver_subtype_task:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
@@ -484,7 +484,7 @@ rule plot_receiver_subtype_task_pr_curves:
 # Plot boxplots for the length scale for the AMICI model only
 rule plot_amici_length_scale_boxplots:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
