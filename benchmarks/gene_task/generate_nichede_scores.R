@@ -111,7 +111,7 @@ nichede_obj <- CreateNicheDEObjectFromSeurat(
 nichede_obj = CalculateEffectiveNiche(nichede_obj)
 
 # Run the niche DE function
-nichede_obj = niche_DE_no_parallel(nichede_obj, C=0, M=1, gamma=0)
+nichede_obj = niche_DE_no_parallel(nichede_obj, C=6000, M=50, gamma=0.6)
 
 # Compute the p-values for the niche DE test on positive and negative fold changes
 nichede_obj = get_niche_DE_pval_fisher(nichede_obj, pos=T)
