@@ -46,7 +46,7 @@ for(i in 1:length(cell_names)) {
 }
 
 # Convert counts to integers by rounding
-counts_matrix <- GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
+counts_matrix <- SeuratObject::GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
 counts_matrix <- round(counts_matrix)
 seurat_obj[["RNA"]]@counts <- counts_matrix
 
@@ -69,11 +69,11 @@ seurat_obj@images[[1]] <- new(
 names(seurat_obj@images) <- "coords"
 
 # Set default assay to RNA
-DefaultAssay(seurat_obj) <- "RNA"
+SeuratObject::DefaultAssay(seurat_obj) <- "RNA"
 
 # Calculate average expression profiles
 cell_types <- unique(seurat_obj$leiden)
-counts_matrix <- GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
+counts_matrix <- SeuratObject::GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
 
 # Ensure cell types are consistently sorted
 cell_types_sorted <- sort(unique(cell_types))
@@ -111,7 +111,7 @@ nichede_obj <- CreateNicheDEObjectFromSeurat(
 nichede_obj = CalculateEffectiveNiche(nichede_obj)
 
 # Run the niche DE function
-nichede_obj = niche_DE_no_parallel(nichede_obj, C=0, M=1, gamma=0)
+nichede_obj = niche_DE_no_parallel(nichede_obj, C=6000, M=50, gamma=0.6)
 
 # Compute the p-values for the niche DE test on positive and negative fold changes
 nichede_obj = get_niche_DE_pval_fisher(nichede_obj, pos=T)
