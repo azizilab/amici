@@ -32,7 +32,9 @@ from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 # %% Config
 DATASET_SEEDS = [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
 TRAIN_SEED = 42
-N_NEIGHBORS_VALUES = [50, 70, 80, 90]
+END_PENALTY_VALUES = [1e-2, 1e-3, 1e-4, 1e-5]
+N_NEIGHBORS = 50
+N_HEADS = 8
 LABELS_KEY = "leiden"
 SUBTYPE_KEY = "subtype"
 GT_INTERACTIONS = {
@@ -53,7 +55,6 @@ GT_INTERACTIONS = {
 }
 PENALTY_PARAMS = {
     "start_val": 1e-6,
-    "end_val": 1e-2,
     "epoch_start": 10,
     "epoch_end": 40,
     "value_l1_penalty_coef": 1e-4,
@@ -75,10 +76,10 @@ os.makedirs(os.path.join(base_dir, "figures"), exist_ok=True)
 
 interaction_df = _create_interaction_df(GT_INTERACTIONS)
 
-# %% Train and evaluate models across dataset seeds and n_neighbors values
-gene_pr_results = {k: [] for k in N_NEIGHBORS_VALUES}
-neighbor_pr_results = {k: [] for k in N_NEIGHBORS_VALUES}
-receiver_pr_results = {k: [] for k in N_NEIGHBORS_VALUES}
+# %% Train and evaluate models across dataset seeds and end_penalty values
+gene_pr_results = {p: [] for p in END_PENALTY_VALUES}
+neighbor_pr_results = {p: [] for p in END_PENALTY_VALUES}
+receiver_pr_results = {p: [] for p in END_PENALTY_VALUES}
 
 gene_pr_curves = {}
 neighbor_pr_curves = {}
@@ -119,8 +120,13 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
         }
     )
 
-    for n_neighbors in N_NEIGHBORS_VALUES:
-        model_path = os.path.join(base_dir, "saved_models", f"amici_neighbor_analysis_{dataset_seed}_{n_neighbors}")
+    AMICI.setup_anndata(adata, labels_key=LABELS_KEY, coord_obsm_key="spatial", n_neighbors=N_NEIGHBORS)
+
+    for end_penalty in END_PENALTY_VALUES:
+        end_penalty_str = f"{end_penalty:.0e}"
+        model_path = os.path.join(
+            base_dir, "saved_models", f"amici_attention_penalty_analysis_{dataset_seed}_{end_penalty_str}"
+        )
 
         if not os.path.exists(os.path.join(model_path, "model.pt")):
             pl.seed_everything(TRAIN_SEED)
@@ -129,11 +135,11 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
                 adata_train,
                 labels_key=LABELS_KEY,
                 coord_obsm_key="spatial",
-                n_neighbors=n_neighbors,
+                n_neighbors=N_NEIGHBORS,
             )
             model = AMICI(
                 adata_train,
-                n_heads=8,
+                n_heads=N_HEADS,
                 value_l1_penalty_coef=PENALTY_PARAMS["value_l1_penalty_coef"],
             )
             model.train(
@@ -148,16 +154,14 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
                 callbacks=[
                     AttentionPenaltyMonitor(
                         start_val=PENALTY_PARAMS["start_val"],
-                        end_val=PENALTY_PARAMS["end_val"],
+                        end_val=end_penalty,
                         epoch_start=PENALTY_PARAMS["epoch_start"],
                         epoch_end=PENALTY_PARAMS["epoch_end"],
                     ),
                 ],
             )
-            AMICI.setup_anndata(adata, labels_key=LABELS_KEY, coord_obsm_key="spatial", n_neighbors=n_neighbors)
             model.save(model_path, overwrite=True)
 
-        AMICI.setup_anndata(adata, labels_key=LABELS_KEY, coord_obsm_key="spatial", n_neighbors=n_neighbors)
         model = AMICI.load(model_path, adata=adata)
 
         # Gene task
@@ -176,9 +180,9 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
             scores_col="amici_scores",
             gt_class_col="class",
         )
-        gene_pr_results[n_neighbors].append(auprc)
+        gene_pr_results[end_penalty].append(auprc)
         if dataset_seed_idx == 0:
-            gene_pr_curves[n_neighbors] = {"precision": precision, "recall": recall, "auprc": auprc}
+            gene_pr_curves[end_penalty] = {"precision": precision, "recall": recall, "auprc": auprc}
 
         # Neighbor interaction task
         gt_neighbor_classes_df = get_interaction_gt_neighbor_classes(adata, GT_INTERACTIONS, LABELS_KEY)
@@ -190,9 +194,9 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
             scores_col="amici_scores",
             gt_class_col="class",
         )
-        neighbor_pr_results[n_neighbors].append(auprc)
+        neighbor_pr_results[end_penalty].append(auprc)
         if dataset_seed_idx == 0:
-            neighbor_pr_curves[n_neighbors] = {"precision": precision, "recall": recall, "auprc": auprc}
+            neighbor_pr_curves[end_penalty] = {"precision": precision, "recall": recall, "auprc": auprc}
 
         # Receiver subtype task
         receiver_scores_df = get_amici_receiver_subtype_scores(model, adata)
@@ -203,12 +207,12 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
             scores_col="amici_scores",
             gt_class_col="class",
         )
-        receiver_pr_results[n_neighbors].append(auprc)
+        receiver_pr_results[end_penalty].append(auprc)
         if dataset_seed_idx == 0:
-            receiver_pr_curves[n_neighbors] = {"precision": precision, "recall": recall, "auprc": auprc}
+            receiver_pr_curves[end_penalty] = {"precision": precision, "recall": recall, "auprc": auprc}
 
 # %% Plot PR curves (first dataset seed)
-colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(N_NEIGHBORS_VALUES)))
+colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(END_PENALTY_VALUES)))
 task_curves = [
     (gene_pr_curves, "Gene Task"),
     (neighbor_pr_curves, "Neighbor Interaction Task"),
@@ -217,15 +221,15 @@ task_curves = [
 
 fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 for ax, (curves, title) in zip(axes, task_curves, strict=False):
-    for (n_neighbors, pr), color in zip(curves.items(), colors, strict=False):
+    for (end_penalty, pr), color in zip(curves.items(), colors, strict=False):
         PrecisionRecallDisplay(recall=pr["recall"], precision=pr["precision"]).plot(
-            ax=ax, name=f"k={n_neighbors} (AUPRC={pr['auprc']:.2f})", color=color
+            ax=ax, name=f"p={end_penalty:.0e} (AUPRC={pr['auprc']:.2f})", color=color
         )
     ax.set_title(title)
     ax.legend(fontsize=8)
-fig.suptitle("AMICI Sensitivity to Number of Neighbors", fontsize=14)
+fig.suptitle("AMICI Sensitivity to Attention End Penalty", fontsize=14)
 plt.tight_layout()
-plt.savefig(os.path.join(base_dir, "figures", "neighbor_analysis_pr_curves.png"), dpi=300, bbox_inches="tight")
+plt.savefig(os.path.join(base_dir, "figures", "attention_penalty_analysis_pr_curves.png"), dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% Plot AUPRC boxplots across dataset seeds
@@ -237,16 +241,19 @@ task_results = [
 
 fig, axes = plt.subplots(1, 3, figsize=(14, 5))
 for ax, (results, title) in zip(axes, task_results, strict=False):
-    data = [results[k] for k in N_NEIGHBORS_VALUES]
-    bp = ax.boxplot(data, labels=[f"k={k}" for k in N_NEIGHBORS_VALUES], patch_artist=True)
+    data = [results[p] for p in END_PENALTY_VALUES]
+    bp = ax.boxplot(data, labels=[f"{p:.0e}" for p in END_PENALTY_VALUES], patch_artist=True)
     for patch in bp["boxes"]:
         patch.set_facecolor("steelblue")
         patch.set_alpha(0.6)
     ax.set_ylabel("AUPRC")
     ax.set_ylim(0, 1)
     ax.set_title(title)
+    ax.set_xlabel("End Attention Penalty")
     ax.grid(axis="y", alpha=0.3)
-fig.suptitle("AUPRC Robustness to Number of Neighbors\n(across 10 dataset seeds)", fontsize=13)
+fig.suptitle("AUPRC Robustness to Attention End Penalty\n(across 10 dataset seeds)", fontsize=13)
 plt.tight_layout()
-plt.savefig(os.path.join(base_dir, "figures", "neighbor_analysis_auprc_boxplots.png"), dpi=300, bbox_inches="tight")
+plt.savefig(
+    os.path.join(base_dir, "figures", "attention_penalty_analysis_auprc_boxplots.png"), dpi=300, bbox_inches="tight"
+)
 plt.show()
