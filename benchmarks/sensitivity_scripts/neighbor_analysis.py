@@ -85,7 +85,7 @@ neighbor_pr_curves = {}
 receiver_pr_curves = {}
 
 for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
-    adata_path = os.path.join(base_dir, "data", f"semisyn_neighbor_analysis_{dataset_seed}.h5ad")
+    adata_path = os.path.join(base_dir, "data", f"semisyn_{dataset_seed}.h5ad")
 
     random.seed(dataset_seed)
     np.random.seed(dataset_seed)
