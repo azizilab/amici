@@ -69,10 +69,17 @@ def plot_combined(all_results, all_metadata, output_dir):
     colors = {"cpu": "tab:blue", "gpu": "tab:orange"}
     markers = {"cpu": "o", "gpu": "s"}
 
+    # Use only subset sizes common to both accelerators for a fair comparison
+    common_sizes = None
+    for results in all_results.values():
+        sizes = {r["n_cells"] for r in results}
+        common_sizes = sizes if common_sizes is None else common_sizes & sizes
+
     max_epochs = None
     for accelerator, results in all_results.items():
-        n_cells = [r["n_cells"] for r in results]
-        runtime_total = [r["runtime_total_s"] for r in results]
+        filtered = [r for r in results if r["n_cells"] in common_sizes]
+        n_cells = [r["n_cells"] for r in filtered]
+        runtime_total = [r["runtime_total_s"] for r in filtered]
         label = accelerator.upper()
         ax_left.plot(
             n_cells, runtime_total, f"{markers[accelerator]}-",
