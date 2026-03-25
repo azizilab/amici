@@ -61,12 +61,12 @@ _gsea_ct_sets = {}
 for _ct in TUMOR_CELL_TYPES:
     _gsea_ct_sets[_ct] = "MSigDB_Hallmark_2020"
 for _ct in IMMUNE_CELL_TYPES + STROMAL_CELL_TYPES:
-    _gsea_ct_sets[_ct] = "GO_Biological_Process_2023"
+    _gsea_ct_sets[_ct] = "Reactome_Pathways_2024"
 
 GENE_SET_CONFIGS = {
     "gsea": {
         "ct_gene_sets": _gsea_ct_sets,
-        "bar_chart_labels": ["Tumor (Hallmark)", "Immune (GO BP)", "Stromal (GO BP)"],
+        "bar_chart_labels": ["Tumor (Hallmark)", "Immune (Reactome)", "Stromal (Reactome)"],
         "fig_dir_base": "hub_validation_gsea",
         "file_prefix": "gsea",
         "min_size": 5,
@@ -75,8 +75,8 @@ GENE_SET_CONFIGS = {
         "md_gene_set_desc": (
             "**Gene set assignment**:\n"
             "- Tumor cell types: MSigDB_Hallmark_2020\n"
-            "- Immune cell types: GO_Biological_Process_2023\n"
-            "- Stromal cell types: GO_Biological_Process_2023\n"
+            "- Immune cell types: Reactome_Pathways_2024\n"
+            "- Stromal cell types: Reactome_Pathways_2024\n"
         ),
         "md_note_extra": "",
         "display_name": "GSEA",
@@ -599,7 +599,8 @@ for focus_ct in ALL_CELL_TYPES:
         Patch(facecolor=comp_color_bf, edgecolor="black", label="Composition (FDR < 0.25)"),
         Patch(facecolor=comp_faded, edgecolor="gray", label="Composition (n.s.)"),
     ]
-    ax.legend(handles=legend_elements, loc="lower right", fontsize=9, frameon=True)
+    ax.legend(handles=legend_elements, loc="lower right",
+              bbox_to_anchor=(1.0, 0.0), fontsize=8, frameon=True, framealpha=0.9)
 
     ax.text(-0.02, 1.02, "Hub clusters", transform=ax.transAxes,
             ha="right", fontsize=11, fontweight="bold", color=hub_color_bf)
