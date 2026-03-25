@@ -470,6 +470,8 @@ def clean_pathway_name(name):
     return name
 
 
+saved_butterfly_cts = []
+
 for focus_ct in ALL_CELL_TYPES:
     print(f"\n{'='*60}")
     print(f"Butterfly chart for: {focus_ct}")
@@ -617,6 +619,7 @@ for focus_ct in ALL_CELL_TYPES:
                 dpi=300, bbox_inches="tight")
     fig.savefig(os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.svg"),
                 bbox_inches="tight")
+    saved_butterfly_cts.append(focus_ct)
     print(f"  Saved to {fig_dir}/{FILE_PREFIX}_butterfly_{ct_slug}.png/.svg")
     plt.show()
 
@@ -824,5 +827,49 @@ with open(md_path, "w") as f:
             f"Small matched_size values indicate sparse overlap; interpret with caution.{_cfg['md_note_extra']}\n")
 
 print(f"Summary saved to {md_path}")
+
+# %% Combined butterfly figure
+from matplotlib.image import imread
+
+# Collect butterfly charts saved during this run, ordered by cell type group
+butterfly_order = []
+for _panel_title, _ct_list in BAR_CHART_PANELS:
+    for ct in _ct_list:
+        if ct not in saved_butterfly_cts:
+            continue
+        ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
+        path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
+        butterfly_order.append((ct, path))
+
+n_plots = len(butterfly_order)
+if n_plots > 0:
+    ncols = 3
+    nrows = (n_plots + ncols - 1) // ncols
+
+    imgs = [(ct, imread(p)) for ct, p in butterfly_order]
+    # Use aspect ratio of first image to set figure size
+    h, w = imgs[0][1].shape[:2]
+    cell_w, cell_h = 6, 6 * h / w
+    fig, axes = plt.subplots(nrows, ncols, figsize=(cell_w * ncols, cell_h * nrows))
+    axes = np.atleast_2d(axes)
+
+    for idx, (ct, img) in enumerate(imgs):
+        r, c = divmod(idx, ncols)
+        axes[r, c].imshow(img)
+        axes[r, c].set_axis_off()
+
+    # Hide unused subplots
+    for idx in range(n_plots, nrows * ncols):
+        r, c = divmod(idx, ncols)
+        axes[r, c].set_axis_off()
+
+    plt.subplots_adjust(wspace=0.02, hspace=0.02)
+    combined_path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_combined.png")
+    plt.savefig(combined_path, dpi=300, bbox_inches="tight")
+    plt.savefig(combined_path.replace(".png", ".svg"), bbox_inches="tight")
+    plt.show()
+    print(f"Saved combined butterfly chart ({n_plots} panels) to {combined_path}")
+else:
+    print("No butterfly charts to combine.")
 
 # %%
