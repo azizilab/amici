@@ -134,6 +134,16 @@ def main(input_path, labels_key, dataset, seed, niche_size):
             f,
         )
 
+    # Clean up all sweep run model files (best model already copied to final path)
+    for run_id_cleanup in range(len(all_runs)):
+        for suffix in [".data-00000-of-00001", ".index"]:
+            path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id_cleanup}_checkpoint") + suffix
+            if os.path.exists(path):
+                os.remove(path)
+        pickle_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id_cleanup}.pickle")
+        if os.path.exists(pickle_path):
+            os.remove(pickle_path)
+
     plot_ncem_loss_curves(
         best_model_history,
         niche_size,

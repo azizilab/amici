@@ -139,6 +139,12 @@ def main():
     with open(os.path.join(models_dir, f"cgcom_sweep_run_{best_run_id}_results.json")) as f:
         best_results = json.load(f)
 
+    # Clean up all sweep run directories (best model already copied to models_dir)
+    for run_id_cleanup in range(len(all_runs)):
+        run_dir = os.path.join(models_dir, f"cgcom_sweep_run_{run_id_cleanup}")
+        if os.path.exists(run_dir):
+            shutil.rmtree(run_dir)
+
     plt.figure(figsize=(10, 5))
     plt.plot(best_results["train_losses"], label="Train Loss")
     plt.plot(best_results["val_losses"], label="Validation Loss", linestyle="--")

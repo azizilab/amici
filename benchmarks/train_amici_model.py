@@ -238,6 +238,12 @@ def main():
     with open(snakemake.output[2], "w") as f:  # noqa: F821
         f.write(str(best_recons))
 
+    # Clean up all sweep run directories (best model already saved to snakemake output)
+    for run_key in results_dict:
+        run_model_path = results_dict[run_key]["model_path"]
+        if os.path.exists(run_model_path):
+            shutil.rmtree(run_model_path)
+
 
 if __name__ == "__main__":
     main()

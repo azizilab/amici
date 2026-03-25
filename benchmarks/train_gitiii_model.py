@@ -141,6 +141,12 @@ def main():
             f,
         )
 
+    # Clean up all sweep run directories (best model already copied to models_dir)
+    for run_id_cleanup in range(len(all_runs)):
+        run_dir_cleanup = os.path.join(models_dir, f"gitiii_sweep_run_{run_id_cleanup}")
+        if os.path.exists(run_dir_cleanup):
+            shutil.rmtree(run_dir_cleanup)
+
 
 if __name__ == "__main__":
     np.random.seed(42)
