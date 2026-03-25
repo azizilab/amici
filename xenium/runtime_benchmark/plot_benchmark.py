@@ -88,11 +88,14 @@ def plot_combined(all_results, all_metadata, output_dir):
     ax_left.grid(True, alpha=0.3)
     ax_left.tick_params(labelsize=10)
 
+    # Set y-axis minimum to zero
+    _, y_max = ax_left.get_ylim()
+    ax_left.set_ylim(0, y_max)
+
     # Right y-axis: seconds per epoch
     ax_right = ax_left.twinx()
     ax_right.set_ylabel("Seconds per Epoch", fontsize=12)
-    y_min, y_max = ax_left.get_ylim()
-    ax_right.set_ylim(y_min / max_epochs, y_max / max_epochs)
+    ax_right.set_ylim(0, y_max / max_epochs)
     ax_right.tick_params(labelsize=10)
 
     fig.tight_layout()
