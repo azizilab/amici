@@ -7,6 +7,7 @@ import gseapy as gp
 import numpy as np
 import pandas as pd
 import os
+import re
 import warnings
 from tqdm import tqdm
 
@@ -33,27 +34,88 @@ CELL_TYPE_PALETTE = {
     "Endothelial": "#277987",
 }
 
-# Cell type categories and their assigned gene set libraries
+# Cell type categories
 TUMOR_CELL_TYPES = ["Invasive_Tumor", "DCIS_1", "DCIS_2"]
 IMMUNE_CELL_TYPES = ["CD8+_T_Cells", "CD4+_T_Cells", "IRF7+_DCs", "LAMP3+_DCs",
                      "Macrophages_1", "Macrophages_2", "B_Cells", "Mast_Cells"]
 STROMAL_CELL_TYPES = ["Stromal", "Myoepi_ACTA2+", "Myoepi_KRT15+",
                       "Perivascular-Like", "Endothelial"]
-
-CT_GENE_SETS = {}
-for _ct in TUMOR_CELL_TYPES:
-    CT_GENE_SETS[_ct] = "MSigDB_Hallmark_2020"
-for _ct in IMMUNE_CELL_TYPES + STROMAL_CELL_TYPES:
-    CT_GENE_SETS[_ct] = "GO_Biological_Process_2023"
-
 ALL_CELL_TYPES = TUMOR_CELL_TYPES + IMMUNE_CELL_TYPES + STROMAL_CELL_TYPES
 
-# Bar chart panel groups: (panel_title, cell_type_list)
-BAR_CHART_PANELS = [
-    ("Tumor (Hallmark)", TUMOR_CELL_TYPES),
-    ("Immune (GO BP)", IMMUNE_CELL_TYPES),
-    ("Stromal (GO BP)", STROMAL_CELL_TYPES),
-]
+# ---------------------------------------------------------------------------
+# Gene set mode: "gsea", "kegg_signaling", or "reactome"
+# ---------------------------------------------------------------------------
+GENE_SET_MODE = "gsea"
+
+def _kegg_signaling_filter(df):
+    """Filter GSEA results to pathways containing 'signaling'."""
+    mask = df["pathway"].str.contains("signaling", case=False, na=False)
+    n_before = len(df)
+    out = df[mask].copy().reset_index(drop=True)
+    print(f"After filtering to 'signaling' pathways: {len(out)} rows "
+          f"(removed {n_before - len(out)}), "
+          f"{out['pathway'].nunique()} unique pathways")
+    return out
+
+_gsea_ct_sets = {}
+for _ct in TUMOR_CELL_TYPES:
+    _gsea_ct_sets[_ct] = "MSigDB_Hallmark_2020"
+for _ct in IMMUNE_CELL_TYPES + STROMAL_CELL_TYPES:
+    _gsea_ct_sets[_ct] = "GO_Biological_Process_2023"
+
+GENE_SET_CONFIGS = {
+    "gsea": {
+        "ct_gene_sets": _gsea_ct_sets,
+        "bar_chart_labels": ["Tumor (Hallmark)", "Immune (GO BP)", "Stromal (GO BP)"],
+        "fig_dir_base": "hub_validation_gsea",
+        "file_prefix": "gsea",
+        "min_size": 5,
+        "pathway_filter": None,
+        "md_title": "GSEA",
+        "md_gene_set_desc": (
+            "**Gene set assignment**:\n"
+            "- Tumor cell types: MSigDB_Hallmark_2020\n"
+            "- Immune cell types: GO_Biological_Process_2023\n"
+            "- Stromal cell types: GO_Biological_Process_2023\n"
+        ),
+        "md_note_extra": "",
+        "display_name": "GSEA",
+    },
+    "kegg_signaling": {
+        "ct_gene_sets": {ct: "KEGG_2021_Human" for ct in ALL_CELL_TYPES},
+        "bar_chart_labels": ["Tumor (KEGG Signaling)", "Immune (KEGG Signaling)",
+                             "Stromal (KEGG Signaling)"],
+        "fig_dir_base": "hub_validation_kegg_signaling",
+        "file_prefix": "kegg_signaling",
+        "min_size": 3,
+        "pathway_filter": _kegg_signaling_filter,
+        "md_title": "KEGG Signaling",
+        "md_gene_set_desc": "**Gene set library**: KEGG_2021_Human (filtered to signaling pathways)\n",
+        "md_note_extra": " Only pathways containing 'signaling' in their name are included.",
+        "display_name": "KEGG Signaling",
+    },
+    "reactome": {
+        "ct_gene_sets": {ct: "Reactome_Pathways_2024" for ct in ALL_CELL_TYPES},
+        "bar_chart_labels": ["Tumor (Reactome)", "Immune (Reactome)",
+                             "Stromal (Reactome)"],
+        "fig_dir_base": "hub_validation_reactome",
+        "file_prefix": "reactome",
+        "min_size": 5,
+        "pathway_filter": None,
+        "md_title": "Reactome",
+        "md_gene_set_desc": "**Gene set library**: Reactome_Pathways_2024\n",
+        "md_note_extra": "",
+        "display_name": "Reactome",
+    },
+}
+
+# Unpack active configuration
+_cfg = GENE_SET_CONFIGS[GENE_SET_MODE]
+CT_GENE_SETS = _cfg["ct_gene_sets"]
+BAR_CHART_PANELS = list(zip(_cfg["bar_chart_labels"],
+                            [TUMOR_CELL_TYPES, IMMUNE_CELL_TYPES, STROMAL_CELL_TYPES]))
+MIN_SIZE = _cfg["min_size"]
+FILE_PREFIX = _cfg["file_prefix"]
 
 # Matched parameters: same k for hub and composition
 k = 10
@@ -61,6 +123,7 @@ q = 0.9
 seed = 18
 MIN_CELLS_PER_CLUSTER = 30
 FDR_THRESHOLD = 0.25
+POSITIVE_ONLY = True  # True: butterfly charts show only positively enriched pathways
 
 labels_key = "celltype_train_grouped"
 data_date = "2025-05-01"
@@ -69,7 +132,7 @@ model_date = "2025-05-02"
 hub_path = f"data/xenium_sample1/grid_search_cache/hub_results/hub_q{q}_k{k}.csv"
 comp_path = f"data/xenium_sample1/grid_search_cache/composition_results/composition_k{k}.csv"
 
-fig_dir = "figures/hub_validation_gsea"
+fig_dir = f"figures/{_cfg['fig_dir_base']}_pos" if POSITIVE_ONLY else f"figures/{_cfg['fig_dir_base']}"
 os.makedirs(fig_dir, exist_ok=True)
 
 # Method display names and colors
@@ -82,9 +145,8 @@ print(f"Parameters: k={k}, q={q}, seed={seed}")
 print(f"Hub path:  {hub_path}")
 print(f"Comp path: {comp_path}")
 print(f"Figures:   {fig_dir}/")
-print(f"Tumor cell types ({len(TUMOR_CELL_TYPES)}): MSigDB_Hallmark_2020")
-print(f"Immune cell types ({len(IMMUNE_CELL_TYPES)}): GO_Biological_Process_2023")
-print(f"Stromal cell types ({len(STROMAL_CELL_TYPES)}): GO_Biological_Process_2023")
+for ct in ALL_CELL_TYPES:
+    print(f"  {ct}: {CT_GENE_SETS[ct]}")
 
 # %% Load adata and cluster assignments
 adata = sc.read_h5ad(f"./data/xenium_sample1/xenium_sample1_filtered_{data_date}.h5ad")
@@ -180,7 +242,7 @@ for (ct, method, clust), deg_df in tqdm(deg_results.items(), desc="Running GSEA"
         pre_res = gp.prerank(
             rnk=ranked,
             gene_sets=gene_set_name,
-            min_size=5,
+            min_size=MIN_SIZE,
             max_size=500,
             permutation_num=1000,
             seed=seed,
@@ -219,11 +281,18 @@ for (ct, method, clust), deg_df in tqdm(deg_results.items(), desc="Running GSEA"
 gsea_df = pd.DataFrame(gsea_all_results)
 print(f"\nTotal GSEA result rows: {len(gsea_df)}")
 
+# Apply optional pathway filter (e.g. KEGG signaling filter)
+if len(gsea_df) > 0 and _cfg["pathway_filter"] is not None:
+    gsea_df = _cfg["pathway_filter"](gsea_df)
+
 if len(gsea_df) > 0:
     gsea_df["fdr"] = pd.to_numeric(gsea_df["fdr"], errors="coerce")
     gsea_df["nes"] = pd.to_numeric(gsea_df["nes"], errors="coerce")
     gsea_df["matched_size"] = pd.to_numeric(gsea_df["matched_size"], errors="coerce")
-    gsea_df["significant"] = gsea_df["fdr"] < FDR_THRESHOLD
+    if POSITIVE_ONLY:
+        gsea_df["significant"] = (gsea_df["fdr"] < FDR_THRESHOLD) & (gsea_df["nes"] > 0)
+    else:
+        gsea_df["significant"] = gsea_df["fdr"] < FDR_THRESHOLD
 
     # Report overlap stats
     for lib in gsea_df["gene_set_library"].unique():
@@ -234,7 +303,7 @@ if len(gsea_df) > 0:
 
 # %% Summary table: significant pathways per cell type x method
 print("\n" + "=" * 70)
-print("GSEA SUMMARY: Significant pathways (FDR < 0.25) per cell type x method")
+print(f"{_cfg['display_name'].upper()} SUMMARY: Significant pathways (FDR < 0.25) per cell type x method")
 print("=" * 70)
 
 summary_rows = []
@@ -376,14 +445,14 @@ for ax_idx, (panel_title, ct_list) in enumerate(BAR_CHART_PANELS):
     ax.spines["right"].set_visible(False)
     ax.set_ylim(bottom=0)
 
-fig.suptitle("GSEA: Hub vs Composition Cluster DEGs", fontsize=14, fontweight="bold", y=1.02)
+fig.suptitle(f"{_cfg['display_name']}: Hub vs Composition Cluster DEGs", fontsize=14, fontweight="bold", y=1.02)
 plt.tight_layout()
 
-fig.savefig(os.path.join(fig_dir, "gsea_sig_pathways_barplot.png"),
+fig.savefig(os.path.join(fig_dir, f"{FILE_PREFIX}_barplot.png"),
             dpi=300, bbox_inches="tight")
-fig.savefig(os.path.join(fig_dir, "gsea_sig_pathways_barplot.svg"),
+fig.savefig(os.path.join(fig_dir, f"{FILE_PREFIX}_barplot.svg"),
             bbox_inches="tight")
-print(f"Saved stacked bar chart to {fig_dir}/gsea_sig_pathways_barplot.png/.svg")
+print(f"Saved stacked bar chart to {fig_dir}/{FILE_PREFIX}_barplot.png/.svg")
 plt.show()
 
 # %% Butterfly/mirror bar charts for all cell types
@@ -391,11 +460,13 @@ from matplotlib.patches import Patch
 
 
 def clean_pathway_name(name):
-    """Remove common prefixes and clean up pathway names for display."""
+    """Clean pathway names for display (handles Hallmark, KEGG, and Reactome formats)."""
+    name = re.sub(r'\s*R-HSA-\d+$', '', name)  # Reactome IDs
+    name = name.split(" Homo sapiens")[0]  # KEGG suffixes
     name = name.replace("Hallmark ", "").replace("HALLMARK_", "").replace("HALLMARK ", "")
     name = name.replace("_", " ").title()
-    if len(name) > 45:
-        name = name[:42] + "..."
+    if len(name) > 50:
+        name = name[:47] + "..."
     return name
 
 
@@ -415,8 +486,10 @@ for focus_ct in ALL_CELL_TYPES:
         print(f"  No GSEA results for {focus_ct}, skipping.")
         continue
 
-    # Aggregate: for each pathway x method, take the cluster with the lowest FDR
-    # (most significant result), so significance counts match the bar chart.
+    # Aggregate: for each pathway x method, pick representative cluster result.
+    # POSITIVE_ONLY mode: prefer positively significant (NES > 0 + FDR < threshold);
+    #   if not significant, take cluster with highest NES (most positive direction).
+    # Standard mode: take the cluster with the lowest FDR.
     butterfly_data = []
     for method in ["hub_cluster", "composition_cluster"]:
         method_df = ct_gsea[ct_gsea["method"] == method]
@@ -424,15 +497,24 @@ for focus_ct in ALL_CELL_TYPES:
             continue
         for pathway in method_df["pathway"].unique():
             pw_df = method_df[method_df["pathway"] == pathway]
-            best_idx = pw_df["fdr"].idxmin()
+            if POSITIVE_ONLY:
+                pos_sig = pw_df[(pw_df["nes"] > 0) & (pw_df["fdr"] < FDR_THRESHOLD)]
+                if len(pos_sig) > 0:
+                    best_idx = pos_sig["fdr"].idxmin()
+                else:
+                    best_idx = pw_df["nes"].idxmax()
+            else:
+                best_idx = pw_df["fdr"].idxmin()
             best_row = pw_df.loc[best_idx]
+            is_sig = (best_row["nes"] > 0 and best_row["fdr"] < FDR_THRESHOLD) \
+                if POSITIVE_ONLY else (best_row["fdr"] < FDR_THRESHOLD)
             butterfly_data.append({
                 "pathway": pathway,
                 "method": method,
                 "nes": best_row["nes"],
                 "fdr": best_row["fdr"],
                 "matched_size": best_row["matched_size"],
-                "significant": best_row["fdr"] < FDR_THRESHOLD,
+                "significant": is_sig,
             })
 
     butterfly_df = pd.DataFrame(butterfly_data)
@@ -440,10 +522,11 @@ for focus_ct in ALL_CELL_TYPES:
     # Filter to pathways significant in at least one method
     sig_pathways = butterfly_df.loc[butterfly_df["significant"], "pathway"].unique()
     butterfly_df = butterfly_df[butterfly_df["pathway"].isin(sig_pathways)]
-    print(f"  Pathways significant in at least one method: {len(sig_pathways)}")
+    mode_label = "positively significant" if POSITIVE_ONLY else "significant"
+    print(f"  Pathways {mode_label} in at least one method: {len(sig_pathways)}")
 
     if len(butterfly_df) == 0:
-        print(f"  No significant pathways for {focus_ct}, skipping butterfly chart.")
+        print(f"  No {mode_label} pathways for {focus_ct}, skipping butterfly chart.")
         continue
 
     # Get union of all pathways
@@ -453,11 +536,12 @@ for focus_ct in ALL_CELL_TYPES:
     hub_data = butterfly_df[butterfly_df["method"] == "hub_cluster"].set_index("pathway")
     comp_data = butterfly_df[butterfly_df["method"] == "composition_cluster"].set_index("pathway")
 
-    # Sort pathways by hub |NES| (descending)
+    # Sort pathways by hub NES (descending); POSITIVE_ONLY uses raw NES, else |NES|
     pathway_order = []
     for pw in all_pathways:
         hub_nes = hub_data.loc[pw, "nes"] if pw in hub_data.index else 0
-        pathway_order.append((pw, abs(hub_nes)))
+        sort_val = hub_nes if POSITIVE_ONLY else abs(hub_nes)
+        pathway_order.append((pw, sort_val))
     pathway_order.sort(key=lambda x: x[1], reverse=True)
     pathways_sorted = [p[0] for p in pathway_order]
 
@@ -505,7 +589,7 @@ for focus_ct in ALL_CELL_TYPES:
     ax.set_yticklabels([clean_pathway_name(pw) for pw in pathways_sorted], fontsize=9)
     ax.axvline(0, color="black", linewidth=0.8)
     ax.set_xlabel("|NES|", fontsize=12)
-    ax.set_title(f"GSEA Butterfly Chart: {focus_ct.replace('_', ' ')}\n"
+    ax.set_title(f"{_cfg['display_name']} Butterfly Chart: {focus_ct.replace('_', ' ')}\n"
                  f"({butterfly_lib.replace('_', ' ')})",
                  fontsize=13, fontweight="bold")
 
@@ -528,16 +612,16 @@ for focus_ct in ALL_CELL_TYPES:
 
     plt.tight_layout()
     ct_slug = focus_ct.lower().replace("+", "").replace("-", "_")
-    fig.savefig(os.path.join(fig_dir, f"gsea_butterfly_{ct_slug}.png"),
+    fig.savefig(os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png"),
                 dpi=300, bbox_inches="tight")
-    fig.savefig(os.path.join(fig_dir, f"gsea_butterfly_{ct_slug}.svg"),
+    fig.savefig(os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.svg"),
                 bbox_inches="tight")
-    print(f"  Saved to {fig_dir}/gsea_butterfly_{ct_slug}.png/.svg")
+    print(f"  Saved to {fig_dir}/{FILE_PREFIX}_butterfly_{ct_slug}.png/.svg")
     plt.show()
 
 # %% Detailed pathway table: pathways significant in hub but NOT composition
 print("\n" + "=" * 70)
-print("PATHWAYS SIGNIFICANT IN HUB CLUSTERS BUT NOT COMPOSITION CLUSTERS")
+print(f"{_cfg['display_name'].upper()} PATHWAYS SIGNIFICANT IN HUB CLUSTERS BUT NOT COMPOSITION CLUSTERS")
 print("(Unique biological signals captured by attention-based interaction)")
 print("=" * 70)
 
@@ -616,20 +700,17 @@ for ct in ALL_CELL_TYPES:
             print(f"        Comp: NES={c_best['nes']:.2f}, FDR={c_best['fdr']:.3f}")
 
 print("\n" + "=" * 70)
-print("NOTE: 250-gene Xenium panel limits overlap with hallmark gene sets.")
+print("NOTE: 250-gene Xenium panel limits overlap with gene sets.")
 print("Small matched_size values indicate sparse overlap; interpret with caution.")
 print("=" * 70)
 
 # %% Save summary to markdown
-md_path = os.path.join(fig_dir, "gsea_summary.md")
+md_path = os.path.join(fig_dir, f"{FILE_PREFIX}_summary.md")
 with open(md_path, "w") as f:
-    f.write("# GSEA: Hub vs Composition Cluster DEGs\n\n")
+    f.write(f"# {_cfg['md_title']}: Hub vs Composition Cluster DEGs\n\n")
     f.write(f"**Parameters**: q={q}, k={k}, seed={seed}\n\n")
     f.write(f"**FDR threshold**: {FDR_THRESHOLD}\n\n")
-    f.write("**Gene set assignment**:\n")
-    f.write("- Tumor cell types: MSigDB_Hallmark_2020\n")
-    f.write("- Immune cell types: GO_Biological_Process_2023\n")
-    f.write("- Stromal cell types: GO_Biological_Process_2023\n\n")
+    f.write(f"{_cfg['md_gene_set_desc']}\n")
 
     # Summary table per panel group
     f.write("## Significant Pathways per Cell Type (FDR < 0.25)\n\n")
@@ -738,8 +819,8 @@ with open(md_path, "w") as f:
             f.write("\n")
 
     f.write("---\n\n")
-    f.write("**Note**: 250-gene Xenium panel limits overlap with hallmark gene sets. "
-            "Small matched_size values indicate sparse overlap; interpret with caution.\n")
+    f.write("**Note**: 250-gene Xenium panel limits overlap with gene sets. "
+            f"Small matched_size values indicate sparse overlap; interpret with caution.{_cfg['md_note_extra']}\n")
 
 print(f"Summary saved to {md_path}")
 
