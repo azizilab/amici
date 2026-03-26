@@ -6,10 +6,12 @@ import pandas as pd
 import scanpy as sc
 import torch
 from gitiii_benchmark_utils import convert_adata_to_csv, normalize_gitiii_scores, setup_gitiii_model
+from gpu_utils import select_gpu
 
 
 def main():
     """Generate the GITIII scores for the receiver subtype task."""
+    select_gpu()
     # Load the dataset
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     labels_key = dataset_config["labels_key"]

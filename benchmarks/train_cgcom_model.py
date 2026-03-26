@@ -5,13 +5,31 @@ import shutil
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import scanpy as sc
 import torch
+from benchmark_utils import plot_interaction_graph, plot_interaction_matrix
 from cgcom.scripts import train_model
 from cgcom.utils import get_exp_params, get_model_params
+from gpu_utils import select_gpu
+
+
+def build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key):
+    """Aggregate CGCom attention scores by cell type pair into a sender x receiver matrix."""
+    comm_df = pd.read_csv(comm_csv_path)
+    cell_type_map = adata.obs[labels_key].to_dict()
+
+    comm_df["sender_type"] = comm_df["neighbor_cell"].map(cell_type_map)
+    comm_df["receiver_type"] = comm_df["center_cell"].map(cell_type_map)
+    comm_df = comm_df.dropna(subset=["sender_type", "receiver_type"])
+
+    matrix = comm_df.groupby(["sender_type", "receiver_type"])["attention_score"].mean().unstack(fill_value=0)
+    cell_types = sorted(set(matrix.index) | set(matrix.columns))
+    return matrix.reindex(index=cell_types, columns=cell_types, fill_value=0)
 
 
 def train_single_run(
-    dataset_path, labels_key, lr, neighbor_threshold_ratio, run_seed, run_model_path, run_results_path
+    dataset_path, labels_key, lr, neighbor_threshold_ratio, run_model_path, run_results_path, train_obs_names
 ):
     """Train a single CGCom run and return the best validation loss, loading from cache if available."""
     if os.path.exists(run_results_path):
@@ -22,10 +40,6 @@ def train_single_run(
 
     os.makedirs(os.path.dirname(run_model_path), exist_ok=True)
     os.makedirs(os.path.dirname(run_results_path), exist_ok=True)
-
-    np.random.seed(run_seed)
-    torch.manual_seed(run_seed)
-    random.seed(run_seed)
 
     exp_params = get_exp_params(lr=lr, num_epochs=50, neighbor_threshold_ratio=neighbor_threshold_ratio)
     model_params = get_model_params(
@@ -48,6 +62,7 @@ def train_single_run(
         model_path=run_model_path,
         labels_key=labels_key,
         disable_lr_masking=True,
+        train_obs_names=train_obs_names,
     )
 
     best_val_loss = float(min(val_losses))
@@ -61,6 +76,7 @@ def train_single_run(
 
 def main():
     """Train the CGCom model with a hyperparameter sweep over lr, neighbor_threshold_ratio, and seed, keeping the best run."""
+    select_gpu()
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     labels_key = dataset_config["labels_key"]
     dataset_path = snakemake.input.adata_path  # noqa: F821
@@ -71,22 +87,26 @@ def main():
     models_dir = os.path.dirname(final_model_path)
     os.makedirs(models_dir, exist_ok=True)
 
-    learning_rates = [1e-3, 1e-4, 1e-5]
+    adata = sc.read_h5ad(dataset_path)
+    train_obs_names = adata.obs_names[adata.obs["train_test_split"] == "train"].tolist()
+
+    np.random.seed(42)
+    torch.manual_seed(42)
+    random.seed(42)
+
+    learning_rates = [1e-3, 1e-4]
     neighbor_threshold_ratios = [0.005, 0.01, 0.02]
-    run_seeds = [42, 22, 38]
-    all_runs = [(lr, ntr, s) for lr in learning_rates for ntr in neighbor_threshold_ratios for s in run_seeds]
+    all_runs = [(lr, ntr) for lr in learning_rates for ntr in neighbor_threshold_ratios]
 
     best_val_loss = float("inf")
     best_run_id = None
 
-    for run_id, (lr, neighbor_threshold_ratio, run_seed) in enumerate(all_runs):
+    for run_id, (lr, neighbor_threshold_ratio) in enumerate(all_runs):
         run_dir = os.path.join(models_dir, f"cgcom_sweep_run_{run_id}")
         run_model_path = os.path.join(run_dir, "cgcom_model.pt")
         run_results_path = os.path.join(models_dir, f"cgcom_sweep_run_{run_id}_results.json")
 
-        print(
-            f"Run {run_id + 1}/{len(all_runs)}: lr={lr}, neighbor_threshold_ratio={neighbor_threshold_ratio}, seed={run_seed}"
-        )
+        print(f"Run {run_id + 1}/{len(all_runs)}: lr={lr}, neighbor_threshold_ratio={neighbor_threshold_ratio}")
 
         # Skip runs that already have both model and results artifacts.
         if os.path.exists(run_model_path) and os.path.exists(run_results_path):
@@ -96,7 +116,13 @@ def main():
             print(f"  Skipping existing run: val_loss={val_loss:.6f}")
         else:
             val_loss = train_single_run(
-                dataset_path, labels_key, lr, neighbor_threshold_ratio, run_seed, run_model_path, run_results_path
+                dataset_path,
+                labels_key,
+                lr,
+                neighbor_threshold_ratio,
+                run_model_path,
+                run_results_path,
+                train_obs_names,
             )
 
         if val_loss < best_val_loss:
@@ -106,12 +132,10 @@ def main():
     if best_run_id is None:
         raise RuntimeError("No runs completed successfully")
 
-    best_lr, best_ntr, best_seed_val = all_runs[best_run_id]
+    best_lr, best_ntr = all_runs[best_run_id]
     best_run_dir = os.path.join(models_dir, f"cgcom_sweep_run_{best_run_id}")
 
-    print(
-        f"Best run {best_run_id}: lr={best_lr}, neighbor_threshold_ratio={best_ntr}, seed={best_seed_val}, val_loss={best_val_loss:.6f}"
-    )
+    print(f"Best run {best_run_id}: lr={best_lr}, neighbor_threshold_ratio={best_ntr}, val_loss={best_val_loss:.6f}")
 
     for fname in os.listdir(best_run_dir):
         src = os.path.join(best_run_dir, fname)
@@ -130,7 +154,7 @@ def main():
             {
                 "learning_rate": best_lr,
                 "neighbor_threshold_ratio": best_ntr,
-                "seed": int(best_seed_val),
+                "seed": 42,
                 "val_loss": best_val_loss,
             },
             f,
@@ -144,16 +168,35 @@ def main():
         run_dir = os.path.join(models_dir, f"cgcom_sweep_run_{run_id_cleanup}")
         if os.path.exists(run_dir):
             shutil.rmtree(run_dir)
+    figures_dir = os.path.join(f"results/{dataset}_{seed}/figures")
+    os.makedirs(figures_dir, exist_ok=True)
 
     plt.figure(figsize=(10, 5))
     plt.plot(best_results["train_losses"], label="Train Loss")
     plt.plot(best_results["val_losses"], label="Validation Loss", linestyle="--")
     plt.legend()
-    figures_dir = os.path.join(f"results/{dataset}_{seed}/figures")
-    os.makedirs(figures_dir, exist_ok=True)
     plt.savefig(os.path.join(figures_dir, "cgcom_loss_curve.png"))
     plt.savefig(os.path.join(figures_dir, "cgcom_loss_curve.svg"))
     plt.close()
+
+    comm_csv_path = os.path.join(models_dir, "communication_scores_default.csv")
+    if os.path.exists(comm_csv_path):
+        matrix = build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key)
+        plot_interaction_matrix(
+            matrix,
+            figures_dir,
+            title="CGCom cell-type interaction matrix",
+            filename="cgcom_interaction_matrix",
+            colorbar_label="Mean attention score",
+        )
+        plot_interaction_graph(
+            matrix,
+            figures_dir,
+            title="CGCom cell-type interaction graph",
+            filename="cgcom_interaction_graph",
+        )
+    else:
+        print(f"Warning: communication scores not found at {comm_csv_path}, skipping interaction figures")
 
 
 if __name__ == "__main__":

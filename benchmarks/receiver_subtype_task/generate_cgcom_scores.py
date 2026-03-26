@@ -8,10 +8,12 @@ from cgcom.scripts import (
     get_cell_communication_scores,
 )
 from cgcom.utils import convert_anndata_to_df, get_cell_label_dict, get_exp_params, get_model_params
+from gpu_utils import select_gpu
 
 
 def main():
     """Main function to generate the CGCom scores for the receiver subtype task."""
+    select_gpu()
     model_path = snakemake.input.model_path  # noqa: F821
     adata_path = snakemake.input.adata_path  # noqa: F821
     output_path = snakemake.output[0]  # noqa: F821
@@ -21,12 +23,14 @@ def main():
     adata = sc.read_h5ad(adata_path)
     adata.obs_names_make_unique()
 
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
     model_params = get_model_params(
         fc_hidden_channels_2=500,
         fc_hidden_channels_3=512,
         fc_hidden_channels_4=64,
         num_classes=10,
-        device=torch.device("cuda"),
+        device=device,
         ligand_channel=500,
         receptor_channel=500,
         TF_channel=500,
@@ -35,14 +39,12 @@ def main():
     )
     exp_params = get_exp_params()
 
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
     cgcom_model = GATGraphClassifier(
         FChidden_channels_2=model_params["fc_hidden_channels_2"],
         FChidden_channels_3=model_params["fc_hidden_channels_3"],
         FChidden_channels_4=model_params["fc_hidden_channels_4"],
         num_classes=model_params["num_classes"],
-        device=torch.device("cuda"),
+        device=device,
         ligand_channel=model_params["ligand_channel"],
         receptor_channel=model_params["receptor_channel"],
         TF_channel=model_params["TF_channel"],
@@ -50,9 +52,9 @@ def main():
         disable_lr_masking=True,
     ).to(device)
 
-    cgcom_model.load_state_dict(torch.load(model_path))
+    cgcom_model.load_state_dict(torch.load(model_path, map_location=device))
     cgcom_model.eval()
-    cgcom_model.to(torch.device("cuda"))
+    cgcom_model.to(device)
 
     # Get the cell-cell communication scores from the loaded CGCom model
     expression_df = convert_anndata_to_df(adata)

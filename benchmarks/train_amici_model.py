@@ -9,6 +9,7 @@ import numpy as np
 import pytorch_lightning as pl
 import scanpy as sc
 from anndata import AnnData
+from gpu_utils import select_gpu
 
 from amici import AMICI
 from amici.callbacks import AttentionPenaltyMonitor
@@ -143,6 +144,7 @@ def train_and_evaluate(
 
 def main():
     """Train the AMICI model."""
+    select_gpu()
     adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
     adata.obs_names_make_unique()
 

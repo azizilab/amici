@@ -8,11 +8,21 @@ import sys
 import numpy as np
 import scanpy as sc
 import tensorflow as tf
+from gpu_utils import select_gpu
 from ncem_benchmark_utils import get_model_parameters, plot_ncem_loss_curves, train_ncem
 
 
 def train_single_run(
-    adata, labels_key, exp_params, model_params, train_params, run_model_path, run_model_args_path, run_results_path
+    adata,
+    labels_key,
+    exp_params,
+    model_params,
+    train_params,
+    run_model_path,
+    run_model_args_path,
+    run_results_path,
+    train_indices,
+    test_indices,
 ):
     """Train a single NCEM run, evaluate on the test set, and return the reconstruction loss and history, loading from cache if available."""
     if os.path.exists(run_results_path):
@@ -29,6 +39,8 @@ def train_single_run(
         train_params,
         run_model_path,
         run_model_args_path,
+        train_indices=train_indices,
+        test_indices=test_indices,
     )
 
     eval_test = trainer.estimator.evaluate_any(
@@ -64,31 +76,32 @@ def main(input_path, labels_key, dataset, seed, niche_size):
         print(f"Model path {model_path} and model args path {model_args_path} already exist, skipping")
         return
 
-    learning_rates = [0.5, 0.05, 0.005]
-    l1_coefs = [0.0, 1e-4, 1e-3]
-    run_seeds = [22, 38, 17, 11, 42, 33, 18]
+    train_indices = np.where(adata.obs["train_test_split"] == "train")[0]
+    test_indices = np.where(adata.obs["train_test_split"] == "test")[0]
 
-    all_runs = list(itertools.product(learning_rates, l1_coefs, run_seeds))
+    learning_rates = [0.05, 0.005]
+    l1_coefs = [1e-4, 1e-3]
+
+    all_runs = list(itertools.product(learning_rates, l1_coefs))
+
+    np.random.seed(42)
+    random.seed(42)
+    tf.random.set_seed(42)
 
     best_test_recons = float("inf")
     best_run_id = None
     best_model_history = None
 
-    for run_id, (lr, l1_coef, run_seed) in enumerate(all_runs):
+    for run_id, (lr, l1_coef) in enumerate(all_runs):
         run_model_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id}_checkpoint")
         run_model_args_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id}.pickle")
         run_results_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id}_results.json")
 
-        np.random.seed(run_seed)
-        random.seed(run_seed)
-        tf.random.set_seed(run_seed)
-
         exp_params, model_params, train_params = get_model_parameters(niche_size)
         model_params["learning_rate"] = lr
         model_params["l1_coef"] = l1_coef
-        exp_params["seed"] = run_seed
 
-        print(f"Run {run_id}/{len(all_runs)}: lr={lr}, l1_coef={l1_coef}, seed={run_seed}")
+        print(f"Run {run_id}/{len(all_runs)}: lr={lr}, l1_coef={l1_coef}")
 
         test_recons, model_history = train_single_run(
             adata,
@@ -99,6 +112,8 @@ def main(input_path, labels_key, dataset, seed, niche_size):
             run_model_path,
             run_model_args_path,
             run_results_path,
+            train_indices,
+            test_indices,
         )
 
         if test_recons < best_test_recons:
@@ -109,13 +124,11 @@ def main(input_path, labels_key, dataset, seed, niche_size):
     if best_run_id is None:
         raise RuntimeError("No runs completed successfully")
 
-    best_lr, best_l1_coef, best_seed = all_runs[best_run_id]
+    best_lr, best_l1_coef = all_runs[best_run_id]
     best_run_model_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{best_run_id}_checkpoint")
     best_run_model_args_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{best_run_id}.pickle")
 
-    print(
-        f"Best run {best_run_id}: lr={best_lr}, l1_coef={best_l1_coef}, seed={best_seed}, test_recons={best_test_recons:.4f}"
-    )
+    print(f"Best run {best_run_id}: lr={best_lr}, l1_coef={best_l1_coef}, test_recons={best_test_recons:.4f}")
 
     for suffix in [".data-00000-of-00001", ".index"]:
         src = best_run_model_path + suffix
@@ -128,7 +141,6 @@ def main(input_path, labels_key, dataset, seed, niche_size):
             {
                 "learning_rate": best_lr,
                 "l1_coef": best_l1_coef,
-                "seed": int(best_seed),
                 "test_recons": best_test_recons,
             },
             f,
@@ -153,9 +165,7 @@ def main(input_path, labels_key, dataset, seed, niche_size):
 
 if __name__ == "__main__":
     print("Started training NCEM")
-    np.random.seed(42)
-    random.seed(42)
-    tf.random.set_seed(42)
+    select_gpu()
 
     # Parse the arguments in the command line
     args = sys.argv[1:]

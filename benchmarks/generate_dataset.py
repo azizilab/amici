@@ -7,6 +7,7 @@ import pandas as pd
 import scanpy as sc
 import scvi
 import torch
+from gpu_utils import select_gpu
 
 from amici.tools import is_count_data
 
@@ -302,6 +303,7 @@ def _generate_2d_triangular_gradient_data(
         zip(
             interaction_df[interaction_df["interaction_type"] == "neutral"]["receptor_cell"],
             interaction_df[interaction_df["interaction_type"] == "neutral"]["receptor_subtype"],
+            strict=False,
         )
     )
     assert ct1 in neutral_types
@@ -425,6 +427,7 @@ def _create_interaction_df(gt_interactions):
 
 def main():
     """Generate a synthetic dataset."""
+    select_gpu()
     seed = int(snakemake.wildcards.seed)  # noqa: F821
     output_path = snakemake.output[0]  # noqa: F821
 

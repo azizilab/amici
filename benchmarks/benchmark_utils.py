@@ -1,6 +1,8 @@
+import os
 from textwrap import fill
 
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -225,12 +227,12 @@ def plot_pr_curves(
             loc -= 0.05
 
     # Then add AURPC scores
-    for _, avg_precision_score, model_name in zip(displays, avg_precision_scores, model_names):
+    for _, avg_precision_score, model_name in zip(displays, avg_precision_scores, model_names, strict=False):
         plt.text(0.2, loc, f"{model_name} AUPRC = {avg_precision_score:.2f}", fontsize=12)
         loc -= 0.05
 
     # Show the plot and save it
-    for display, model_name in zip(displays, model_names):
+    for display, model_name in zip(displays, model_names, strict=False):
         display.plot(ax=ax_to_plot, name=model_name)
 
     # Create a wrapped title using textwrap
@@ -302,7 +304,7 @@ def plot_boxplots(
 
     # Customize boxplot colors
     colors = ["lightblue", "lightgreen", "pink", "lightyellow"]
-    for patch, color in zip(boxplots["boxes"], colors):
+    for patch, color in zip(boxplots["boxes"], colors, strict=False):
         patch.set_facecolor(color)
 
     # Perform Mann-Whitney U test between AMICI and other models
@@ -314,7 +316,7 @@ def plot_boxplots(
     star_offset = (y_max - y_min) * 0.05  # 5% of the plot height
     new_y_max = y_max
 
-    for i, (model_metrics, model_name) in enumerate(zip(metrics, model_names)):
+    for i, (model_metrics, model_name) in enumerate(zip(metrics, model_names, strict=False)):
         if model_name != "AMICI":
             # Perform Mann-Whitney U test
             statistic, pval = stats.mannwhitneyu(amici_metrics, model_metrics, alternative="two-sided")
@@ -372,3 +374,99 @@ def plot_boxplots(
         plt.savefig(save_path.replace(".png", ".svg"), bbox_inches="tight")
     plt.show()
     plt.close()
+
+
+def plot_interaction_matrix(
+    matrix,
+    save_dir,
+    title="Cell-type interaction matrix",
+    filename="interaction_matrix",
+    xlabel="Receiver cell type",
+    ylabel="Sender cell type",
+    colorbar_label="Interaction score",
+):
+    """
+    Plot a cell-type interaction heatmap from a pre-computed score matrix.
+
+    Args:
+        matrix: pd.DataFrame with sender cell types as index and receiver cell types as columns.
+        save_dir: str, directory to save the figures.
+        title: str, plot title.
+        filename: str, output filename stem (no extension).
+        xlabel: str, x-axis label.
+        ylabel: str, y-axis label.
+        colorbar_label: str, colorbar label.
+    """
+    cell_types = matrix.index.tolist()
+    fig, ax = plt.subplots(figsize=(8, 7))
+    im = ax.imshow(matrix.values, aspect="auto")
+    plt.colorbar(im, ax=ax, label=colorbar_label)
+    ax.set_xticks(range(len(cell_types)))
+    ax.set_yticks(range(len(cell_types)))
+    ax.set_xticklabels(cell_types, rotation=45, ha="right")
+    ax.set_yticklabels(cell_types)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    plt.tight_layout()
+    os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, f"{filename}.png"))
+    fig.savefig(os.path.join(save_dir, f"{filename}.svg"))
+    plt.close(fig)
+
+
+def plot_interaction_graph(
+    matrix,
+    save_dir,
+    title="Cell-type interaction graph",
+    filename="interaction_graph",
+):
+    """
+    Draw a directed cell-type interaction graph weighted by interaction scores.
+
+    Args:
+        matrix: pd.DataFrame with sender cell types as index and receiver cell types as columns.
+            Values are used as edge weights (e.g. mean attention scores).
+        save_dir: str, directory to save the figures.
+        title: str, plot title.
+        filename: str, output filename stem (no extension).
+    """
+    G = nx.DiGraph()
+    G.add_nodes_from(matrix.index)
+    for sender in matrix.index:
+        for receiver in matrix.columns:
+            weight = matrix.loc[sender, receiver]
+            if weight > 0:
+                G.add_edge(sender, receiver, weight=float(weight))
+
+    weights = np.array([d["weight"] for _, _, d in G.edges(data=True)])
+    max_w = weights.max() if weights.size > 0 else 1.0
+    norm_weights = weights / max_w
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    pos = nx.circular_layout(G)
+    nx.draw_networkx_nodes(G, pos, ax=ax, node_size=2000, node_color="steelblue", alpha=0.9)
+    nx.draw_networkx_labels(G, pos, ax=ax, font_size=10, font_color="white", font_weight="bold")
+    for (u, v, _), nw in zip(G.edges(data=True), norm_weights, strict=False):
+        nx.draw_networkx_edges(
+            G,
+            pos,
+            edgelist=[(u, v)],
+            ax=ax,
+            width=1 + 5 * nw,
+            alpha=0.4 + 0.6 * nw,
+            edge_color="darkorange",
+            arrows=True,
+            arrowstyle="-|>",
+            arrowsize=20,
+            connectionstyle="arc3,rad=0.1",
+            min_source_margin=30,
+            min_target_margin=30,
+        )
+    ax.set_title(title)
+    ax.axis("off")
+    plt.tight_layout()
+    os.makedirs(save_dir, exist_ok=True)
+    fig.savefig(os.path.join(save_dir, f"{filename}.png"))
+    fig.savefig(os.path.join(save_dir, f"{filename}.svg"))
+    plt.close(fig)
