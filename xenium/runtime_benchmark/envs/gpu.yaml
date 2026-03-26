@@ -1,0 +1,6 @@
+name: amici_bench_gpu
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip

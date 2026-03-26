@@ -1,0 +1,102 @@
+{
+  "metadata": {
+    "model_params": {
+      "n_heads": 8,
+      "n_query_dim": 256,
+      "n_head_size": 32,
+      "n_nn_embed": 256,
+      "n_nn_embed_hidden": 512,
+      "neighbor_dropout": 0.1,
+      "attention_penalty_coef": 1e-05,
+      "value_l1_penalty_coef": 0.0001
+    },
+    "train_params": {
+      "batch_size": 128,
+      "lr": 1e-05,
+      "max_epochs": 50
+    },
+    "penalty_params": {
+      "epoch_start": 40,
+      "epoch_end": 80,
+      "start_val": 1e-05,
+      "end_val": 0.0001
+    },
+    "seed": 42,
+    "data_path": "/home/justin/ghrepos/amici-prod/amici/xenium/data/xenium_sample1/xenium_sample1_filtered_train_2025-05-01.h5ad",
+    "total_dataset_cells": 178446
+  },
+  "results": [
+    {
+      "n_cells": 1000,
+      "runtime_setup_s": 0.018309161998331547,
+      "runtime_train_s": 9.695476458407938,
+      "runtime_total_s": 9.71378562040627,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 2000,
+      "runtime_setup_s": 0.041138919070363045,
+      "runtime_train_s": 17.199232771992683,
+      "runtime_total_s": 17.240371691063046,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 5000,
+      "runtime_setup_s": 0.04931826330721378,
+      "runtime_train_s": 42.631078333593905,
+      "runtime_total_s": 42.68039659690112,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 10000,
+      "runtime_setup_s": 0.09638847224414349,
+      "runtime_train_s": 87.59159641992301,
+      "runtime_total_s": 87.68798489216715,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 20000,
+      "runtime_setup_s": 0.17316698096692562,
+      "runtime_train_s": 170.48440582491457,
+      "runtime_total_s": 170.6575728058815,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 50000,
+      "runtime_setup_s": 0.45858754962682724,
+      "runtime_train_s": 448.8250682502985,
+      "runtime_total_s": 449.2836557999253,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 100000,
+      "runtime_setup_s": 1.1013836227357388,
+      "runtime_train_s": 947.1212327806279,
+      "runtime_total_s": 948.2226164033636,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    },
+    {
+      "n_cells": 178446,
+      "runtime_setup_s": 2.1730228001251817,
+      "runtime_train_s": 1674.033546416089,
+      "runtime_total_s": 1676.2065692162141,
+      "peak_memory_bytes": 254562304,
+      "peak_memory_gb": 0.23707962036132812,
+      "accelerator": "gpu"
+    }
+  ]
+}
