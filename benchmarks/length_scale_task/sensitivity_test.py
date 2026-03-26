@@ -92,6 +92,13 @@ for idx, row in interaction_df.iterrows():
     ax.set_xlabel("Attention Threshold")
     ax.set_ylabel("Length Scale")
     plt.tight_layout()
-    plt.show()
+
+    figures_dir = os.path.join(base_dir, "figures")
+    os.makedirs(figures_dir, exist_ok=True)
+    for ext in ("png", "svg"):
+        save_path = os.path.join(figures_dir, f"sensitivity_{sender_type}_to_{receiver_type}.{ext}")
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"  Saved {save_path}")
+    plt.close(fig)
 
 # %%
