@@ -4,6 +4,8 @@ This document maps scripts and workflows in this repository to the figures they 
 
 ## Benchmarks
 
+**Base data**: The semisynthetic datasets are generated from the [Fresh 68k PBMCs (Donor A)](https://www.10xgenomics.com/datasets/fresh-68-k-pbm-cs-donor-a-1-standard-1-1-0) dataset, downloaded programmatically via `scvi.data.dataset_10x(dataset_name="fresh_68k_pbmc_donor_a")`.
+
 The full benchmark pipeline is orchestrated by [`benchmarks/Snakefile`](benchmarks/Snakefile) with configuration in [`benchmarks/benchmark_config.yaml`](benchmarks/benchmark_config.yaml). The pipeline:
 
 1. Generates semisynthetic datasets ([`benchmarks/generate_dataset.py`](benchmarks/generate_dataset.py))
@@ -89,9 +91,11 @@ Length scale sensitivity to attention threshold parameter across sender-receiver
 
 ## Cortex Analysis
 
+**Base data**: MERFISH mouse cortex data from the [Brain Image Library](https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data/).
+
 Prerequisites (run in order):
 
-1. [`cortex/cortex_preprocess.py`](cortex/cortex_preprocess.py) — Loads raw MERFISH data (counts, cell labels, segmentation CSVs from the Brain Image Library), extracts cell centroids from polygon boundaries, normalizes counts, and performs train/test split.
+1. [`cortex/cortex_preprocess.py`](cortex/cortex_preprocess.py) — Loads raw MERFISH data (counts, cell labels, segmentation CSVs), extracts cell centroids from polygon boundaries, normalizes counts, and performs train/test split.
 2. [`cortex/cortex_sweep_main.py`](cortex/cortex_sweep_main.py) — Runs a Weights & Biases hyperparameter sweep to train the AMICI model on the preprocessed cortex data. Sweep config: [`cortex/cortex_sweep.yaml`](cortex/cortex_sweep.yaml).
 3. [`cortex/cortex_analysis.py`](cortex/cortex_analysis.py) — Loads the trained model and generates all cortex figures (see below).
 
@@ -106,9 +110,11 @@ MERFISH mouse cortex analysis. Generates spatial distributions, directed interac
 
 ## Xenium Breast Cancer Analysis
 
+**Base data**: [10x Genomics Xenium FFPE Human Breast Cancer](https://www.10xgenomics.com/products/xenium-in-situ/preview-dataset-human-breast), resegmented with ProSeg and reannotated with resolVI. The preprocessed datasets used in the analyses are available on Figshare (see [Data and Model Artifacts](#data-and-model-artifacts)).
+
 Prerequisites (run in order):
 
-1. [`xenium/xenium_preprocess.py`](xenium/xenium_preprocess.py) — Loads raw Xenium spatial transcriptomics data, filters highly variable genes, normalizes counts, corrects DCIS labels via nearest-neighbor voting, and performs train/test split by spatial region.
+1. [`xenium/xenium_preprocess.py`](xenium/xenium_preprocess.py) — Loads the resegmented/reannotated Xenium data, filters highly variable genes, normalizes counts, corrects DCIS labels via nearest-neighbor voting, and performs train/test split by spatial region.
 2. [`xenium/xenium_sweep_main.py`](xenium/xenium_sweep_main.py) — Runs a Weights & Biases hyperparameter sweep to train the AMICI model on the preprocessed Xenium data. Sweep config: [`xenium/xenium_sweep.yaml`](xenium/xenium_sweep.yaml). Alternatively, [`xenium/xenium_train.py`](xenium/xenium_train.py) trains a single model with fixed hyperparameters.
 3. Analysis and plotting scripts (each loads the trained model independently): [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py), [`xenium/xenium_spatial_analysis.py`](xenium/xenium_spatial_analysis.py), [`xenium/xenium_niche_analysis.py`](xenium/xenium_niche_analysis.py), [`xenium/xenium_niche_prediction_analysis.py`](xenium/xenium_niche_prediction_analysis.py), [`xenium/xenium_niche_validation_gsea.py`](xenium/xenium_niche_validation_gsea.py), [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py), [`xenium/segmentation_analysis.py`](xenium/segmentation_analysis.py), [`xenium/xenium_null_z_distribution.py`](xenium/xenium_null_z_distribution.py), [`xenium/runtime_benchmark/plot_benchmark.py`](xenium/runtime_benchmark/plot_benchmark.py).
 
@@ -185,18 +191,6 @@ Some of the analyses above depend on pretrained AMICI models and preprocessed da
 | Dataset              | Local Dataset Path                             | Local Model Path                                                          | Model YAML Config | Figshare Link |
 | -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ----------------- | ------------- |
 | MERFISH Mouse Cortex | `cortex/data/cortex_processed_2025-04-28.h5ad` | `cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05` | TODO              | TODO          |
-
-### CosMx
-
-Prerequisites (run in order):
-
-1. [`cosmx/preprocess_cosmx.py`](cosmx/preprocess_cosmx.py) — Loads CosMx liver data, normalizes expression, creates spatial coordinates, filters cell types, and splits into training/test sets.
-2. [`cosmx/tune_cosmx.py`](cosmx/tune_cosmx.py) — Runs a Weights & Biases hyperparameter sweep. Alternatively, [`cosmx/train_cosmx.py`](cosmx/train_cosmx.py) trains a single model with fixed hyperparameters.
-
-| Dataset                    | Local Dataset Path                                                | Local Model Path                                          | Model YAML Config | Figshare Link |
-| -------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------- | ----------------- | ------------- |
-| CosMx Liver Cancer (train) | `/home/justin/data/cosmx/liver/cosmx_liver_cancer_sub_train.h5ad` | `cosmx/saved_models/cosmx_liver_cancer_sub_khushi_params` | TODO              | TODO          |
-| CosMx Liver Cancer (test)  | `/home/justin/data/cosmx/liver/cosmx_liver_cancer_sub_test.h5ad`  | —                                                         | —                 | TODO          |
 
 ### Xenium Breast Cancer
 
