@@ -9,6 +9,7 @@ import pytorch_lightning as pl
 import scanpy as sc
 from matplotlib.colors import Normalize
 from omnipath.interactions import import_intercell_network
+from omnipath.requests import Annotations
 
 from amici import AMICI
 
@@ -54,21 +55,34 @@ ligand_genes = set(lr_df[ligand_col])
 receptor_genes = set(lr_df[receptor_col])
 all_lr_genes = ligand_genes | receptor_genes
 
-# Map gene -> role(s) and LR partners
+# Map gene -> role(s)
 gene_roles = {}
-gene_partners = {}
 for _, row in lr_df.iterrows():
     lig = row[ligand_col]
     rec = row[receptor_col]
     gene_roles.setdefault(lig, set()).add("ligand")
     gene_roles.setdefault(rec, set()).add("receptor")
-    gene_partners.setdefault(lig, set()).add(rec)
-    gene_partners.setdefault(rec, set()).add(lig)
 
 panel_lr_genes = all_lr_genes & set(adata.var_names)
 print(f"OmniPath LR genes: {len(all_lr_genes)}")
 print(f"Panel genes: {adata.n_vars}")
 print(f"Panel genes in LR database: {len(panel_lr_genes)}")
+
+# Fetch pathway/category annotations from OmniPath
+print("Fetching pathway annotations...")
+annot_df = Annotations.get(
+    proteins=list(panel_lr_genes),
+    resources=["SIGNOR", "SignaLink_pathway", "Matrisome"],
+)
+pathway_annot = annot_df[annot_df["label"].isin(["pathway", "subclass"])][
+    ["genesymbol", "value"]
+].drop_duplicates()
+gene_pathway = (
+    pathway_annot.groupby("genesymbol")["value"]
+    .apply(lambda x: "; ".join(sorted(set(x))))
+    .to_dict()
+)
+print(f"Genes with pathway annotations: {len(gene_pathway)}")
 
 # %% Compute ablation scores for all receiver cell types
 cell_types = sorted(adata.obs[labels_key].unique())
@@ -127,9 +141,8 @@ lr_sig_df = sig_df[sig_df["is_lr_gene"]].copy()
 lr_sig_df["role"] = lr_sig_df["gene"].map(
     lambda g: "/".join(sorted(gene_roles.get(g, set())))
 )
-lr_sig_df["lr_partners"] = lr_sig_df["gene"].map(
-    lambda g: ", ".join(sorted(list(gene_partners.get(g, set()))[:5]))
-    + ("..." if len(gene_partners.get(g, set())) > 5 else "")
+lr_sig_df["pathway"] = lr_sig_df["gene"].map(
+    lambda g: gene_pathway.get(g, "")
 )
 lr_sig_df["interaction"] = lr_sig_df["sender"] + " → " + lr_sig_df["receiver"]
 
