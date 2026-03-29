@@ -62,11 +62,12 @@ AMICI.setup_anndata(
 model_old = AMICI.load(old_model_path, adata=adata_old)
 
 # %% Load new lowres model data
+lowres_seed = 42
 lowres_labels_key = "celltype_lowres"
 lowres_data_date = "2026-03-27"  # update to match when xenium_preprocess_lowres.py was run
-lowres_model_date = "2026-03-27"
-lowres_wandb_sweep_id = "u9ymyr7k"
-lowres_wandb_run_id = "n7nwnmf9"
+lowres_model_date = "2026-03-29"
+lowres_wandb_sweep_id = "xsjrwnof"
+lowres_wandb_run_id = "5tfi78lp"
 
 adata_new = sc.read_h5ad(f"data/xenium_sample1_filtered_lowres_{lowres_data_date}.h5ad")
 adata_new_train = sc.read_h5ad(
@@ -76,7 +77,7 @@ adata_new_train = sc.read_h5ad(
 new_saved_models_dir = f"saved_models/xenium_sample1_lowres_sweep_{lowres_data_date}_model_{lowres_model_date}"
 new_model_path = os.path.join(
     new_saved_models_dir,
-    f"xenium_{seed}_sweep_{lowres_wandb_sweep_id}_{lowres_wandb_run_id}_params_{lowres_model_date}",
+    f"xenium_{lowres_seed}_sweep_{lowres_wandb_sweep_id}_{lowres_wandb_run_id}_params_{lowres_model_date}",
 )
 
 AMICI.setup_anndata(
@@ -129,35 +130,62 @@ interaction_matrix_old_lowres = interaction_matrix_old_lowres.groupby(level=0).m
 interaction_matrix_old_lowres = interaction_matrix_old_lowres.T.groupby(level=0).mean().T
 
 # %% Plot side-by-side interaction weight heatmaps at lowres resolution
-shared_cell_types = sorted(
-    set(interaction_matrix_old_lowres.index) & set(interaction_matrix_new.index)
-)
-mat_old_shared = interaction_matrix_old_lowres.loc[shared_cell_types, shared_cell_types]
-mat_new_shared = interaction_matrix_new.loc[shared_cell_types, shared_cell_types]
+# Order lowres cell types explicitly, then expand to highres with subtypes grouped together
+lowres_order = ["T_Cells", "DCIS", "DCs", "Macrophages", "Myoepithelial", "Invasive_Tumor", "B_Cells", "Mast_Cells", "Vascular"]
+highres_groups = {
+    "T_Cells": ["CD8+_T_Cells", "CD4+_T_Cells"],
+    "DCIS": ["DCIS_1", "DCIS_2"],
+    "DCs": ["IRF7+_DCs", "LAMP3+_DCs"],
+    "Macrophages": ["Macrophages_1", "Macrophages_2"],
+    "Myoepithelial": ["Myoepi_ACTA2+", "Myoepi_KRT15+"],
+    "Invasive_Tumor": ["Invasive_Tumor"],
+    "B_Cells": ["B_Cells"],
+    "Mast_Cells": ["Mast_Cells"],
+    "Vascular": ["Perivascular-Like", "Endothelial"],
+}
+highres_order = [ct for group in lowres_order for ct in highres_groups.get(group, [])]
 
-fig, axes = plt.subplots(1, 2, figsize=(22, 9))
+shared_lowres = [ct for ct in lowres_order if ct in interaction_matrix_old_lowres.index and ct in interaction_matrix_new.index]
+shared_highres = [ct for ct in highres_order if ct in interaction_matrix_old.index]
+
+mat_old_hires = interaction_matrix_old.loc[shared_highres, shared_highres]
+mat_old_shared = interaction_matrix_old_lowres.loc[shared_lowres, shared_lowres]
+mat_new_shared = interaction_matrix_new.loc[shared_lowres, shared_lowres]
+
+fig, axes = plt.subplots(1, 3, figsize=(34, 9))
 
 sns.heatmap(
-    mat_old_shared,
+    mat_old_hires,
     ax=axes[0],
     cmap="Reds",
     cbar_kws={"label": "Interaction Weight"},
     linewidths=0.5,
 )
-axes[0].set_title("Old Model (aggregated to lowres labels)")
+axes[0].set_title("Old Model (high-res labels)")
 axes[0].set_xlabel("Receiver Cell Type")
 axes[0].set_ylabel("Sender Cell Type")
 
 sns.heatmap(
-    mat_new_shared,
+    mat_old_shared,
     ax=axes[1],
     cmap="Reds",
     cbar_kws={"label": "Interaction Weight"},
     linewidths=0.5,
 )
-axes[1].set_title("New Model (lowres-trained)")
+axes[1].set_title("Old Model (aggregated to lowres labels)")
 axes[1].set_xlabel("Receiver Cell Type")
 axes[1].set_ylabel("Sender Cell Type")
+
+sns.heatmap(
+    mat_new_shared,
+    ax=axes[2],
+    cmap="Reds",
+    cbar_kws={"label": "Interaction Weight"},
+    linewidths=0.5,
+)
+axes[2].set_title("New Model (lowres-trained)")
+axes[2].set_xlabel("Receiver Cell Type")
+axes[2].set_ylabel("Sender Cell Type")
 
 plt.tight_layout()
 plt.savefig("figures/xenium_sample1_interaction_matrix_comparison.png", dpi=200)
@@ -165,8 +193,10 @@ plt.savefig("figures/xenium_sample1_interaction_matrix_comparison.svg")
 plt.show()
 
 # %% Compute interaction matrix similarity score with permutation null
-A = mat_old_shared.values.flatten()
-B = mat_new_shared.values.flatten()
+# Exclude diagonal (same cell type as sender and receiver)
+off_diag_mask = ~np.eye(len(shared_lowres), dtype=bool)
+A = mat_old_shared.values[off_diag_mask]
+B = mat_new_shared.values[off_diag_mask]
 
 cosine_sim = np.dot(A, B) / (np.linalg.norm(A) * np.linalg.norm(B))
 r_matrix, p_matrix = pearsonr(A, B)
@@ -176,40 +206,53 @@ n_permutations = 1000
 rng = np.random.default_rng(seed)
 perm_cosine = np.zeros(n_permutations)
 perm_pearson = np.zeros(n_permutations)
-n_ct = len(shared_cell_types)
+n_ct = len(shared_lowres)
 mat_old_vals = mat_old_shared.values
 mat_new_vals = mat_new_shared.values
 
 for i in range(n_permutations):
     perm = rng.permutation(n_ct)
-    B_perm = mat_new_vals[np.ix_(perm, perm)].flatten()
+    B_perm = mat_new_vals[np.ix_(perm, perm)][off_diag_mask]
     perm_cosine[i] = np.dot(A, B_perm) / (np.linalg.norm(A) * np.linalg.norm(B_perm))
     perm_pearson[i] = pearsonr(A, B_perm)[0]
 
 cosine_z = (cosine_sim - perm_cosine.mean()) / perm_cosine.std()
 pearson_z = (r_matrix - perm_pearson.mean()) / perm_pearson.std()
 
+# Empirical p-value: fraction of permutations >= observed; if none, report < 1/N
+def empirical_pval(observed, null_vals):
+    p = (null_vals >= observed).sum() / len(null_vals)
+    return p if p > 0 else None
+
+p_cosine_emp = empirical_pval(cosine_sim, perm_cosine)
+p_pearson_emp = empirical_pval(r_matrix, perm_pearson)
+
+def fmt_pval(p, n):
+    return f"< {1/n:.4f}" if p is None else f"{p:.4f}"
+
 print("Interaction Matrix Similarity (cell-type x cell-type)")
 print("=" * 56)
-print(f"Cosine similarity:  {cosine_sim:.4f}  |  null: {perm_cosine.mean():.4f} ± {perm_cosine.std():.4f}  |  z = {cosine_z:.2f}")
-print(f"Pearson r:          {r_matrix:.4f}  |  null: {perm_pearson.mean():.4f} ± {perm_pearson.std():.4f}  |  z = {pearson_z:.2f}")
-print(f"  (p = {p_matrix:.2e})")
+print(f"Cosine similarity:  {cosine_sim:.4f}  |  null: {perm_cosine.mean():.4f} ± {perm_cosine.std():.4f}  |  z = {cosine_z:.2f}  |  p = {fmt_pval(p_cosine_emp, n_permutations)}")
+print(f"Pearson r:          {r_matrix:.4f}  |  null: {perm_pearson.mean():.4f} ± {perm_pearson.std():.4f}  |  z = {pearson_z:.2f}  |  p = {fmt_pval(p_pearson_emp, n_permutations)}")
 
 # %% Plot null distributions vs observed similarity scores
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 
-for ax, null_vals, observed, metric in zip(
+for ax, null_vals, observed, metric, p_emp in zip(
     axes,
     [perm_cosine, perm_pearson],
     [cosine_sim, r_matrix],
     ["Cosine Similarity", "Pearson r"],
+    [p_cosine_emp, p_pearson_emp],
 ):
+    z = (observed - null_vals.mean()) / null_vals.std()
+    p_str = fmt_pval(p_emp, n_permutations)
     ax.hist(null_vals, bins=40, color="steelblue", alpha=0.7, label="Shuffled null")
     ax.axvline(observed, color="crimson", linewidth=2, label=f"Observed ({observed:.3f})")
     ax.axvline(null_vals.mean(), color="steelblue", linewidth=1.5, linestyle="--", label=f"Null mean ({null_vals.mean():.3f})")
     ax.set_xlabel(metric)
     ax.set_ylabel("Count")
-    ax.set_title(f"{metric}: z = {(observed - null_vals.mean()) / null_vals.std():.2f}")
+    ax.set_title(f"{metric}:  z = {z:.2f},  p = {p_str}")
     ax.legend()
 
 plt.suptitle("Interaction Matrix Similarity vs Shuffled Null", fontsize=13)
