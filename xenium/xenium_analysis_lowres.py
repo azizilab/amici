@@ -6,9 +6,8 @@ import pytorch_lightning as pl
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
 
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr
 from amici import AMICI
 
 # %%
@@ -259,77 +258,6 @@ plt.suptitle("Interaction Matrix Similarity vs Shuffled Null", fontsize=13)
 plt.tight_layout()
 plt.savefig("figures/xenium_sample1_interaction_matrix_similarity_null.png", dpi=200)
 plt.savefig("figures/xenium_sample1_interaction_matrix_similarity_null.svg")
-plt.show()
-
-# %% Extract cell-cell attention scores averaged over heads
-def get_cell_pair_attention(model, adata):
-    attention_patterns = model.get_attention_patterns(adata, batch_size=32)
-    nn_idxs_df = attention_patterns._nn_idxs_df  # (n_cells, n_neighbors)
-
-    head_attn_arrays = []
-    for head_idx in range(model.module.n_heads):
-        head_df = (
-            attention_patterns._attention_patterns_df[
-                attention_patterns._attention_patterns_df["head"] == head_idx
-            ]
-            .drop(columns=["label", "head"])
-            .set_index("cell_idx")
-            .reindex(nn_idxs_df.index)
-        )
-        head_attn_arrays.append(head_df.values)
-
-    mean_attn = np.mean(head_attn_arrays, axis=0)  # (n_cells, n_neighbors)
-    query_idxs = np.repeat(nn_idxs_df.index.values, nn_idxs_df.shape[1])
-    neighbor_idxs = nn_idxs_df.values.flatten()
-
-    return pd.DataFrame({
-        "query_idx": query_idxs,
-        "neighbor_idx": neighbor_idxs,
-        "attention": mean_attn.flatten(),
-    })
-
-cell_attn_old = get_cell_pair_attention(model_old, adata_old).rename(columns={"attention": "attention_old"})
-cell_attn_new = get_cell_pair_attention(model_new, adata_new).rename(columns={"attention": "attention_new"})
-
-# %% Correlation plot of cell-cell attention scores
-# Color by high-res cell type labels — both adatas share the same cells and obs_names
-cell_attn_merged = cell_attn_old.merge(cell_attn_new, on=["query_idx", "neighbor_idx"])
-cell_attn_merged["query_ct"] = cell_attn_merged["query_idx"].map(adata_new.obs[old_labels_key])
-
-r_cell, p_cell = pearsonr(cell_attn_merged["attention_new"], cell_attn_merged["attention_old"])
-r_cell_sp, p_cell_sp = spearmanr(cell_attn_merged["attention_new"], cell_attn_merged["attention_old"])
-
-fig, ax = plt.subplots(figsize=(8, 7))
-
-for ct, group in cell_attn_merged.groupby("query_ct"):
-    ax.scatter(
-        group["attention_new"],
-        group["attention_old"],
-        color=CELL_TYPE_PALETTE.get(ct, "#808080"),
-        label=ct,
-        alpha=0.3,
-        s=4,
-        rasterized=True,
-    )
-
-lims = [
-    min(cell_attn_merged["attention_new"].min(), cell_attn_merged["attention_old"].min()),
-    max(cell_attn_merged["attention_new"].max(), cell_attn_merged["attention_old"].max()),
-]
-ax.plot(lims, lims, "k--", alpha=0.4, linewidth=1, label="y = x")
-
-ax.set_xlabel("New Model (lowres-trained) — Attention Score", fontsize=12)
-ax.set_ylabel("Old Model — Attention Score", fontsize=12)
-ax.set_title(
-    f"Cell-Cell Attention Score Correlation\n"
-    f"Pearson r = {r_cell:.3f} (p={p_cell:.2e}),  "
-    f"Spearman ρ = {r_cell_sp:.3f} (p={p_cell_sp:.2e})",
-    fontsize=11,
-)
-ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0, markerscale=3, fontsize=8)
-plt.tight_layout()
-plt.savefig("figures/xenium_sample1_cell_attention_correlation.png", dpi=200)
-plt.savefig("figures/xenium_sample1_cell_attention_correlation.svg")
 plt.show()
 
 # %%
