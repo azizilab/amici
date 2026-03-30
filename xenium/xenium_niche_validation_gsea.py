@@ -547,7 +547,7 @@ for focus_ct in ALL_CELL_TYPES:
     pathway_order.sort(key=lambda x: x[1], reverse=True)
     pathways_sorted = [p[0] for p in pathway_order]
 
-    fig, ax = plt.subplots(figsize=(14, max(6, len(pathways_sorted) * 0.45)))
+    fig, ax = plt.subplots(figsize=(16, max(6, len(pathways_sorted) * 0.65)))
 
     y_positions = np.arange(len(pathways_sorted))
 
@@ -569,7 +569,7 @@ for focus_ct in ALL_CELL_TYPES:
             sign_str = "+" if h_nes > 0 else "-" if h_nes < 0 else ""
             label = f"{sign_str}{abs(h_nes):.2f} (q={h_fdr:.2f})"
             ax.text(-abs(h_nes) / 2, i, label,
-                    ha="center", va="center", fontsize=6.5,
+                    ha="center", va="center", fontsize=11,
                     color="white" if h_sig else "#444444", fontweight="bold")
 
         # Composition bars extend to the RIGHT (positive x)
@@ -584,16 +584,17 @@ for focus_ct in ALL_CELL_TYPES:
             sign_str = "+" if c_nes > 0 else "-" if c_nes < 0 else ""
             label = f"{sign_str}{abs(c_nes):.2f} (q={c_fdr:.2f})"
             ax.text(abs(c_nes) / 2, i, label,
-                    ha="center", va="center", fontsize=6.5,
+                    ha="center", va="center", fontsize=11,
                     color="white" if c_sig else "#444444", fontweight="bold")
 
     ax.set_yticks(y_positions)
-    ax.set_yticklabels([clean_pathway_name(pw) for pw in pathways_sorted], fontsize=9)
+    ax.set_yticklabels([clean_pathway_name(pw) for pw in pathways_sorted], fontsize=14)
     ax.axvline(0, color="black", linewidth=0.8)
-    ax.set_xlabel("|NES|", fontsize=12)
+    ax.set_xlabel("|NES|", fontsize=16)
     ax.set_title(f"{_cfg['display_name']} Butterfly Chart: {focus_ct.replace('_', ' ')}\n"
                  f"({butterfly_lib.replace('_', ' ')})",
-                 fontsize=13, fontweight="bold")
+                 fontsize=17, fontweight="bold")
+    ax.tick_params(axis='x', labelsize=13)
 
     legend_elements = [
         Patch(facecolor=hub_color_bf, edgecolor="black", label="Hub (FDR < 0.25)"),
@@ -601,13 +602,13 @@ for focus_ct in ALL_CELL_TYPES:
         Patch(facecolor=comp_color_bf, edgecolor="black", label="Composition (FDR < 0.25)"),
         Patch(facecolor=comp_faded, edgecolor="gray", label="Composition (n.s.)"),
     ]
-    ax.legend(handles=legend_elements, loc="lower right",
-              bbox_to_anchor=(1.0, 0.0), fontsize=8, frameon=True, framealpha=0.9)
+    ax.legend(handles=legend_elements, loc="upper left",
+              bbox_to_anchor=(1.02, 1.0), fontsize=12, frameon=True, framealpha=0.9)
 
     ax.text(-0.02, 1.02, "Hub clusters", transform=ax.transAxes,
-            ha="right", fontsize=11, fontweight="bold", color=hub_color_bf)
+            ha="right", fontsize=15, fontweight="bold", color=hub_color_bf)
     ax.text(1.02, 1.02, "Composition clusters", transform=ax.transAxes,
-            ha="left", fontsize=11, fontweight="bold", color=comp_color_bf)
+            ha="left", fontsize=15, fontweight="bold", color=comp_color_bf)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -843,27 +844,43 @@ for _panel_title, _ct_list in BAR_CHART_PANELS:
 
 n_plots = len(butterfly_order)
 if n_plots > 0:
-    ncols = 3
+    from matplotlib.gridspec import GridSpec
+
+    ncols = 2
     nrows = (n_plots + ncols - 1) // ncols
 
     imgs = [(ct, imread(p)) for ct, p in butterfly_order]
-    # Use aspect ratio of first image to set figure size
-    h, w = imgs[0][1].shape[:2]
-    cell_w, cell_h = 6, 6 * h / w
-    fig, axes = plt.subplots(nrows, ncols, figsize=(cell_w * ncols, cell_h * nrows))
-    axes = np.atleast_2d(axes)
+
+    # Compute height ratios: for each row, use the max image height (in pixels)
+    # relative to a fixed width so text stays the same size across panels
+    col_w = 8  # inches per column
+    row_heights = []
+    for row_idx in range(nrows):
+        max_h_inches = 0
+        for col_idx in range(ncols):
+            flat_idx = row_idx * ncols + col_idx
+            if flat_idx < len(imgs):
+                h, w = imgs[flat_idx][1].shape[:2]
+                h_inches = col_w * h / w
+                max_h_inches = max(max_h_inches, h_inches)
+        row_heights.append(max_h_inches)
+
+    fig = plt.figure(figsize=(col_w * ncols, sum(row_heights)))
+    gs = GridSpec(nrows, ncols, figure=fig, height_ratios=row_heights,
+                  wspace=0.03, hspace=0.05)
 
     for idx, (ct, img) in enumerate(imgs):
         r, c = divmod(idx, ncols)
-        axes[r, c].imshow(img)
-        axes[r, c].set_axis_off()
+        ax = fig.add_subplot(gs[r, c])
+        ax.imshow(img)
+        ax.set_axis_off()
 
     # Hide unused subplots
     for idx in range(n_plots, nrows * ncols):
         r, c = divmod(idx, ncols)
-        axes[r, c].set_axis_off()
+        ax = fig.add_subplot(gs[r, c])
+        ax.set_axis_off()
 
-    plt.subplots_adjust(wspace=0.02, hspace=0.02)
     combined_path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_combined.png")
     plt.savefig(combined_path, dpi=300, bbox_inches="tight")
     plt.savefig(combined_path.replace(".png", ".svg"), bbox_inches="tight")
