@@ -1,21 +1,58 @@
 dir_path: "data/"
+
+datasets_realistic:
+  - breast_cancer
+
 datasets:
-  3ct_dataset_2way:
-    seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
-    labels_key: "leiden"
+  #   3ct_dataset_2way:
+  #     seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
+  #     labels_key: "leiden"
+  #     subtype_labels_key: "subtype"
+  #     ncem_niche_sizes: [10, 15, 20]
+  #     nichede_niche_sizes: [20, 200, 500]
+  #     gt_interactions:
+  #       interaction_1:
+  #         sender: "0"
+  #         receiver: "2"
+  #         interaction_subtype: "2_sub1"
+  #         neutral_subtype: "2_sub0"
+  #         length_scale: 10
+  #       interaction_2:
+  #         sender: "3"
+  #         receiver: "0"
+  #         interaction_subtype: "0_sub1"
+  #         neutral_subtype: "0_sub0"
+  #         length_scale: 20
+
+  breast_cancer:
+    generation_type: "realistic"
+    seeds: [42]
+    labels_key: "cell_type"
     subtype_labels_key: "subtype"
+    use_cross_validation: true
     ncem_niche_sizes: [10, 15, 20]
     nichede_niche_sizes: [20, 200, 500]
+    # Paths to raw input files (expected to be uploaded to data/)
+    flex_h5_path: "data/GSM7782698_count_raw_feature_bc_matrix.h5"
+    annot_path: "data/41467_2023_43458_MOESM4_ESM.xlsx"
+    xenium_path: "data/xenium_rep1_io.h5ad"
+    scvi_model_dir: "data/scvi_model"
     gt_interactions:
       interaction_1:
-        sender: "0"
-        receiver: "2"
-        interaction_subtype: "2_sub1"
-        neutral_subtype: "2_sub0"
-        length_scale: 10
+        sender: "Macrophages"
+        receiver: "DCIS"
+        interaction_subtype: "DCIS_sub1"
+        neutral_subtype: "DCIS_sub0"
+        length_scale: 40
       interaction_2:
-        sender: "3"
-        receiver: "0"
-        interaction_subtype: "0_sub1"
-        neutral_subtype: "0_sub0"
-        length_scale: 20
+        sender: "T_Cells"
+        receiver: "Endothelial"
+        interaction_subtype: "Endothelial_sub1"
+        neutral_subtype: "Endothelial_sub0"
+        length_scale: 25
+      interaction_3:
+        sender: "Invasive_Tumor"
+        receiver: "Myoepi"
+        interaction_subtype: "Myoepi_sub1"
+        neutral_subtype: "Myoepi_sub0"
+        length_scale: 15
