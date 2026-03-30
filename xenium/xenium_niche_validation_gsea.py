@@ -829,64 +829,69 @@ with open(md_path, "w") as f:
 
 print(f"Summary saved to {md_path}")
 
-# %% Combined butterfly figure
+# %% Combined butterfly figures — split into tumor vs immune/stromal
 from matplotlib.image import imread
+from matplotlib.gridspec import GridSpec
 
-# Collect butterfly charts saved during this run, ordered by cell type group
-butterfly_order = []
-for _panel_title, _ct_list in BAR_CHART_PANELS:
-    for ct in _ct_list:
-        if ct not in saved_butterfly_cts:
-            continue
-        ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
-        path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
-        butterfly_order.append((ct, path))
 
-n_plots = len(butterfly_order)
-if n_plots > 0:
-    from matplotlib.gridspec import GridSpec
-
+def _make_combined_butterfly(img_list, save_name, fig_dir):
+    """Create a 2-column combined figure from a list of (ct, img_array) tuples."""
     ncols = 2
-    nrows = (n_plots + ncols - 1) // ncols
+    nrows = (len(img_list) + ncols - 1) // ncols
 
-    imgs = [(ct, imread(p)) for ct, p in butterfly_order]
-
-    # Compute height ratios: for each row, use the max image height (in pixels)
-    # relative to a fixed width so text stays the same size across panels
-    col_w = 8  # inches per column
+    col_w = 8
     row_heights = []
     for row_idx in range(nrows):
         max_h_inches = 0
         for col_idx in range(ncols):
             flat_idx = row_idx * ncols + col_idx
-            if flat_idx < len(imgs):
-                h, w = imgs[flat_idx][1].shape[:2]
-                h_inches = col_w * h / w
-                max_h_inches = max(max_h_inches, h_inches)
+            if flat_idx < len(img_list):
+                h, w = img_list[flat_idx][1].shape[:2]
+                max_h_inches = max(max_h_inches, col_w * h / w)
         row_heights.append(max_h_inches)
 
     fig = plt.figure(figsize=(col_w * ncols, sum(row_heights)))
     gs = GridSpec(nrows, ncols, figure=fig, height_ratios=row_heights,
                   wspace=0.03, hspace=0.05)
 
-    for idx, (ct, img) in enumerate(imgs):
+    for idx, (ct, img) in enumerate(img_list):
         r, c = divmod(idx, ncols)
         ax = fig.add_subplot(gs[r, c])
         ax.imshow(img)
         ax.set_axis_off()
 
-    # Hide unused subplots
-    for idx in range(n_plots, nrows * ncols):
+    for idx in range(len(img_list), nrows * ncols):
         r, c = divmod(idx, ncols)
         ax = fig.add_subplot(gs[r, c])
         ax.set_axis_off()
 
-    combined_path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_combined.png")
+    combined_path = os.path.join(fig_dir, save_name)
     plt.savefig(combined_path, dpi=300, bbox_inches="tight")
     plt.savefig(combined_path.replace(".png", ".svg"), bbox_inches="tight")
     plt.show()
-    print(f"Saved combined butterfly chart ({n_plots} panels) to {combined_path}")
-else:
+    print(f"Saved combined butterfly chart ({len(img_list)} panels) to {combined_path}")
+
+
+# Collect images per group
+tumor_imgs = []
+other_imgs = []
+for _panel_title, _ct_list in BAR_CHART_PANELS:
+    for ct in _ct_list:
+        if ct not in saved_butterfly_cts:
+            continue
+        ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
+        path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
+        img = (ct, imread(path))
+        if ct in TUMOR_CELL_TYPES:
+            tumor_imgs.append(img)
+        else:
+            other_imgs.append(img)
+
+if tumor_imgs:
+    _make_combined_butterfly(tumor_imgs, f"{FILE_PREFIX}_butterfly_combined_tumor.png", fig_dir)
+if other_imgs:
+    _make_combined_butterfly(other_imgs, f"{FILE_PREFIX}_butterfly_combined_immune_stromal.png", fig_dir)
+if not tumor_imgs and not other_imgs:
     print("No butterfly charts to combine.")
 
 # %%
