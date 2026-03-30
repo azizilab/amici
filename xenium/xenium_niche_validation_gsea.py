@@ -873,25 +873,23 @@ def _make_combined_butterfly(img_list, save_name, fig_dir):
 
 
 # Collect images per group
-tumor_imgs = []
-other_imgs = []
-for _panel_title, _ct_list in BAR_CHART_PANELS:
-    for ct in _ct_list:
-        if ct not in saved_butterfly_cts:
-            continue
-        ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
-        path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
-        img = (ct, imread(path))
-        if ct in TUMOR_CELL_TYPES:
-            tumor_imgs.append(img)
-        else:
-            other_imgs.append(img)
+group_imgs = {"tumor": [], "immune": [], "stromal": []}
+for ct in saved_butterfly_cts:
+    ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
+    path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
+    img = (ct, imread(path))
+    if ct in TUMOR_CELL_TYPES:
+        group_imgs["tumor"].append(img)
+    elif ct in IMMUNE_CELL_TYPES:
+        group_imgs["immune"].append(img)
+    elif ct in STROMAL_CELL_TYPES:
+        group_imgs["stromal"].append(img)
 
-if tumor_imgs:
-    _make_combined_butterfly(tumor_imgs, f"{FILE_PREFIX}_butterfly_combined_tumor.png", fig_dir)
-if other_imgs:
-    _make_combined_butterfly(other_imgs, f"{FILE_PREFIX}_butterfly_combined_immune_stromal.png", fig_dir)
-if not tumor_imgs and not other_imgs:
+for group_name, imgs in group_imgs.items():
+    if imgs:
+        _make_combined_butterfly(imgs, f"{FILE_PREFIX}_butterfly_combined_{group_name}.png", fig_dir)
+
+if not any(group_imgs.values()):
     print("No butterfly charts to combine.")
 
 # %%
