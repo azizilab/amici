@@ -210,11 +210,11 @@ rule train_ncem_model:
         "results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt",
     params:
         labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
-        use_cv=lambda wildcards: str(config["datasets"][wildcards.dataset].get("use_cross_validation", False)).lower(),
+        sweep_baselines=lambda wildcards: str(config["datasets"][wildcards.dataset].get("sweep_baselines", False)).lower(),
     resources:
         gpu=1
     shell:
-        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size} {params.use_cv}"
+        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size} {params.sweep_baselines}"
 
 rule train_gitiii_model:
     conda:

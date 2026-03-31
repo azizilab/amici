@@ -276,8 +276,6 @@ def main():
     dataset_path = snakemake.input.adata_path  # noqa: F821
     dataset = snakemake.wildcards.dataset  # noqa: F821
     seed = snakemake.wildcards.seed  # noqa: F821
-    use_cv = dataset_config.get("use_cross_validation", False)
-
     adata = sc.read_h5ad(dataset_path)
 
     models_dir = os.path.abspath(f"results/{dataset}_{seed}/saved_models")
@@ -305,35 +303,38 @@ def main():
     torch.manual_seed(42)
     random.seed(42)
 
-    learning_rates = [1e-3, 1e-4]
-    distance_thresholds = [50, 80, 120]
-    all_runs = [(lr, dt) for lr in learning_rates for dt in distance_thresholds]
+    sweep_baselines = dataset_config.get("sweep_baselines", False)
+    if sweep_baselines:
+        learning_rates = [1e-3, 1e-4]
+        distance_thresholds = [50, 80, 120]
+        all_runs = [(lr, dt) for lr in learning_rates for dt in distance_thresholds]
+    else:
+        all_runs = [(1e-4, 80)]
 
     figures_dir = f"results/{dataset}_{seed}/figures"
     os.makedirs(figures_dir, exist_ok=True)
 
-    if not use_cv:
-        # ── Original behaviour ────────────────────────────────────────────────
-        best_run_id, best_val_mse, best_run_dir, _ = _run_sweep(
-            project_root,
-            abs_converted_df_path,
-            gene_names,
-            all_runs,
-            models_dir,
-            excluded_cell_coords=test_cell_coords,
-            run_prefix="gitiii_sweep",
-            cache_results=True,
-        )
+    best_run_id, best_val_mse, best_run_dir, _ = _run_sweep(
+        project_root,
+        abs_converted_df_path,
+        gene_names,
+        all_runs,
+        models_dir,
+        excluded_cell_coords=test_cell_coords,
+        run_prefix="gitiii_sweep",
+        cache_results=True,
+    )
 
-        if best_run_id is None:
-            raise RuntimeError("No runs completed successfully")
+    if best_run_id is None:
+        raise RuntimeError("No runs completed successfully")
 
-        best_lr, best_distance_threshold = all_runs[best_run_id]
-        print(
-            f"Best run {best_run_id}: lr={best_lr}, distance_threshold={best_distance_threshold}, "
-            f"val_mse={best_val_mse:.6f}"
-        )
+    best_lr, best_distance_threshold = all_runs[best_run_id]
+    print(
+        f"Best run {best_run_id}: lr={best_lr}, distance_threshold={best_distance_threshold}, "
+        f"val_mse={best_val_mse:.6f}"
+    )
 
+    if os.path.exists(best_run_dir):
         for fname in os.listdir(best_run_dir):
             src = os.path.join(best_run_dir, fname)
             dst = os.path.join(models_dir, fname)
@@ -344,103 +345,24 @@ def main():
             elif os.path.isfile(src) and not fname.endswith("_results.json"):
                 shutil.copy2(src, dst)
 
-        with open(os.path.join(models_dir, "gitiii_best_params.json"), "w") as f:
-            json.dump(
-                {
-                    "learning_rate": best_lr,
-                    "distance_threshold": best_distance_threshold,
-                    "seed": 42,
-                    "val_mse": best_val_mse,
-                },
-                f,
-            )
-
-        # Clean up all sweep run directories
-        for run_id_cleanup in range(len(all_runs)):
-            run_dir_cleanup = os.path.join(models_dir, f"gitiii_sweep_run_{run_id_cleanup}")
-            if os.path.exists(run_dir_cleanup):
-                shutil.rmtree(run_dir_cleanup)
-
-        _write_figures(best_run_dir, figures_dir)
-
-    else:
-        # ── Cross-validation mode ─────────────────────────────────────────────
-        # Step 1: 3-fold CV sweep — run dirs deleted after each run
-        n_folds = 3
-        train_mask = adata.obs["train_test_split"] == "train"
-        # cv_scores[run_idx] = list of val metrics across folds
-        cv_scores = {i: [] for i in range(len(all_runs))}
-
-        for fold_id in range(n_folds):
-            print(f"\n=== CV fold {fold_id + 1}/{n_folds} ===")
-
-            val_mask = train_mask & (adata.obs["cv_fold"] == fold_id)
-            # Exclude both test cells AND current validation fold from training
-            excluded_coords = test_cell_coords | set(zip(x_all[val_mask], y_all[val_mask], strict=False))
-
-            _, _, _, fold_scores = _run_sweep(
-                project_root,
-                abs_converted_df_path,
-                gene_names,
-                all_runs,
-                models_dir,
-                excluded_cell_coords=excluded_coords,
-                run_prefix=f"gitiii_cv_fold{fold_id}",
-                cache_results=False,
-            )
-
-            for run_id, val_mse in fold_scores.items():
-                cv_scores[run_id].append(val_mse)
-
-        # Step 2: Select best config by average CV score
-        avg_cv_scores = {i: float(np.mean(scores)) for i, scores in cv_scores.items()}
-        best_run_idx = min(avg_cv_scores, key=avg_cv_scores.get)
-        best_lr, best_distance_threshold = all_runs[best_run_idx]
-        print(
-            f"\nBest config (idx={best_run_idx}): lr={best_lr}, distance_threshold={best_distance_threshold} "
-            f"avg_val_loss={avg_cv_scores[best_run_idx]:.6f}"
+    with open(os.path.join(models_dir, "gitiii_best_params.json"), "w") as f:
+        json.dump(
+            {
+                "learning_rate": best_lr,
+                "distance_threshold": best_distance_threshold,
+                "seed": 42,
+                "val_mse": best_val_mse,
+            },
+            f,
         )
 
-        # Step 3: Train final model on all train cells (only test cells excluded)
-        print("\n=== Training final model on all training data ===")
-        final_run_dir = os.path.join(models_dir, "gitiii_final_run")
-        final_val_mse = train_single_run(
-            abs_converted_df_path,
-            gene_names,
-            best_lr,
-            best_distance_threshold,
-            final_run_dir,
-            run_results_path=None,
-            excluded_cell_coords=test_cell_coords,
-        )
-        os.chdir(project_root)
-        print(f"Final model val_mse={final_val_mse:.6f}")
+    # Clean up all sweep run directories
+    for run_id_cleanup in range(len(all_runs)):
+        run_dir_cleanup = os.path.join(models_dir, f"gitiii_sweep_run_{run_id_cleanup}")
+        if os.path.exists(run_dir_cleanup):
+            shutil.rmtree(run_dir_cleanup)
 
-        for fname in os.listdir(final_run_dir):
-            src = os.path.join(final_run_dir, fname)
-            dst = os.path.join(models_dir, fname)
-            if os.path.isdir(src):
-                if os.path.exists(dst):
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-            elif os.path.isfile(src) and not fname.endswith("_results.json"):
-                shutil.copy2(src, dst)
-
-        with open(os.path.join(models_dir, "gitiii_best_params.json"), "w") as f:
-            json.dump(
-                {
-                    "learning_rate": best_lr,
-                    "distance_threshold": best_distance_threshold,
-                    "seed": 42,
-                    "val_mse": final_val_mse,
-                },
-                f,
-            )
-
-        _write_figures(final_run_dir, figures_dir)
-
-        if os.path.exists(final_run_dir):
-            shutil.rmtree(final_run_dir)
+    _write_figures(best_run_dir, figures_dir)
 
 
 if __name__ == "__main__":
