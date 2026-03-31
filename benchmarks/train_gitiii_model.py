@@ -237,7 +237,7 @@ def main():
     figures_dir = f"results/{dataset}_{seed}/figures"
     os.makedirs(figures_dir, exist_ok=True)
 
-    records_df = pd.read_csv(os.path.join(best_run_dir, "record_GRIT.csv"))
+    records_df = pd.read_csv(os.path.join(models_dir, "record_GRIT.csv"))
     plt.figure(figsize=(10, 5))
     plt.plot(records_df["train_loss_interaction"].values, label="Train Loss")
     plt.plot(records_df["val_loss_interaction"].values, label="Validation Loss", linestyle="--")
@@ -247,7 +247,7 @@ def main():
     plt.savefig(os.path.join(figures_dir, "gitiii_loss_curve.svg"))
     plt.close()
 
-    matrix = _build_gitiii_interaction_matrix(best_run_dir, num_neighbors=50, node_dim=256, edge_dim=48, att_dim=8)
+    matrix = _build_gitiii_interaction_matrix(models_dir, num_neighbors=50, node_dim=256, edge_dim=48, att_dim=8)
     plot_interaction_matrix(
         matrix,
         figures_dir,
