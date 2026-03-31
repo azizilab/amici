@@ -208,6 +208,24 @@ def main():
         f"val_mse={best_val_mse:.6f}"
     )
 
+    # If the best run directory was cleaned up by a prior run that failed after the copy step,
+    # re-run training for that configuration to regenerate the model files.
+    if not os.path.exists(best_run_dir):
+        run_results_path_best = os.path.join(models_dir, f"gitiii_sweep_run_{best_run_id}_results.json")
+        if os.path.exists(run_results_path_best):
+            os.remove(run_results_path_best)
+        print(f"Best run directory missing — re-training run {best_run_id} to regenerate model files")
+        train_single_run(
+            abs_converted_df_path,
+            gene_names,
+            best_lr,
+            best_distance_threshold,
+            best_run_dir,
+            run_results_path_best,
+            test_cell_coords,
+        )
+        os.chdir(project_root)
+
     for fname in os.listdir(best_run_dir):
         src = os.path.join(best_run_dir, fname)
         dst = os.path.join(models_dir, fname)
