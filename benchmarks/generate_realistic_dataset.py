@@ -1,6 +1,11 @@
 import os
 
 import anndata as ad
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.patches as mpatches
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -541,6 +546,122 @@ def _create_train_test_split(adata):
     return adata
 
 
+CELL_TYPE_PALETTE = {
+    "T_Cells": "#56B4E9",
+    "B_Cells": "#009E4E",
+    "Invasive_Tumor": "#cf4242",
+    "DCIS": "#E69F00",
+    "Macrophages": "#de692a",
+    "Endothelial": "#277987",
+    "Stromal": "#968253",
+    "Myoepi": "#823960",
+}
+
+
+def plot_spatial_distribution(adata, figure_path):
+    """
+    Save a two-panel spatial overview of the semi-synthetic dataset.
+
+    Panel 1 – cell types: training cells as filled circles, test cells as ×.
+    Panel 2 – interaction subtypes: sub1 (interacting) bright/outlined, sub0 dim.
+
+    Args:
+        adata: The generated AnnData with obsm["spatial"], obs["cell_type"],
+            obs["subtype"], and obs["train_test_split"].
+        figure_path: File path to write the PNG figure.
+    """
+    os.makedirs(os.path.dirname(figure_path), exist_ok=True)
+
+    coords = adata.obsm["spatial"]
+    cell_types = adata.obs["cell_type"].astype(str).values
+    subtypes = adata.obs["subtype"].astype(str).values
+    splits = adata.obs["train_test_split"].astype(str).values
+    test_mask = splits == "test"
+
+    fig, axes = plt.subplots(1, 2, figsize=(26, 9))
+
+    # ── Panel 1: cell types ──────────────────────────────────────────────────
+    ax = axes[0]
+    for ct, color in CELL_TYPE_PALETTE.items():
+        ct_mask = cell_types == ct
+        if ct_mask.sum() == 0:
+            continue
+        train_ct = ct_mask & ~test_mask
+        test_ct = ct_mask & test_mask
+        ax.scatter(
+            coords[train_ct, 0],
+            coords[train_ct, 1],
+            c=color,
+            s=4,
+            alpha=0.6,
+            linewidths=0,
+            label=ct,
+        )
+        if test_ct.sum() > 0:
+            ax.scatter(
+                coords[test_ct, 0],
+                coords[test_ct, 1],
+                c=color,
+                s=5,
+                alpha=0.7,
+                marker="x",
+                linewidths=0.5,
+            )
+
+    if test_mask.sum() > 0:
+        tx, ty = coords[test_mask, 0], coords[test_mask, 1]
+        pad = 20
+        rect = mpatches.Rectangle(
+            (tx.min() - pad, ty.min() - pad),
+            tx.max() - tx.min() + 2 * pad,
+            ty.max() - ty.min() + 2 * pad,
+            linewidth=1.5,
+            edgecolor="black",
+            facecolor="none",
+            linestyle="--",
+            label="Test region",
+        )
+        ax.add_patch(rect)
+
+    ax.set_title("Cell types  (train = filled, test = ×)", fontsize=12)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", markerscale=2.5, fontsize=8)
+
+    # ── Panel 2: interaction subtypes ────────────────────────────────────────
+    ax = axes[1]
+    for ct, color in CELL_TYPE_PALETTE.items():
+        sub0 = subtypes == f"{ct}_sub0"
+        sub1 = subtypes == f"{ct}_sub1"
+        if sub0.sum() > 0:
+            ax.scatter(coords[sub0, 0], coords[sub0, 1], c=color, s=3, alpha=0.25, linewidths=0)
+        if sub1.sum() > 0:
+            ax.scatter(
+                coords[sub1, 0],
+                coords[sub1, 1],
+                c=color,
+                s=6,
+                alpha=0.9,
+                edgecolors="black",
+                linewidths=0.3,
+                label=f"{ct} sub1",
+            )
+
+    ax.set_title(
+        "Subtypes  (bright+outlined = sub1 / interacting,  dim = sub0 / neutral)",
+        fontsize=11,
+    )
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", markerscale=2.5, fontsize=8)
+
+    plt.suptitle(f"Realistic semi-synthetic dataset — {adata.n_obs} cells", fontsize=13)
+    plt.tight_layout()
+    plt.savefig(figure_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"Saved spatial distribution figure to {figure_path}")
+
+
 def main():
     """Generate the breast cancer semi-synthetic spatial dataset."""
     select_gpu()
@@ -557,6 +678,13 @@ def main():
 
     generate_realistic_dataset(flex_h5_path, annot_path, xenium_path, output_path, scvi_model_dir=scvi_model_dir)
     print(f"Successfully wrote output to {output_path}")
+
+    figure_path = (
+        f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}"  # noqa: F821
+        f"/figures/spatial_distribution.png"
+    )
+    adata = ad.read_h5ad(output_path)
+    plot_spatial_distribution(adata, figure_path)
 
 
 if __name__ == "__main__":

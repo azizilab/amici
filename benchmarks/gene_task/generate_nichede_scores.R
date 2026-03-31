@@ -33,6 +33,13 @@ if (!file.exists(seurat_dataset_path)) {
 # Load the Seurat object
 seurat_obj <- readRDS(seurat_dataset_path)
 
+# n > ~46 340 causes integer overflow in the internal n×n distance matrix
+MAX_CELLS <- 40000L
+if (ncol(seurat_obj) > MAX_CELLS) {
+    set.seed(42)
+    seurat_obj <- seurat_obj[, sample(colnames(seurat_obj), MAX_CELLS)]
+}
+
 # Create deconvolution matrix with cell type labels
 labels_key <- snakemake@params[["labels_key"]]
 cell_types <- seurat_obj[[labels_key]][, 1]
@@ -49,7 +56,7 @@ for(i in 1:length(cell_names)) {
 # Convert counts to integers by rounding
 counts_matrix <- SeuratObject::GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
 counts_matrix <- round(counts_matrix)
-seurat_obj[["RNA"]]@counts <- counts_matrix
+seurat_obj[["RNA"]] <- SeuratObject::CreateAssayObject(counts = counts_matrix)
 
 spatial_coords <- seurat_obj[["spatial"]]@cell.embeddings
 

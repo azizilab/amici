@@ -32,6 +32,15 @@ datasets:
     use_cross_validation: true
     ncem_niche_sizes: [10, 15, 20]
     nichede_niche_sizes: [20, 200, 500]
+    sweep_params:
+      end_attention_penalty: [1.0e-5, 1.0e-4, 1.0e-3]
+      attention_penalty_schedule: [[10, 20], [15, 30], [20, 40]]
+      seed: [4, 7, 13, 18, 21, 22]
+      value_l1_penalty_coef: [1.0e-6, 1.0e-5]
+      batch_size: [256]
+      lr: [1.0e-3]
+      n_neighbors: [50]
+      penalty_flavor_params: [linear]
     # Paths to raw input files (expected to be uploaded to data/)
     flex_h5_path: "data/GSM7782698_count_raw_feature_bc_matrix.h5"
     annot_path: "data/41467_2023_43458_MOESM4_ESM.xlsx"

@@ -205,21 +205,79 @@ def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_mode
     return dict(results_dict)
 
 
-def _build_run_configs():
-    end_penalty_values = [1e-2, 1e-3, 1e-4]
-    value_l1_penalty_values = [1e-6, 1e-5, 1e-4]
-    schedule_flavors = ["linear"]
-    seeds = [22, 38, 17, 11, 42, 33, 18]
+def _build_run_configs(dataset_config):
+    """Build the list of hyperparameter configurations to sweep over.
+
+    If the dataset config contains a ``sweep_params`` key (e.g. breast_cancer),
+    those values are used; otherwise the default values for the synthetic
+    semisynthetic datasets are used.
+    """
+    sweep = dataset_config.get("sweep_params")
+
+    if sweep is not None:
+        end_penalty_values = sweep.get("end_attention_penalty", [1e-2, 1e-3, 1e-4])
+        value_l1_penalty_values = sweep.get("value_l1_penalty_coef", [1e-6, 1e-5, 1e-4])
+        schedule_flavors = sweep.get("penalty_flavor_params", ["linear"])
+        seeds = sweep.get("seed", [22, 38, 17, 11, 42, 33, 18])
+        schedules = sweep.get("attention_penalty_schedule", [[10, 40]])
+        batch_sizes = sweep.get("batch_size", [128])
+        lrs = sweep.get("lr", [1e-3])
+        n_neighbors_values = sweep.get("n_neighbors", [50])
+    else:
+        end_penalty_values = [1e-2, 1e-3, 1e-4]
+        value_l1_penalty_values = [1e-6, 1e-5, 1e-4]
+        schedule_flavors = ["linear"]
+        seeds = [22, 38, 17, 11, 42, 33, 18]
+        schedules = [[10, 40]]
+        batch_sizes = [128]
+        lrs = [1e-3]
+        n_neighbors_values = [50]
 
     all_runs = []
-    for item in itertools.product(end_penalty_values, schedule_flavors, value_l1_penalty_values, seeds):
+    for end_val, flavor, value_l1, seed, schedule, batch_size, lr, n_neighbors in itertools.product(
+        end_penalty_values,
+        schedule_flavors,
+        value_l1_penalty_values,
+        seeds,
+        schedules,
+        batch_sizes,
+        lrs,
+        n_neighbors_values,
+    ):
         all_runs.append(
             {
-                "penalty_params": {"end_val": item[0], "flavor": item[1], "value_l1_penalty_coef": item[2]},
-                "exp_params": {"seed": item[3]},
+                "penalty_params": {
+                    "end_val": end_val,
+                    "flavor": flavor,
+                    "value_l1_penalty_coef": value_l1,
+                    "epoch_start": schedule[0],
+                    "epoch_end": schedule[1],
+                },
+                "exp_params": {
+                    "seed": seed,
+                    "batch_size": batch_size,
+                    "lr": lr,
+                    "n_neighbors": n_neighbors,
+                },
             }
         )
     return all_runs
+
+
+def _hyperparam_key(run):
+    """Return a hashable key for a run config that excludes the random seed."""
+    p = run["penalty_params"]
+    e = run["exp_params"]
+    return (
+        p["end_val"],
+        p["value_l1_penalty_coef"],
+        p.get("epoch_start", 10),
+        p.get("epoch_end", 40),
+        p["flavor"],
+        int(e.get("batch_size", 128)),
+        float(e.get("lr", 1e-3)),
+        int(e.get("n_neighbors", 50)),
+    )
 
 
 def _save_best_model(adata, best_run_params, best_model_path, best_recons):
@@ -235,12 +293,12 @@ def _save_best_model(adata, best_run_params, best_model_path, best_recons):
     ) as f:
         model = AMICI.load(best_model_path, adata=adata)
         penalty_params = best_run_params["penalty_params"]
-        exp_params = best_run_params["exp_params"]
         model_config = {
             "n_heads": model.module.n_heads,
             "value_l1_penalty_coef": penalty_params["value_l1_penalty_coef"],
             "end_penalty_coef": penalty_params["end_val"],
-            "seed": exp_params["seed"],
+            "epoch_start": penalty_params.get("epoch_start", 10),
+            "epoch_end": penalty_params.get("epoch_end", 40),
             "n_neighbors": model.n_neighbors,
             "penalty_flavor": penalty_params["flavor"],
         }
@@ -259,7 +317,7 @@ def main():
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     use_cv = dataset_config.get("use_cross_validation", False)
 
-    all_runs = _build_run_configs()
+    all_runs = _build_run_configs(dataset_config)
 
     if not use_cv:
         # ── Original behaviour ────────────────────────────────────────────────
@@ -287,7 +345,7 @@ def main():
 
             cv_val_indices = np.where(train_mask & (adata.obs["cv_fold"] == fold_id))[0]
 
-            # Make a view of adata where fold cells are excluded from training
+            # Make a copy of adata where fold cells are excluded from training
             adata_cv = adata.copy()
             adata_cv.obs.loc[adata_cv.obs["cv_fold"] == fold_id, "train_test_split"] = "test"
 
@@ -304,32 +362,63 @@ def main():
                 run_id = f"run_{fold_id * len(all_runs) + local_idx}"
                 cv_scores[local_idx].append(fold_results[run_id]["test_recons"])
 
-        # Step 2: Average across folds, select best config
-        avg_cv_scores = {i: float(np.mean(scores)) for i, scores in cv_scores.items()}
-        best_run_idx = min(avg_cv_scores, key=avg_cv_scores.get)
-        best_run_params = all_runs[best_run_idx]
+        # Step 2: Average across BOTH folds AND seeds — select best hyperparameter config.
+        # Group run indices by non-seed hyperparameters; average loss over all seeds × folds.
+        hyperparam_groups: dict[tuple, dict] = {}
+        for run_idx, run in enumerate(all_runs):
+            key = _hyperparam_key(run)
+            if key not in hyperparam_groups:
+                hyperparam_groups[key] = {"run_indices": [], "run_template": run}
+            hyperparam_groups[key]["run_indices"].append(run_idx)
+
+        avg_group_scores: dict[tuple, float] = {}
+        for key, group in hyperparam_groups.items():
+            all_fold_scores = []
+            for run_idx in group["run_indices"]:
+                all_fold_scores.extend(cv_scores[run_idx])
+            avg_group_scores[key] = float(np.mean(all_fold_scores))
+
+        best_key = min(avg_group_scores, key=avg_group_scores.get)
+        best_group = hyperparam_groups[best_key]
+        best_penalty_params = dict(best_group["run_template"]["penalty_params"])
+        best_exp_params_no_seed = {k: v for k, v in best_group["run_template"]["exp_params"].items() if k != "seed"}
         print(
-            f"\nBest config (idx={best_run_idx}): {best_run_params} " f"avg_val_loss={avg_cv_scores[best_run_idx]:.6f}"
+            f"\nBest hyperparams (averaged over seeds and folds): "
+            f"penalty={best_penalty_params}, exp={best_exp_params_no_seed} "
+            f"avg_val_loss={avg_group_scores[best_key]:.6f}"
         )
 
-        # Step 3: Train final model on ALL train cells with best config
-        print("\n=== Training final model on all training data ===")
+        # Step 3: Train final model with every seed using the best hyperparams;
+        # pick the seed with the lowest test reconstruction loss.
+        all_seeds = list(dict.fromkeys(run["exp_params"]["seed"] for run in all_runs))
+        final_seed_runs = [
+            {
+                "penalty_params": best_penalty_params,
+                "exp_params": {**best_exp_params_no_seed, "seed": seed},
+            }
+            for seed in all_seeds
+        ]
+
+        print("\n=== Training final models (all seeds) on all training data ===")
         final_results = _run_sweep_parallel(
             adata,
             dataset_config,
-            [best_run_params],
+            final_seed_runs,
             eval_indices=None,
             save_model=True,
             base_run_id=0,
         )
 
-        final_run_id = "run_0"
-        final_info = final_results[final_run_id]
-        _save_best_model(adata, best_run_params, final_info["model_path"], final_info["test_recons"])
+        best_final_run_id = min(final_results.keys(), key=lambda k: final_results[k]["test_recons"])
+        best_final_info = final_results[best_final_run_id]
+        _save_best_model(
+            adata, best_final_info["model_config"], best_final_info["model_path"], best_final_info["test_recons"]
+        )
 
-        # Clean up the final sweep directory
-        if final_info["model_path"] and os.path.exists(final_info["model_path"]):
-            shutil.rmtree(final_info["model_path"])
+        # Clean up all final model directories except the best
+        for run_id, run_info in final_results.items():
+            if run_id != best_final_run_id and run_info["model_path"] and os.path.exists(run_info["model_path"]):
+                shutil.rmtree(run_info["model_path"])
 
 
 if __name__ == "__main__":

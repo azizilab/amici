@@ -154,11 +154,18 @@ def main():
     neighbor_threshold_ratios = [0.005, 0.01, 0.02]
     all_runs = [(lr, ntr) for lr in learning_rates for ntr in neighbor_threshold_ratios]
 
+    # CGCom requires integer-encoded cell labels. Build a temporary h5ad with a
+    # numeric labels column so that cgcom.utils.get_cell_label_dict can parse them.
+    cgcom_labels_key = "cgcom_int_labels"
+    adata.obs[cgcom_labels_key] = adata.obs[labels_key].astype("category").cat.codes.astype(str)
+    cgcom_dataset_path = dataset_path.replace(".h5ad", "_cgcom.h5ad")
+    adata.write_h5ad(cgcom_dataset_path)
+
     if not use_cv:
         # ── Original behaviour ────────────────────────────────────────────────
         best_run_id, best_val_loss, _ = _run_sweep(
-            dataset_path,
-            labels_key,
+            cgcom_dataset_path,
+            cgcom_labels_key,
             all_runs,
             models_dir,
             train_obs_names=train_obs_names,
@@ -203,6 +210,8 @@ def main():
                 shutil.rmtree(run_dir)
 
         _write_figures(best_results, adata, labels_key, models_dir, dataset, seed)
+        if os.path.exists(cgcom_dataset_path):
+            os.remove(cgcom_dataset_path)
 
     else:
         # ── Cross-validation mode ─────────────────────────────────────────────
@@ -218,8 +227,8 @@ def main():
             cv_train_obs_names = adata.obs_names[train_mask & (adata.obs["cv_fold"] != fold_id)].tolist()
 
             _, _, fold_scores = _run_sweep(
-                dataset_path,
-                labels_key,
+                cgcom_dataset_path,
+                cgcom_labels_key,
                 all_runs,
                 models_dir,
                 train_obs_names=cv_train_obs_names,
@@ -245,8 +254,8 @@ def main():
         final_model_tmp = os.path.join(final_run_dir, "cgcom_model.pt")
         final_results_path = os.path.join(models_dir, "cgcom_final_run_results.json")
         final_val_loss = train_single_run(
-            dataset_path,
-            labels_key,
+            cgcom_dataset_path,
+            cgcom_labels_key,
             best_lr,
             best_ntr,
             final_model_tmp,
@@ -278,6 +287,8 @@ def main():
             shutil.rmtree(final_run_dir)
         if os.path.exists(final_results_path):
             os.remove(final_results_path)
+        if os.path.exists(cgcom_dataset_path):
+            os.remove(cgcom_dataset_path)
 
 
 def _write_figures(best_results, adata, labels_key, models_dir, dataset, seed):
