@@ -547,7 +547,7 @@ for focus_ct in ALL_CELL_TYPES:
     pathway_order.sort(key=lambda x: x[1], reverse=True)
     pathways_sorted = [p[0] for p in pathway_order]
 
-    fig, ax = plt.subplots(figsize=(14, max(6, len(pathways_sorted) * 0.45)))
+    fig, ax = plt.subplots(figsize=(16, max(6, len(pathways_sorted) * 0.65)))
 
     y_positions = np.arange(len(pathways_sorted))
 
@@ -569,7 +569,7 @@ for focus_ct in ALL_CELL_TYPES:
             sign_str = "+" if h_nes > 0 else "-" if h_nes < 0 else ""
             label = f"{sign_str}{abs(h_nes):.2f} (q={h_fdr:.2f})"
             ax.text(-abs(h_nes) / 2, i, label,
-                    ha="center", va="center", fontsize=6.5,
+                    ha="center", va="center", fontsize=11,
                     color="white" if h_sig else "#444444", fontweight="bold")
 
         # Composition bars extend to the RIGHT (positive x)
@@ -584,16 +584,17 @@ for focus_ct in ALL_CELL_TYPES:
             sign_str = "+" if c_nes > 0 else "-" if c_nes < 0 else ""
             label = f"{sign_str}{abs(c_nes):.2f} (q={c_fdr:.2f})"
             ax.text(abs(c_nes) / 2, i, label,
-                    ha="center", va="center", fontsize=6.5,
+                    ha="center", va="center", fontsize=11,
                     color="white" if c_sig else "#444444", fontweight="bold")
 
     ax.set_yticks(y_positions)
-    ax.set_yticklabels([clean_pathway_name(pw) for pw in pathways_sorted], fontsize=9)
+    ax.set_yticklabels([clean_pathway_name(pw) for pw in pathways_sorted], fontsize=14)
     ax.axvline(0, color="black", linewidth=0.8)
-    ax.set_xlabel("|NES|", fontsize=12)
+    ax.set_xlabel("|NES|", fontsize=16)
     ax.set_title(f"{_cfg['display_name']} Butterfly Chart: {focus_ct.replace('_', ' ')}\n"
                  f"({butterfly_lib.replace('_', ' ')})",
-                 fontsize=13, fontweight="bold")
+                 fontsize=17, fontweight="bold")
+    ax.tick_params(axis='x', labelsize=13)
 
     legend_elements = [
         Patch(facecolor=hub_color_bf, edgecolor="black", label="Hub (FDR < 0.25)"),
@@ -601,13 +602,13 @@ for focus_ct in ALL_CELL_TYPES:
         Patch(facecolor=comp_color_bf, edgecolor="black", label="Composition (FDR < 0.25)"),
         Patch(facecolor=comp_faded, edgecolor="gray", label="Composition (n.s.)"),
     ]
-    ax.legend(handles=legend_elements, loc="lower right",
-              bbox_to_anchor=(1.0, 0.0), fontsize=8, frameon=True, framealpha=0.9)
+    ax.legend(handles=legend_elements, loc="upper left",
+              bbox_to_anchor=(1.02, 1.0), fontsize=12, frameon=True, framealpha=0.9)
 
     ax.text(-0.02, 1.02, "Hub clusters", transform=ax.transAxes,
-            ha="right", fontsize=11, fontweight="bold", color=hub_color_bf)
+            ha="right", fontsize=15, fontweight="bold", color=hub_color_bf)
     ax.text(1.02, 1.02, "Composition clusters", transform=ax.transAxes,
-            ha="left", fontsize=11, fontweight="bold", color=comp_color_bf)
+            ha="left", fontsize=15, fontweight="bold", color=comp_color_bf)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -828,48 +829,67 @@ with open(md_path, "w") as f:
 
 print(f"Summary saved to {md_path}")
 
-# %% Combined butterfly figure
+# %% Combined butterfly figures — split into tumor vs immune/stromal
 from matplotlib.image import imread
+from matplotlib.gridspec import GridSpec
 
-# Collect butterfly charts saved during this run, ordered by cell type group
-butterfly_order = []
-for _panel_title, _ct_list in BAR_CHART_PANELS:
-    for ct in _ct_list:
-        if ct not in saved_butterfly_cts:
-            continue
-        ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
-        path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
-        butterfly_order.append((ct, path))
 
-n_plots = len(butterfly_order)
-if n_plots > 0:
-    ncols = 3
-    nrows = (n_plots + ncols - 1) // ncols
+def _make_combined_butterfly(img_list, save_name, fig_dir):
+    """Create a 2-column combined figure from a list of (ct, img_array) tuples."""
+    ncols = 2
+    nrows = (len(img_list) + ncols - 1) // ncols
 
-    imgs = [(ct, imread(p)) for ct, p in butterfly_order]
-    # Use aspect ratio of first image to set figure size
-    h, w = imgs[0][1].shape[:2]
-    cell_w, cell_h = 6, 6 * h / w
-    fig, axes = plt.subplots(nrows, ncols, figsize=(cell_w * ncols, cell_h * nrows))
-    axes = np.atleast_2d(axes)
+    col_w = 8
+    row_heights = []
+    for row_idx in range(nrows):
+        max_h_inches = 0
+        for col_idx in range(ncols):
+            flat_idx = row_idx * ncols + col_idx
+            if flat_idx < len(img_list):
+                h, w = img_list[flat_idx][1].shape[:2]
+                max_h_inches = max(max_h_inches, col_w * h / w)
+        row_heights.append(max_h_inches)
 
-    for idx, (ct, img) in enumerate(imgs):
+    fig = plt.figure(figsize=(col_w * ncols, sum(row_heights)))
+    gs = GridSpec(nrows, ncols, figure=fig, height_ratios=row_heights,
+                  wspace=0.03, hspace=0.05)
+
+    for idx, (ct, img) in enumerate(img_list):
         r, c = divmod(idx, ncols)
-        axes[r, c].imshow(img)
-        axes[r, c].set_axis_off()
+        ax = fig.add_subplot(gs[r, c])
+        ax.imshow(img)
+        ax.set_axis_off()
 
-    # Hide unused subplots
-    for idx in range(n_plots, nrows * ncols):
+    for idx in range(len(img_list), nrows * ncols):
         r, c = divmod(idx, ncols)
-        axes[r, c].set_axis_off()
+        ax = fig.add_subplot(gs[r, c])
+        ax.set_axis_off()
 
-    plt.subplots_adjust(wspace=0.02, hspace=0.02)
-    combined_path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_combined.png")
+    combined_path = os.path.join(fig_dir, save_name)
     plt.savefig(combined_path, dpi=300, bbox_inches="tight")
     plt.savefig(combined_path.replace(".png", ".svg"), bbox_inches="tight")
     plt.show()
-    print(f"Saved combined butterfly chart ({n_plots} panels) to {combined_path}")
-else:
+    print(f"Saved combined butterfly chart ({len(img_list)} panels) to {combined_path}")
+
+
+# Collect images per group
+group_imgs = {"tumor": [], "immune": [], "stromal": []}
+for ct in saved_butterfly_cts:
+    ct_slug = ct.lower().replace("+", "").replace("-", "_").replace(" ", "_")
+    path = os.path.join(fig_dir, f"{FILE_PREFIX}_butterfly_{ct_slug}.png")
+    img = (ct, imread(path))
+    if ct in TUMOR_CELL_TYPES:
+        group_imgs["tumor"].append(img)
+    elif ct in IMMUNE_CELL_TYPES:
+        group_imgs["immune"].append(img)
+    elif ct in STROMAL_CELL_TYPES:
+        group_imgs["stromal"].append(img)
+
+for group_name, imgs in group_imgs.items():
+    if imgs:
+        _make_combined_butterfly(imgs, f"{FILE_PREFIX}_butterfly_combined_{group_name}.png", fig_dir)
+
+if not any(group_imgs.values()):
     print("No butterfly charts to combine.")
 
 # %%
