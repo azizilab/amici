@@ -1,7 +1,7 @@
 dir_path: "data/"
 datasets:
   3ct_dataset_2way:
-    seeds: [22]
+    seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
     labels_key: "leiden"
     subtype_labels_key: "subtype"
     ncem_niche_sizes: [10, 15, 20]

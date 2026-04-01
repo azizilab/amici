@@ -61,8 +61,8 @@ def _build_gitiii_interaction_matrix(best_run_dir, num_neighbors, node_dim, edge
             batch = {k: v.to(device) for k, v in batch.items()}
             y_pred = model(batch)
 
-            # [batch, num_genes, num_neighbors-1, 1] -> mean over genes -> [batch, num_neighbors-1]
-            strength = y_pred[1][0].squeeze(-1).abs().mean(dim=1).cpu().numpy()
+            # [batch, num_genes, num_neighbors-1, att_dim] -> mean over genes and att_dim -> [batch, num_neighbors-1]
+            strength = y_pred[1][0].abs().mean(dim=(1, -1)).cpu().numpy()
             cell_types = batch["cell_types"].cpu()
             center_types = cell_types[:, 0]  # [batch]
             neighbor_types = cell_types[:, 1:]  # [batch, num_neighbors-1]
