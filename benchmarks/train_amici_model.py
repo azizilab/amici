@@ -37,8 +37,7 @@ def train_model(
         run_id: The run ID (used as cache/save path key when save_model=True).
         eval_indices: Indices into adata to evaluate reconstruction loss on.
             Defaults to test cells when None (original behaviour).
-        save_model: If False, train without persisting the model to disk
-            (used during CV sweeps).
+        save_model: If False, train without persisting the model to disk.
 
     Returns
     -------
@@ -143,7 +142,19 @@ def train_and_evaluate(
     eval_indices=None,
     save_model: bool = True,
 ) -> None:
-    """Run a single training job and store results in shared dictionary."""
+    """
+    Run a single training job and store results in shared dictionary.
+
+    Args:
+        adata: AnnData object
+        dataset_config: dict, dataset configuration
+        penalty_params: dict, attention penalty parameters
+        exp_params: dict, experiment parameters
+        results_dict: dict, shared dictionary to store results in
+        run_id: str, unique identifier for this run
+        eval_indices: array-like or None, indices to evaluate reconstruction loss on
+        save_model: bool, whether to persist the model to disk
+    """
     model_path, test_recons = train_model(
         adata,
         dataset_config,
@@ -162,9 +173,20 @@ def train_and_evaluate(
 
 
 def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_model, base_run_id=0):
-    """Run hyperparameter configurations in batches of 4 parallel processes.
+    """
+    Run hyperparameter configurations in batches of 4 parallel processes.
 
-    Returns a dict mapping run_id -> result dict.
+    Args:
+        adata: AnnData object
+        dataset_config: dict, dataset configuration
+        all_runs: list of run config dicts with penalty_params and exp_params
+        eval_indices: array-like or None, indices to evaluate reconstruction loss on
+        save_model: bool, whether to persist models to disk
+        base_run_id: int, offset added to run indices for unique naming across calls
+
+    Returns
+    -------
+        dict mapping run_id -> result dict
     """
     num_agents = 4
     manager = Manager()
@@ -206,11 +228,18 @@ def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_mode
 
 
 def _build_run_configs(dataset_config):
-    """Build the list of hyperparameter configurations to sweep over.
+    """
+    Build the list of hyperparameter configurations to sweep over.
 
-    If the dataset config contains a ``sweep_params`` key (e.g. breast_cancer),
-    those values are used; otherwise the default values for the synthetic
-    semisynthetic datasets are used.
+    If the dataset config contains a sweep_params key, those values are used;
+    otherwise the default values for the synthetic and semisynthetic datasets are used.
+
+    Args:
+        dataset_config: dict, dataset configuration optionally containing a sweep_params key
+
+    Returns
+    -------
+        list of run config dicts, each with penalty_params and exp_params keys
     """
     sweep = dataset_config.get("sweep_params")
 
@@ -265,7 +294,16 @@ def _build_run_configs(dataset_config):
 
 
 def _hyperparam_key(run):
-    """Return a hashable key for a run config that excludes the random seed."""
+    """
+    Return a hashable key for a run config that excludes the random seed.
+
+    Args:
+        run: dict, run config with penalty_params and exp_params keys
+
+    Returns
+    -------
+        tuple, hashable key identifying the hyperparameter configuration
+    """
     p = run["penalty_params"]
     e = run["exp_params"]
     return (
@@ -281,7 +319,15 @@ def _hyperparam_key(run):
 
 
 def _save_best_model(adata, best_run_params, best_model_path, best_recons):
-    """Copy best model to snakemake outputs and write param/loss files."""
+    """
+    Copy best model to snakemake outputs and write param/loss files.
+
+    Args:
+        adata: AnnData object
+        best_run_params: dict, model config with penalty_params and exp_params
+        best_model_path: str, path to the best model directory
+        best_recons: float, reconstruction loss of the best model
+    """
     shutil.copy(os.path.join(best_model_path, "model.pt"), snakemake.output[0])  # noqa: F821
 
     with open(snakemake.output[1], "w") as f:  # noqa: F821
@@ -309,7 +355,7 @@ def _save_best_model(adata, best_run_params, best_model_path, best_recons):
 
 
 def main():
-    """Train the AMICI model."""
+    """Train the AMICI model with a hyperparameter sweep, optionally using cross-validation."""
     select_gpu()
     adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
     adata.obs_names_make_unique()
@@ -320,7 +366,6 @@ def main():
     all_runs = _build_run_configs(dataset_config)
 
     if not use_cv:
-        # ── Original behaviour ────────────────────────────────────────────────
         results_dict = _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices=None, save_model=True)
 
         best_run_id = min(results_dict.keys(), key=lambda k: results_dict[k]["test_recons"])
@@ -333,8 +378,7 @@ def main():
                 shutil.rmtree(run_path)
 
     else:
-        # ── Cross-validation mode ─────────────────────────────────────────────
-        # Step 1: CV sweep — number of folds is read from the data, not hardcoded
+        # Cross-validation mode: number of folds is read from the data, not hardcoded
         n_folds = int(adata.obs.loc[adata.obs["cv_fold"] >= 0, "cv_fold"].max()) + 1
         # cv_scores[run_idx] = list of val metrics across folds
         cv_scores = {i: [] for i in range(len(all_runs))}
@@ -362,8 +406,8 @@ def main():
                 run_id = f"run_{fold_id * len(all_runs) + local_idx}"
                 cv_scores[local_idx].append(fold_results[run_id]["test_recons"])
 
-        # Step 2: Average across BOTH folds AND seeds — select best hyperparameter config.
-        # Group run indices by non-seed hyperparameters; average loss over all seeds × folds.
+        # Average across folds and seeds to select the best hyperparameter config.
+        # Group run indices by non-seed hyperparameters; average loss over all seeds x folds.
         hyperparam_groups: dict[tuple, dict] = {}
         for run_idx, run in enumerate(all_runs):
             key = _hyperparam_key(run)
@@ -388,7 +432,7 @@ def main():
             f"avg_val_loss={avg_group_scores[best_key]:.6f}"
         )
 
-        # Step 3: Train final model with every seed using the best hyperparams;
+        # Train final model with every seed using the best hyperparams;
         # pick the seed with the lowest test reconstruction loss.
         all_seeds = list(dict.fromkeys(run["exp_params"]["seed"] for run in all_runs))
         final_seed_runs = [

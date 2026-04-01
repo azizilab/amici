@@ -24,10 +24,27 @@ def train_single_run(
     train_indices,
     eval_indices,
 ):
-    """Train a single NCEM run, evaluate on eval_indices, and return the reconstruction loss.
+    """
+    Train a single NCEM run, evaluate on eval_indices, and return the reconstruction loss.
 
     Loads from cache when run_results_path already exists.
-    Pass run_results_path=None to disable caching (used during CV sweeps).
+
+    Args:
+        adata: AnnData object
+        labels_key: str, key in adata.obs for cell type labels
+        exp_params: dict, experiment parameters
+        model_params: dict, model architecture parameters
+        train_params: dict, training parameters
+        run_model_path: str, path to save/load model weights
+        run_model_args_path: str, path to save/load model arguments
+        run_results_path: str, path to cache the result JSON
+        train_indices: array-like, indices of training cells
+        eval_indices: array-like, indices of cells to evaluate on
+
+    Returns
+    -------
+        tuple of (eval_recons, model_history) where eval_recons is the reconstruction loss
+        and model_history is a dict of training metrics
     """
     if run_results_path is not None and os.path.exists(run_results_path):
         with open(run_results_path) as f:
@@ -76,11 +93,23 @@ def _run_sweep(
     train_indices,
     eval_indices,
     run_prefix,
-    cache_results=True,
 ):
-    """Run the hyperparameter sweep and return (best_run_id, best_eval_recons, scores_per_run, best_history).
+    """
+    Run the hyperparameter sweep over learning rate and l1 coefficient combinations.
 
-    When cache_results=False the model weights and result JSON are not written to disk.
+    Args:
+        adata: AnnData object
+        labels_key: str, key in adata.obs for cell type labels
+        all_runs: list of (lr, l1_coef) tuples
+        niche_size: int, number of neighbors to use
+        model_dir: str, directory to save run results
+        train_indices: array-like, indices of training cells
+        eval_indices: array-like, indices of cells to evaluate on
+        run_prefix: str, prefix for run file names
+
+    Returns
+    -------
+        tuple of (best_run_id, best_eval_recons, scores, best_model_history)
     """
     best_eval_recons = float("inf")
     best_run_id = None
@@ -90,7 +119,7 @@ def _run_sweep(
     for run_id, (lr, l1_coef) in enumerate(all_runs):
         run_model_path = os.path.join(model_dir, f"{run_prefix}_run_{run_id}_checkpoint")
         run_model_args_path = os.path.join(model_dir, f"{run_prefix}_run_{run_id}.pickle")
-        run_results_path = os.path.join(model_dir, f"{run_prefix}_run_{run_id}_results.json") if cache_results else None
+        run_results_path = os.path.join(model_dir, f"{run_prefix}_run_{run_id}_results.json")
 
         exp_params, model_params, train_params = get_model_parameters(niche_size)
         model_params["learning_rate"] = lr
@@ -118,20 +147,21 @@ def _run_sweep(
             best_run_id = run_id
             best_model_history = model_history
 
-        # Always remove transient model files when not caching (CV mode)
-        if not cache_results:
-            for suffix in [".data-00000-of-00001", ".index"]:
-                path = run_model_path + suffix
-                if os.path.exists(path):
-                    os.remove(path)
-            if os.path.exists(run_model_args_path):
-                os.remove(run_model_args_path)
-
     return best_run_id, best_eval_recons, scores, best_model_history
 
 
 def main(input_path, labels_key, dataset, seed, niche_size, sweep_baselines=False):
-    """Train the NCEM model, optionally using 3-fold spatial CV for hyperparameter selection."""
+    """
+    Train the NCEM model with a hyperparameter sweep, keeping the best run.
+
+    Args:
+        input_path: str, path to the input AnnData h5ad file
+        labels_key: str, key in adata.obs for cell type labels
+        dataset: str, dataset name
+        seed: str, random seed identifier
+        niche_size: int, number of neighbors to use
+        sweep_baselines: bool, whether to sweep over multiple hyperparameter configurations
+    """
     adata = sc.read_h5ad(input_path)
     if "spatial" not in adata.uns:
         adata.uns["spatial"] = adata.obsm["spatial"].copy()
@@ -167,7 +197,6 @@ def main(input_path, labels_key, dataset, seed, niche_size, sweep_baselines=Fals
         train_indices=train_indices,
         eval_indices=test_indices,
         run_prefix=f"ncem_{niche_size}_sweep",
-        cache_results=True,
     )
 
     if best_run_id is None:

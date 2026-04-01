@@ -15,7 +15,18 @@ from gpu_utils import select_gpu
 
 
 def build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key):
-    """Aggregate CGCom attention scores by cell type pair into a sender x receiver matrix."""
+    """
+    Aggregate CGCom attention scores by cell type pair into a sender x receiver matrix.
+
+    Args:
+        comm_csv_path: str, path to the communication scores CSV file
+        adata: AnnData object
+        labels_key: str, key in adata.obs for cell type labels
+
+    Returns
+    -------
+        pd.DataFrame, sender x receiver interaction matrix with cell type names as index/columns
+    """
     comm_df = pd.read_csv(comm_csv_path)
     cell_type_map = adata.obs[labels_key].to_dict()
 
@@ -31,10 +42,23 @@ def build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key):
 def train_single_run(
     dataset_path, labels_key, lr, neighbor_threshold_ratio, run_model_path, run_results_path, train_obs_names
 ):
-    """Train a single CGCom run and return the best validation loss.
+    """
+    Train a single CGCom run and return the best validation loss.
 
     Loads from cache when run_results_path already exists.
-    Pass run_results_path=None to disable caching (used during CV sweeps).
+
+    Args:
+        dataset_path: str, path to the input AnnData h5ad file
+        labels_key: str, key in adata.obs for cell type labels
+        lr: float, learning rate
+        neighbor_threshold_ratio: float, ratio for neighbor distance threshold
+        run_model_path: str, path to save the model weights
+        run_results_path: str, path to cache the result JSON
+        train_obs_names: list, observation names to use for training
+
+    Returns
+    -------
+        float, best validation loss
     """
     if run_results_path is not None and os.path.exists(run_results_path):
         with open(run_results_path) as f:
@@ -85,13 +109,21 @@ def _run_sweep(
     models_dir,
     train_obs_names,
     run_prefix,
-    cache_results=True,
 ):
-    """Run the hyperparameter sweep.
+    """
+    Run the hyperparameter sweep over learning rate and neighbor threshold combinations.
 
-    Returns (best_run_id, best_val_loss, all_scores) where all_scores maps run_id -> val_loss.
-    When cache_results=False, result JSON files are not written and run dirs are deleted
-    after each run (used during CV sweeps).
+    Args:
+        dataset_path: str, path to the input AnnData h5ad file
+        labels_key: str, key in adata.obs for cell type labels
+        all_runs: list of (lr, neighbor_threshold_ratio) tuples
+        models_dir: str, directory to save run results
+        train_obs_names: list, observation names to use for training
+        run_prefix: str, prefix for run directory and result file names
+
+    Returns
+    -------
+        tuple of (best_run_id, best_val_loss, all_scores) where all_scores maps run_id -> val_loss
     """
     best_val_loss = float("inf")
     best_run_id = None
@@ -100,9 +132,7 @@ def _run_sweep(
     for run_id, (lr, neighbor_threshold_ratio) in enumerate(all_runs):
         run_dir = os.path.join(models_dir, f"{run_prefix}_run_{run_id}")
         run_model_path = os.path.join(run_dir, "cgcom_model.pt")
-        run_results_path = (
-            os.path.join(models_dir, f"{run_prefix}_run_{run_id}_results.json") if cache_results else None
-        )
+        run_results_path = os.path.join(models_dir, f"{run_prefix}_run_{run_id}_results.json")
 
         print(f"Run {run_id + 1}/{len(all_runs)}: lr={lr}, neighbor_threshold_ratio={neighbor_threshold_ratio}")
 
@@ -122,15 +152,11 @@ def _run_sweep(
             best_val_loss = val_loss
             best_run_id = run_id
 
-        # In CV mode, delete run directory immediately to free disk space
-        if not cache_results and os.path.exists(run_dir):
-            shutil.rmtree(run_dir)
-
     return best_run_id, best_val_loss, all_scores
 
 
 def main():
-    """Train the CGCom model with a hyperparameter sweep, optionally using 3-fold spatial CV."""
+    """Train the CGCom model with a hyperparameter sweep, keeping the best run."""
     select_gpu()
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     labels_key = dataset_config["labels_key"]
@@ -170,7 +196,6 @@ def main():
         models_dir,
         train_obs_names=train_obs_names,
         run_prefix="cgcom_sweep",
-        cache_results=True,
     )
 
     if best_run_id is None:
@@ -213,7 +238,17 @@ def main():
 
 
 def _write_figures(best_results, adata, labels_key, models_dir, dataset, seed):
-    """Write loss curve and interaction matrix figures."""
+    """
+    Write loss curve and interaction matrix figures.
+
+    Args:
+        best_results: dict, results from the best run including train_losses and val_losses
+        adata: AnnData object
+        labels_key: str, key in adata.obs for cell type labels
+        models_dir: str, directory containing the communication scores CSV
+        dataset: str, dataset name
+        seed: str, random seed identifier
+    """
     figures_dir = os.path.join(f"results/{dataset}_{seed}/figures")
     os.makedirs(figures_dir, exist_ok=True)
 

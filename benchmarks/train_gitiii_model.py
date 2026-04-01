@@ -18,12 +18,24 @@ def _mark_test_cells_in_processed_csv(run_dir, test_cell_coords):
     """Set flag=False for test cells in GITIII's processed CSV, matched by (centerx, centery)."""
 =======
 def _build_gitiii_interaction_matrix(best_run_dir, num_neighbors, node_dim, edge_dim, att_dim):
-    """Load the best trained GITIII model and compute a cell-type interaction matrix.
+    """
+    Load the best trained GITIII model and compute a cell-type interaction matrix.
 
     Uses the mean absolute output of the graph transformer across genes as a proxy
     for how strongly each neighbor cell type influences each center cell type.
     y_pred[1][0] has shape [batch, num_genes, num_neighbors-1, 1]; neighbor j in the
     attention corresponds to cell_types[:, j+1] (index 0 is the center cell).
+
+    Args:
+        best_run_dir: str, path to the best run directory containing model weights and data
+        num_neighbors: int, number of neighbors used during training
+        node_dim: int, node embedding dimension
+        edge_dim: int, edge embedding dimension
+        att_dim: int, attention output dimension
+
+    Returns
+    -------
+        pd.DataFrame, cell-type interaction matrix with sender types as rows and receiver types as columns
     """
     from gitiii.dataloader import GITIII_dataset
     from gitiii.model import GITIII
@@ -84,10 +96,12 @@ def _build_gitiii_interaction_matrix(best_run_dir, num_neighbors, node_dim, edge
 
 
 def _mark_excluded_cells_in_processed_csv(run_dir, excluded_cell_coords):
-    """Set flag=False for excluded cells in GITIII's processed CSV, matched by (centerx, centery).
+    """
+    Set flag=False for excluded cells in GITIII's processed CSV, matched by (centerx, centery).
 
-    excluded_cell_coords is a set of (x, y) tuples for cells that should NOT be used in training
-    (covers both held-out test cells and, during CV, the current validation fold).
+    Args:
+        run_dir: str, path to the run directory containing the processed CSV
+        excluded_cell_coords: set of (x, y) tuples for cells that should NOT be used in training
     """
 >>>>>>> 256431f (add cross-validation option for realistic semisynthetic dataset)
     processed_csv_path = os.path.join(run_dir, "data", "processed", "slide1.csv")
@@ -108,11 +122,21 @@ def train_single_run(
     run_results_path,
     excluded_cell_coords,
 ):
-    """Train a single GITIII run and return the best validation MSE.
+    """
+    Train a single GITIII run and return the best validation MSE.
 
-    excluded_cell_coords: set of (x, y) tuples for cells excluded from training
-    (test cells, and optionally a CV validation fold).
-    Pass run_results_path=None to disable caching.
+    Args:
+        converted_df_path: str, path to the converted CSV file
+        gene_names: list, list of gene names
+        lr: float, learning rate
+        distance_threshold: float, distance threshold for neighbor selection
+        run_dir: str, path to the run directory
+        run_results_path: str, path to cache the result JSON
+        excluded_cell_coords: set of (x, y) tuples for cells excluded from training (test cells)
+
+    Returns
+    -------
+        float, best validation MSE
     """
     if run_results_path is not None and os.path.exists(run_results_path):
         with open(run_results_path) as f:
@@ -160,15 +184,23 @@ def _run_sweep(
     models_dir,
     excluded_cell_coords,
     run_prefix,
-    cache_results=True,
 ):
-    """Run the hyperparameter sweep.
+    """
+    Run the hyperparameter sweep over learning rate and distance threshold combinations.
 
-    Returns (best_run_id, best_val_mse, best_run_dir, all_scores) where
-    all_scores is a dict mapping run_id -> val_mse.
+    Args:
+        project_root: str, absolute path to the project root directory
+        abs_converted_df_path: str, absolute path to the converted CSV file
+        gene_names: list, list of gene names
+        all_runs: list of (lr, distance_threshold) tuples
+        models_dir: str, directory to save run results
+        excluded_cell_coords: set of (x, y) tuples for cells excluded from training
+        run_prefix: str, prefix for run directory and result file names
 
-    When cache_results=False, result JSON files are not written and run dirs are deleted
-    after each run (used during CV sweeps).
+    Returns
+    -------
+        tuple of (best_run_id, best_val_mse, best_run_dir, all_scores) where
+        all_scores maps run_id -> val_mse
     """
     best_val_mse = float("inf")
     best_run_id = None
@@ -177,9 +209,7 @@ def _run_sweep(
 
     for run_id, (lr, distance_threshold) in enumerate(all_runs):
         run_dir = os.path.join(models_dir, f"{run_prefix}_run_{run_id}")
-        run_results_path = (
-            os.path.join(models_dir, f"{run_prefix}_run_{run_id}_results.json") if cache_results else None
-        )
+        run_results_path = os.path.join(models_dir, f"{run_prefix}_run_{run_id}_results.json")
 
         print(f"Run {run_id + 1}/{len(all_runs)}: lr={lr}, distance_threshold={distance_threshold}")
 
@@ -193,7 +223,7 @@ def _run_sweep(
             excluded_cell_coords,
         )
 
-        if cache_results and run_results_path is not None and not os.path.exists(run_results_path):
+        if not os.path.exists(run_results_path):
             with open(run_results_path, "w") as f:
                 json.dump({"val_mse": val_mse}, f)
 
@@ -205,15 +235,17 @@ def _run_sweep(
             best_run_id = run_id
             best_run_dir = run_dir
 
-        # In CV mode, delete run directory immediately to free disk space
-        if not cache_results and os.path.exists(run_dir):
-            shutil.rmtree(run_dir)
-
     return best_run_id, best_val_mse, best_run_dir, all_scores
 
 
 def _write_figures(source_run_dir, figures_dir):
-    """Write loss curve and interaction figures from a completed run directory."""
+    """
+    Write loss curve and interaction figures from a completed run directory.
+
+    Args:
+        source_run_dir: str, path to the completed run directory
+        figures_dir: str, directory to save figure files
+    """
     records_path = os.path.join(source_run_dir, "record_GRIT.csv")
     if os.path.exists(records_path):
         records_df = pd.read_csv(records_path)
@@ -322,7 +354,6 @@ def main():
         models_dir,
         excluded_cell_coords=test_cell_coords,
         run_prefix="gitiii_sweep",
-        cache_results=True,
     )
 
     if best_run_id is None:
