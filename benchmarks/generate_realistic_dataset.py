@@ -77,7 +77,7 @@ GT_INTERACTIONS = [
 ]
 
 
-def generate_realistic_dataset(flex_h5_path, annot_path, xenium_path, output_path, scvi_model_dir=None):
+def generate_realistic_dataset(flex_h5_path, annot_path, xenium_path, output_path, scvi_model_dir=None, n_cv_folds=3):
     """
     Generate a semi-synthetic spatial dataset from breast cancer Flex and Xenium data.
 
@@ -87,6 +87,7 @@ def generate_realistic_dataset(flex_h5_path, annot_path, xenium_path, output_pat
         xenium_path: Path to the Xenium spatial h5ad file.
         output_path: Path to write the output semi-synthetic h5ad.
         scvi_model_dir: Directory to save/load the scVI model.
+        n_cv_folds: Number of spatially contiguous CV folds to embed in the dataset.
     """
     if os.path.exists(output_path):
         print(f"Output already exists at {output_path}, skipping.")
@@ -112,7 +113,7 @@ def generate_realistic_dataset(flex_h5_path, annot_path, xenium_path, output_pat
     rng = np.random.default_rng(SEED)
     sampled_data = _sample_flex_by_subtype(flex_pp, spatial_data, scvi_model, rng)
 
-    sampled_data = _create_train_test_split(sampled_data)
+    sampled_data = _create_train_test_split(sampled_data, n_cv_folds=n_cv_folds)
     sampled_data.obs_names_make_unique()
     sampled_data.write_h5ad(output_path)
 
@@ -499,17 +500,112 @@ def _sample_flex_by_subtype(flex_adata, spatial_data, scvi_model, rng=None):
     return sampled
 
 
-def _create_train_test_split(adata):
+def _assign_cv_folds(adata, n_folds=3, fold_fraction=0.10, cell_type_key="cell_type"):
     """
-    Assign train/test labels based on spatial coordinates.
+    Assign spatially contiguous CV folds to training cells via a scan-and-select algorithm.
+
+    Each fold covers ~fold_fraction of the training cells as a contiguous window along
+    the X axis.  All possible window positions are scored by the minimum cell-type count
+    inside the window (higher = better representation of rare types in the val fold).
+    The n_folds non-overlapping windows with the highest scores are selected greedily,
+    then assigned fold IDs 0 … n_folds-1 ordered left → right along X.
+
+    Training cells not assigned to any fold receive cv_fold = -1; test cells also = -1.
 
     Args:
-        adata: AnnData with spatial coordinates in obsm["spatial"].
+        adata: AnnData with train_test_split obs column already set, spatial coords
+            in obsm["spatial"] (numpy array, columns [X, Y]), and a cell-type column.
+        n_folds: Number of CV folds to select (1–5 recommended).
+        fold_fraction: Target fraction of training cells per fold (default 0.10 = 10%).
+        cell_type_key: obs column containing cell-type labels used for coverage scoring.
 
     Returns
     -------
-        AnnData with train_test_split obs column ("train" or "test") and
-        cv_fold obs column (0/1/2 for spatially contiguous train folds, -1 for test cells).
+        adata with cv_fold obs column populated.
+
+    Raises
+    ------
+        ValueError if n_folds non-overlapping windows with at least one cell of every
+        type cannot be found (indicates too many folds or too small a dataset).
+    """
+    train_mask = (adata.obs["train_test_split"] == "train").values
+    train_positions = np.where(train_mask)[0]  # positional indices into adata
+    n_train = len(train_positions)
+
+    x_coords = adata.obsm["spatial"][:, 0]
+    sort_order = np.argsort(x_coords[train_positions])
+    sorted_positions = train_positions[sort_order]  # adata positions sorted by X
+
+    window_size = max(1, round(fold_fraction * n_train))
+    step = max(1, window_size // 20)
+
+    # Integer cell-type codes for fast counting (computed on sorted training cells only)
+    ct_values = adata.obs[cell_type_key].values[sorted_positions]
+    ct_codes, ct_uniq = pd.factorize(ct_values)
+    n_types = len(ct_uniq)
+
+    # Score every candidate window by its minimum cell-type count
+    n_positions = n_train - window_size + 1
+    candidates = []  # (start_in_sorted, score)
+    for start in range(0, n_positions, step):
+        window_codes = ct_codes[start : start + window_size]
+        counts = np.bincount(window_codes, minlength=n_types)
+        candidates.append((start, int(counts.min())))
+
+    # Greedy non-overlapping selection: prefer highest score, break ties by
+    # picking whichever candidate is furthest from already-selected windows
+    # (maximises spatial spread as a secondary criterion).
+    candidates.sort(key=lambda x: -x[1])
+
+    selected_starts = []
+    for start, _ in candidates:
+        if not any(abs(start - s) < window_size for s in selected_starts):
+            selected_starts.append(start)
+            if len(selected_starts) == n_folds:
+                break
+
+    if len(selected_starts) < n_folds:
+        raise ValueError(
+            f"Could only find {len(selected_starts)} non-overlapping CV folds with "
+            f"adequate cell-type coverage (requested {n_folds}). "
+            "Consider reducing n_cv_folds or fold_fraction."
+        )
+
+    # Sort by X position so fold IDs go left → right
+    selected_starts.sort()
+
+    adata.obs["cv_fold"] = -1
+    for fold_id, start in enumerate(selected_starts):
+        fold_obs_names = adata.obs_names[sorted_positions[start : start + window_size]]
+        adata.obs.loc[fold_obs_names, "cv_fold"] = fold_id
+
+        window_codes = ct_codes[start : start + window_size]
+        counts = np.bincount(window_codes, minlength=n_types)
+        x_lo = x_coords[sorted_positions[start]]
+        x_hi = x_coords[sorted_positions[start + window_size - 1]]
+        print(
+            f"  CV fold {fold_id}: {window_size} cells, "
+            f"X=[{x_lo:.1f}, {x_hi:.1f}], "
+            f"min cell-type count={counts.min()} ({ct_uniq[counts.argmin()]})"
+        )
+
+    return adata
+
+
+def _create_train_test_split(adata, n_cv_folds=3):
+    """
+    Assign train/test labels based on spatial coordinates, then select CV folds.
+
+    Args:
+        adata: AnnData with spatial coordinates in obsm["spatial"].
+        n_cv_folds: Number of spatially contiguous CV folds to embed (each ~10% of
+            training data, chosen to maximise cell-type coverage in the val window).
+
+    Returns
+    -------
+        AnnData with:
+          - train_test_split obs column ("train" or "test")
+          - cv_fold obs column (0 … n_cv_folds-1 for selected val folds, -1 elsewhere)
     """
     coords = adata.obsm["spatial"]
     test_mask = (
@@ -525,23 +621,11 @@ def _create_train_test_split(adata):
     print(f"Train: {(~test_mask).sum()} cells ({100 - test_pct:.1f}%)")
     print(f"Test:  {test_mask.sum()} cells ({test_pct:.1f}%)")
 
-    # Assign spatially contiguous CV folds to training cells.
-    # Folds are equal-width bands along the X axis (by percentile of training X coords).
-    train_mask = ~test_mask
-    x_coords = coords[:, 0]
-    train_x = x_coords[train_mask]
-    fold_edges = np.percentile(train_x, [0, 33.33, 66.67, 100])
-
-    adata.obs["cv_fold"] = -1
-    for fold_id, (lo, hi) in enumerate(zip(fold_edges[:-1], fold_edges[1:], strict=False)):
-        if fold_id == 2:
-            fold_mask = train_mask & (x_coords >= lo)
-        else:
-            fold_mask = train_mask & (x_coords >= lo) & (x_coords < hi)
-        adata.obs.loc[fold_mask, "cv_fold"] = fold_id
+    print(f"Selecting {n_cv_folds} CV folds (each ~10% of training data) by cell-type coverage scan...")
+    adata = _assign_cv_folds(adata, n_folds=n_cv_folds, fold_fraction=0.10)
 
     fold_counts = adata.obs["cv_fold"].value_counts().sort_index()
-    print("CV fold sizes:", dict(fold_counts.items()))
+    print("CV fold sizes:", {k: v for k, v in fold_counts.items() if k >= 0})
 
     return adata
 
@@ -676,7 +760,17 @@ def main():
     torch.manual_seed(SEED)
     scvi.settings.seed = SEED
 
-    generate_realistic_dataset(flex_h5_path, annot_path, xenium_path, output_path, scvi_model_dir=scvi_model_dir)
+    dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
+    n_cv_folds = dataset_config.get("n_cv_folds", 3)
+
+    generate_realistic_dataset(
+        flex_h5_path,
+        annot_path,
+        xenium_path,
+        output_path,
+        scvi_model_dir=scvi_model_dir,
+        n_cv_folds=n_cv_folds,
+    )
     print(f"Successfully wrote output to {output_path}")
 
     figure_path = (

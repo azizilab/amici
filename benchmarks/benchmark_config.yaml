@@ -4,25 +4,25 @@ datasets_realistic:
   - breast_cancer
 
 datasets:
-  #   3ct_dataset_2way:
-  #     seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
-  #     labels_key: "leiden"
-  #     subtype_labels_key: "subtype"
-  #     ncem_niche_sizes: [10, 15, 20]
-  #     nichede_niche_sizes: [20, 200, 500]
-  #     gt_interactions:
-  #       interaction_1:
-  #         sender: "0"
-  #         receiver: "2"
-  #         interaction_subtype: "2_sub1"
-  #         neutral_subtype: "2_sub0"
-  #         length_scale: 10
-  #       interaction_2:
-  #         sender: "3"
-  #         receiver: "0"
-  #         interaction_subtype: "0_sub1"
-  #         neutral_subtype: "0_sub0"
-  #         length_scale: 20
+  3ct_dataset_2way:
+    seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
+    labels_key: "leiden"
+    subtype_labels_key: "subtype"
+    ncem_niche_sizes: [10, 15, 20]
+    nichede_niche_sizes: [20, 200, 500]
+    gt_interactions:
+      interaction_1:
+        sender: "0"
+        receiver: "2"
+        interaction_subtype: "2_sub1"
+        neutral_subtype: "2_sub0"
+        length_scale: 10
+      interaction_2:
+        sender: "3"
+        receiver: "0"
+        interaction_subtype: "0_sub1"
+        neutral_subtype: "0_sub0"
+        length_scale: 20
 
   breast_cancer:
     generation_type: "realistic"
@@ -30,12 +30,13 @@ datasets:
     labels_key: "cell_type"
     subtype_labels_key: "subtype"
     use_cross_validation: true
+    n_cv_folds: 3
     sweep_baselines: true
     ncem_niche_sizes: [10, 15, 20]
     nichede_niche_sizes: [20, 200, 500]
     sweep_params:
       end_attention_penalty: [1.0e-5, 1.0e-4]
-      attention_penalty_schedule: [[10, 20], [15, 30]]
+      attention_penalty_schedule: [[10, 20], [15, 30], [20, 40]]
       seed: [21, 22]
       value_l1_penalty_coef: [1.0e-6, 1.0e-5]
       batch_size: [256]

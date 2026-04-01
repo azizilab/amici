@@ -334,8 +334,8 @@ def main():
 
     else:
         # ── Cross-validation mode ─────────────────────────────────────────────
-        # Step 1: 3-fold CV sweep — no models saved to disk
-        n_folds = 3
+        # Step 1: CV sweep — number of folds is read from the data, not hardcoded
+        n_folds = int(adata.obs.loc[adata.obs["cv_fold"] >= 0, "cv_fold"].max()) + 1
         # cv_scores[run_idx] = list of val metrics across folds
         cv_scores = {i: [] for i in range(len(all_runs))}
         train_mask = adata.obs["train_test_split"] == "train"
