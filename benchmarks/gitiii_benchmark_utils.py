@@ -29,10 +29,17 @@ def convert_adata_to_csv(
     adata_sub.obs[labels_key] = adata_sub.obs[labels_key].apply(lambda x: f"ct_{x}")
 
     # Get observation columns
+    spatial = adata_sub.obsm["spatial"]
+    if hasattr(spatial, "iloc"):
+        centerx = spatial["X"].values
+        centery = spatial["Y"].values
+    else:
+        centerx = spatial[:, 0]
+        centery = spatial[:, 1]
     observation_columns = pd.DataFrame(
         {
-            "centerx": adata_sub.obsm["spatial"]["X"],
-            "centery": adata_sub.obsm["spatial"]["Y"],
+            "centerx": centerx,
+            "centery": centery,
             "subclass": adata_sub.obs[labels_key],
             "section": ["slide1"] * adata_sub.n_obs,
         },

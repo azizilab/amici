@@ -5,12 +5,14 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import seaborn as sns
+from gpu_utils import select_gpu
 
 from amici import AMICI
 
 
 def main():
     """Plot the KDE plot for the length scale task."""
+    select_gpu()
     adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
 
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821

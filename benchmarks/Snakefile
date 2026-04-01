@@ -122,9 +122,11 @@ rule all:
 
 rule generate_dataset:
     conda:
-        "amici"
+        "envs/amici.yaml"
     output:
         os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    resources:
+        gpu=1
     script:
         "generate_dataset.py"
 
@@ -140,7 +142,7 @@ rule run_ground_truth_genes:
 
 rule run_ground_truth_neighbor_interactions:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
@@ -161,13 +163,15 @@ rule run_ground_truth_receiver_subtypes:
 # Train the AMICI, NCEM, GITIII and CGCom models
 rule train_amici_model:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
         "results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
         "results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt",
         "results/{dataset}_{seed}/amici_{dataset}_{seed}_mse_loss.txt"
+    resources:
+        gpu=1
     script:
         "train_amici_model.py"
 
@@ -180,6 +184,8 @@ rule train_ncem_model:
         "results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt",
     params:
         labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
+    resources:
+        gpu=1
     shell:
         "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size}"
 
@@ -190,6 +196,8 @@ rule train_gitiii_model:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
         "results/{dataset}_{seed}/saved_models/GRIT_best.pth",
+    resources:
+        gpu=1
     script:
         "train_gitiii_model.py"
 
@@ -200,43 +208,51 @@ rule train_cgcom_model:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
         "results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt",
+    resources:
+        gpu=1
     script:
         "train_cgcom_model.py"
 
 # Run AMICI model for gene and neighbor interaction tasks
 rule run_amici_gene_task:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
         best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
     output:
         "results/{dataset}_{seed}/amici_gene_task_scores.csv",
+    resources:
+        gpu=1
     script:
         "gene_task/generate_amici_scores.py"
 
 rule run_amici_neighbor_interaction_task:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
         best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
     output:
         "results/{dataset}_{seed}/amici_neighbor_interaction_scores.csv",
+    resources:
+        gpu=1
     script:
         "neighbor_interaction_task/generate_amici_scores.py"
 
 rule run_amici_receiver_subtype_task:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
         best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
     output:
         "results/{dataset}_{seed}/amici_receiver_subtype_scores.csv",
+    resources:
+        gpu=1
     script:
         "receiver_subtype_task/generate_amici_scores.py"
 
@@ -249,6 +265,8 @@ rule run_ncem_gene_task:
         ncem_all_train_done_path="results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt"
     output:
         "results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv"
+    resources:
+        gpu=1
     script:
         "gene_task/generate_ncem_scores.py"
 
@@ -260,6 +278,8 @@ rule run_nichede_gene_task_model:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
         "results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv",
+    resources:
+        mem_mb=10000
     script:
         "gene_task/generate_nichede_scores.R"
 
@@ -272,6 +292,8 @@ rule run_gitiii_gene_task:
         model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
     output:
         "results/{dataset}_{seed}/gitiii_gene_task_scores.csv"
+    resources:
+        gpu=1
     script:
         "gene_task/generate_gitiii_scores.py"
 
@@ -283,6 +305,8 @@ rule run_gitiii_neighbor_interaction_task:
         model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
     output:
         "results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+    resources:
+        gpu=1
     script:
         "neighbor_interaction_task/generate_gitiii_scores.py"
 
@@ -294,6 +318,8 @@ rule run_gitiii_receiver_subtype_task:
         model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
     output:
         "results/{dataset}_{seed}/gitiii_receiver_subtype_scores.csv"
+    resources:
+        gpu=1
     script:
         "receiver_subtype_task/generate_gitiii_scores.py"
 
@@ -305,6 +331,8 @@ rule run_cgcom_neighbor_interaction_task:
         model_path="results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"
     output:
         "results/{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv"
+    resources:
+        gpu=1
     script:
         "neighbor_interaction_task/generate_cgcom_scores.py"
 
@@ -316,6 +344,8 @@ rule run_cgcom_receiver_subtype_task:
         model_path="results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"
     output:
         "results/{dataset}_{seed}/cgcom_receiver_subtype_scores.csv"
+    resources:
+        gpu=1
     script:
         "receiver_subtype_task/generate_cgcom_scores.py"
 
@@ -484,7 +514,7 @@ rule plot_receiver_subtype_task_pr_curves:
 # Plot boxplots for the length scale for the AMICI model only
 rule plot_amici_length_scale_boxplots:
     conda:
-        "amici"
+        "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
         model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
@@ -492,6 +522,8 @@ rule plot_amici_length_scale_boxplots:
     output:
         "results/{dataset}_{seed}/length_scale_distribution.png",
         "results/{dataset}_{seed}/length_scale_boxplots_done.txt"
+    resources:
+        gpu=1
     script:
         "length_scale_task/plot_kde.py"
 

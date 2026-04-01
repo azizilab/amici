@@ -9,6 +9,7 @@ import numpy as np
 import pytorch_lightning as pl
 import scanpy as sc
 from anndata import AnnData
+from gpu_utils import select_gpu
 
 from amici import AMICI
 from amici.callbacks import AttentionPenaltyMonitor
@@ -143,6 +144,7 @@ def train_and_evaluate(
 
 def main():
     """Train the AMICI model."""
+    select_gpu()
     adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
     adata.obs_names_make_unique()
 
@@ -237,6 +239,12 @@ def main():
     # Save the reconstruction loss
     with open(snakemake.output[2], "w") as f:  # noqa: F821
         f.write(str(best_recons))
+
+    # Clean up all sweep run directories (best model already saved to snakemake output)
+    for run_key in results_dict:
+        run_model_path = results_dict[run_key]["model_path"]
+        if os.path.exists(run_model_path):
+            shutil.rmtree(run_model_path)
 
 
 if __name__ == "__main__":

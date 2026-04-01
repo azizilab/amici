@@ -4,12 +4,14 @@ import pandas as pd
 import pytorch_lightning as pl
 import scanpy as sc
 from amici_benchmark_utils import get_amici_gene_task_scores
+from gpu_utils import select_gpu
 
 from amici import AMICI
 
 
 def main():
     """Generate the AMICI scores for the gene task."""
+    select_gpu()
     adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
     adata.obs_names_make_unique()
 

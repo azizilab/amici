@@ -3,6 +3,7 @@ import pickle
 
 import matplotlib.pyplot as plt
 import ncem.models as models
+import numpy as np
 from ncem.data import customLoader, get_data_custom
 from ncem.interpretation import InterpreterInteraction
 from ncem.train import TrainModelInteractions
@@ -111,6 +112,8 @@ def train_ncem(
     train_params,
     model_path,
     model_args_path,
+    train_indices=None,
+    test_indices=None,
 ):
     """
     Train the NCEM model.
@@ -123,6 +126,10 @@ def train_ncem(
         train_params: dict, training parameters
         model_path: str, path to save the model weights
         model_args_path: str, path to save the model arguments
+        train_indices: np.ndarray, optional row indices into adata for training cells.
+            If provided alongside test_indices, overrides NCEM's internal random split.
+            Validation is carved from train_indices (10% held out with seed 42).
+        test_indices: np.ndarray, optional row indices into adata for test cells.
 
     Returns
     -------
@@ -136,7 +143,26 @@ def train_ncem(
     trainer.estimator.data = customLoader(
         adata=adata, cluster=labels_key, patient=None, library_id=None, radius=exp_params.get("radius")
     )
+    # get_data_custom calls split_data_node(0.1, 0.1) internally; we override below if custom
+    # indices are provided
     get_data_custom(interpreter=trainer.estimator)
+
+    if train_indices is not None and test_indices is not None:
+        np.random.seed(42)
+        n_val = max(1, round(len(train_indices) * 0.1))
+        val_indices = np.random.choice(train_indices, size=n_val, replace=False)
+        train_only_indices = np.setdiff1d(train_indices, val_indices)
+
+        img_key = trainer.estimator.complete_img_keys[0]
+        img_keys = trainer.estimator.complete_img_keys
+        trainer.estimator.split_data_given(
+            img_keys_test=img_keys,
+            img_keys_train=img_keys,
+            img_keys_eval=img_keys,
+            nodes_idx_test={img_key: test_indices},
+            nodes_idx_train={img_key: train_only_indices},
+            nodes_idx_eval={img_key: val_indices},
+        )
 
     trainer.estimator.init_model(
         **model_params,

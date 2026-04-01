@@ -8,12 +8,14 @@ import scanpy as sc
 import torch
 from einops import rearrange
 from gitiii_benchmark_utils import convert_adata_to_csv, setup_gitiii_model
+from gpu_utils import select_gpu
 from scipy.stats import norm
 from statsmodels.stats.multitest import multipletests
 
 
 def main():
     """Generate the GITIII scores for the gene task."""
+    select_gpu()
     # Load the dataset
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     labels_key = dataset_config["labels_key"]

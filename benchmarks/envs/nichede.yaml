@@ -5,6 +5,9 @@ channels:
   - defaults
 dependencies:
   - r-base
+  - r-seurat
+  - r-ggrepel
+  - r-data.table
   - r-devtools
   - r-irkernel
   - git

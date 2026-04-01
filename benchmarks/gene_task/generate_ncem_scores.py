@@ -3,11 +3,13 @@ import os
 import numpy as np
 import pandas as pd
 import scanpy as sc
+from gpu_utils import select_gpu
 from ncem_benchmark_utils import get_model_parameters, load_ncem_from_weights
 
 
 def main():
     """Generate the NCEM scores for the gene task."""
+    select_gpu()
     try:
         adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
         adata.obs_names_make_unique()
