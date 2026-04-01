@@ -9,75 +9,8 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import torch
-from benchmark_utils import plot_interaction_graph, plot_interaction_matrix
 from gitiii_benchmark_utils import convert_adata_to_csv
 from gpu_utils import select_gpu
-
-
-def _build_gitiii_interaction_matrix(best_run_dir, num_neighbors, node_dim, edge_dim, att_dim):
-    """Load the best trained GITIII model and compute a cell-type interaction matrix.
-
-    Uses the mean absolute output of the graph transformer across genes as a proxy
-    for how strongly each neighbor cell type influences each center cell type.
-    y_pred[1][0] has shape [batch, num_genes, num_neighbors-1, 1]; neighbor j in the
-    attention corresponds to cell_types[:, j+1] (index 0 is the center cell).
-    """
-    from gitiii.dataloader import GITIII_dataset
-    from gitiii.model import GITIII
-    from torch.utils.data import DataLoader as TorchDataLoader
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    data_dir = os.path.join(best_run_dir, "data", "processed") + "/"
-    ligands_info = torch.load(os.path.join(best_run_dir, "data", "ligands.pth"), weights_only=False)
-    genes = torch.load(os.path.join(best_run_dir, "data", "genes.pth"), weights_only=False)
-
-    dataset = GITIII_dataset(processed_dir=data_dir, num_neighbors=num_neighbors)
-    cell_types_list = list(dataset.cell_types_dict.keys())
-
-    model = GITIII(
-        genes,
-        ligands_info,
-        node_dim=node_dim,
-        edge_dim=edge_dim,
-        num_heads=2,
-        n_layers=1,
-        node_dim_small=16,
-        att_dim=att_dim,
-        use_cell_type_embedding=True,
-    ).to(device)
-    model.load_state_dict(
-        torch.load(os.path.join(best_run_dir, "GRIT_best.pth"), map_location=device, weights_only=False)
-    )
-    model.eval()
-
-    n_types = len(cell_types_list)
-    scores = np.zeros((n_types, n_types))
-    counts = np.zeros_like(scores)
-
-    loader = TorchDataLoader(dataset, batch_size=256, shuffle=False)
-    with torch.no_grad():
-        for batch in loader:
-            batch = {k: v.to(device) for k, v in batch.items()}
-            y_pred = model(batch)
-
-            # [batch, num_genes, num_neighbors-1, att_dim] -> mean over genes and att_dim -> [batch, num_neighbors-1]
-            strength = y_pred[1][0].abs().mean(dim=(1, -1)).cpu().numpy()
-            cell_types = batch["cell_types"].cpu()
-            center_types = cell_types[:, 0]  # [batch]
-            neighbor_types = cell_types[:, 1:]  # [batch, num_neighbors-1]
-
-            for i in range(strength.shape[0]):
-                c = center_types[i].item()
-                for j in range(strength.shape[1]):
-                    n = neighbor_types[i, j].item()
-                    if 0 <= c < n_types and 0 <= n < n_types:
-                        scores[n, c] += strength[i, j]  # sender=neighbor, receiver=center
-                        counts[n, c] += 1
-
-    mean_scores = np.divide(scores, counts, where=counts > 0)
-    display_names = [name.replace("ct_", "") for name in cell_types_list]
-    return pd.DataFrame(mean_scores, index=display_names, columns=display_names)
 
 
 def _mark_test_cells_in_processed_csv(run_dir, test_cell_coords):
@@ -264,21 +197,6 @@ def main():
     plt.savefig(os.path.join(figures_dir, "gitiii_loss_curve.png"))
     plt.savefig(os.path.join(figures_dir, "gitiii_loss_curve.svg"))
     plt.close()
-
-    matrix = _build_gitiii_interaction_matrix(models_dir, num_neighbors=50, node_dim=256, edge_dim=48, att_dim=8)
-    plot_interaction_matrix(
-        matrix,
-        figures_dir,
-        title="GITIII cell-type interaction matrix",
-        filename="gitiii_interaction_matrix",
-        colorbar_label="Mean attention strength",
-    )
-    plot_interaction_graph(
-        matrix,
-        figures_dir,
-        title="GITIII cell-type interaction graph",
-        filename="gitiii_interaction_graph",
-    )
 
 
 if __name__ == "__main__":
