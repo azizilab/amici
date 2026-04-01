@@ -33,8 +33,16 @@ if (!file.exists(seurat_dataset_path)) {
 # Load the Seurat object
 seurat_obj <- readRDS(seurat_dataset_path)
 
+# n > ~46 340 causes integer overflow in the internal n×n distance matrix
+MAX_CELLS <- 40000L
+if (ncol(seurat_obj) > MAX_CELLS) {
+    set.seed(42)
+    seurat_obj <- seurat_obj[, sample(colnames(seurat_obj), MAX_CELLS)]
+}
+
 # Create deconvolution matrix with cell type labels
-cell_types <- seurat_obj$leiden
+labels_key <- snakemake@params[["labels_key"]]
+cell_types <- seurat_obj[[labels_key]][, 1]
 cell_names <- colnames(seurat_obj)
 cell_type_mat <- matrix(0, nrow=length(cell_names), ncol=length(unique(cell_types)))
 colnames(cell_type_mat) <- sort(unique(cell_types))
@@ -48,7 +56,7 @@ for(i in 1:length(cell_names)) {
 # Convert counts to integers by rounding
 counts_matrix <- SeuratObject::GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
 counts_matrix <- round(counts_matrix)
-seurat_obj[["RNA"]]@counts <- counts_matrix
+seurat_obj[["RNA"]] <- SeuratObject::CreateAssayObject(counts = counts_matrix)
 
 spatial_coords <- seurat_obj[["spatial"]]@cell.embeddings
 
@@ -72,7 +80,7 @@ names(seurat_obj@images) <- "coords"
 SeuratObject::DefaultAssay(seurat_obj) <- "RNA"
 
 # Calculate average expression profiles
-cell_types <- unique(seurat_obj$leiden)
+cell_types <- unique(seurat_obj[[labels_key]][, 1])
 counts_matrix <- SeuratObject::GetAssayData(seurat_obj, layer = "counts", assay = "RNA")
 
 # Ensure cell types are consistently sorted
@@ -89,7 +97,7 @@ cell_type_mat <- cell_type_mat[, cell_types_sorted]
 
 # Calculate means using the sorted cell types
 for(ct in cell_types_sorted) {  # Use sorted cell types in loop
-    cells_in_type <- colnames(seurat_obj)[seurat_obj$leiden == ct]
+    cells_in_type <- colnames(seurat_obj)[seurat_obj[[labels_key]][, 1] == ct]
     library_mat[ct,] <- colMeans(t(counts_matrix[,cells_in_type]))
 }
 

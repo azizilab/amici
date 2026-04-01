@@ -87,9 +87,14 @@ def main():
     os.chdir(project_root)
 
     test_mask = adata.obs["train_test_split"] == "test"
-    test_cell_coords = set(
-        zip(adata.obsm["spatial"]["X"][test_mask], adata.obsm["spatial"]["Y"][test_mask], strict=False)
-    )
+    spatial = adata.obsm["spatial"]
+    if hasattr(spatial, "iloc"):
+        spatial_x = spatial["X"].values
+        spatial_y = spatial["Y"].values
+    else:
+        spatial_x = spatial[:, 0]
+        spatial_y = spatial[:, 1]
+    test_cell_coords = set(zip(spatial_x[test_mask], spatial_y[test_mask], strict=False))
 
     gene_names = adata.var_names.tolist()
 

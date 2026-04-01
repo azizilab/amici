@@ -1,4 +1,8 @@
 dir_path: "data/"
+
+datasets_realistic:
+  - breast_cancer
+
 datasets:
   3ct_dataset_2way:
     seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
@@ -19,3 +23,47 @@ datasets:
         interaction_subtype: "0_sub1"
         neutral_subtype: "0_sub0"
         length_scale: 20
+
+  breast_cancer:
+    generation_type: "realistic"
+    seeds: [42]
+    labels_key: "cell_type"
+    subtype_labels_key: "subtype"
+    use_cross_validation: true
+    n_cv_folds: 3
+    sweep_baselines: true
+    ncem_niche_sizes: [10, 15, 20]
+    nichede_niche_sizes: [20, 200, 500]
+    sweep_params:
+      end_attention_penalty: [1.0e-5, 1.0e-4]
+      attention_penalty_schedule: [[10, 20], [15, 30], [20, 40]]
+      seed: [21, 22]
+      value_l1_penalty_coef: [1.0e-6, 1.0e-5]
+      batch_size: [256]
+      lr: [1.0e-3]
+      n_neighbors: [50]
+      penalty_flavor_params: [linear]
+    # Paths to raw input files (expected to be uploaded to data/)
+    flex_h5_path: "data/GSM7782698_count_raw_feature_bc_matrix.h5"
+    annot_path: "data/41467_2023_43458_MOESM4_ESM.xlsx"
+    xenium_path: "data/xenium_rep1_io.h5ad"
+    scvi_model_dir: "data/scvi_model"
+    gt_interactions:
+      interaction_1:
+        sender: "Macrophages"
+        receiver: "DCIS"
+        interaction_subtype: "DCIS_sub1"
+        neutral_subtype: "DCIS_sub0"
+        length_scale: 40
+      interaction_2:
+        sender: "T_Cells"
+        receiver: "Endothelial"
+        interaction_subtype: "Endothelial_sub1"
+        neutral_subtype: "Endothelial_sub0"
+        length_scale: 25
+      interaction_3:
+        sender: "Invasive_Tumor"
+        receiver: "Myoepi"
+        interaction_subtype: "Myoepi_sub1"
+        neutral_subtype: "Myoepi_sub0"
+        length_scale: 15

@@ -2,6 +2,7 @@ import itertools
 import json
 import os
 import shutil
+import tempfile
 from multiprocessing import Manager, Process
 from typing import Any
 
@@ -21,26 +22,51 @@ def train_model(
     penalty_params: dict,
     exp_params: dict,
     run_id: str,
-) -> int:
+    eval_indices=None,
+    save_model: bool = True,
+) -> tuple:
     """
     Train an AMICI model with the given parameters.
 
     Args:
-        seed: The seed for the random number generator.
+        adata: The full AnnData object. Its train_test_split column determines
+            which cells are used for training (== "train").
+        dataset_config: Dataset configuration dict.
         penalty_params: The parameters for the penalty.
-        model_params: The parameters for the model.
         exp_params: The parameters for the experiment.
-        run_id: The run ID.
+        run_id: The run ID (used as cache/save path key when save_model=True).
+        eval_indices: Indices into adata to evaluate reconstruction loss on.
+            Defaults to test cells when None (original behaviour).
+        save_model: If False, train without persisting the model to disk.
 
     Returns
     -------
-        model: The trained model.
-        test_elbo: The test elbo score of the model.
+        (model_path_or_None, recons_loss)
     """
-    model_path = f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models/amici_model_{run_id}"  # noqa: F821
+    if save_model:
+        model_path = (
+            f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models/amici_model_{run_id}"  # noqa: F821
+        )
+    else:
+        model_path = None
 
-    if not os.path.exists(os.path.join(model_path, "model.pt")):
-        adata_train = adata[adata.obs["train_test_split"] == "train"]
+    adata_train = adata[adata.obs["train_test_split"] == "train"]
+
+    # Cache hit: skip re-training when the model file already exists on disk
+    if save_model and model_path and os.path.exists(os.path.join(model_path, "model.pt")):
+        model = AMICI.load(model_path, adata=adata)
+        if eval_indices is None:
+            eval_indices = np.where(adata.obs["train_test_split"] == "test")[0]
+        recons = (
+            model.get_reconstruction_error(adata, indices=eval_indices, batch_size=128)["reconstruction_loss"]
+            .detach()
+            .cpu()
+            .numpy()
+        )
+        return model_path, recons
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_model_path = os.path.join(tmpdir, "model")
 
         pl.seed_everything(exp_params.get("seed", 42))
 
@@ -80,6 +106,7 @@ def train_model(
             ],
         )
 
+        # Re-register the full adata before evaluating
         AMICI.setup_anndata(
             adata,
             labels_key=dataset_config["labels_key"],
@@ -87,26 +114,22 @@ def train_model(
             n_neighbors=int(exp_params.get("n_neighbors", 50)),
         )
 
-        model.save(
-            model_path,
-            overwrite=True,
+        save_path = model_path if save_model else tmp_model_path
+        model.save(save_path, overwrite=True)
+
+        if eval_indices is None:
+            eval_indices = np.where(adata.obs["train_test_split"] == "test")[0]
+
+        recons = (
+            model.get_reconstruction_error(adata, indices=eval_indices, batch_size=128)["reconstruction_loss"]
+            .detach()
+            .cpu()
+            .numpy()
         )
 
-    model = AMICI.load(
-        model_path,
-        adata=adata,
-    )
-
-    test_recons = (
-        model.get_reconstruction_error(
-            adata, indices=np.where(adata.obs["train_test_split"] == "test")[0], batch_size=128
-        )["reconstruction_loss"]
-        .detach()
-        .cpu()
-        .numpy()
-    )
-
-    return model_path, test_recons
+    if save_model:
+        return model_path, recons
+    return None, recons
 
 
 def train_and_evaluate(
@@ -116,68 +139,65 @@ def train_and_evaluate(
     exp_params: dict,
     results_dict: dict[str, Any],
     run_id: str,
+    eval_indices=None,
+    save_model: bool = True,
 ) -> None:
     """
-    Run a single training job and store results in shared dictionary
+    Run a single training job and store results in shared dictionary.
 
     Args:
-        adata: The AnnData object.
-        dataset_config: The dataset configuration.
-        penalty_params: The penalty parameters.
-        model_params: The model parameters.
-        exp_params: The experiment parameters.
-        results_dict: The shared dictionary to store results.
-        run_id: The run ID.
+        adata: AnnData object
+        dataset_config: dict, dataset configuration
+        penalty_params: dict, attention penalty parameters
+        exp_params: dict, experiment parameters
+        results_dict: dict, shared dictionary to store results in
+        run_id: str, unique identifier for this run
+        eval_indices: array-like or None, indices to evaluate reconstruction loss on
+        save_model: bool, whether to persist the model to disk
     """
-    model_path, test_recons = train_model(adata, dataset_config, penalty_params, exp_params, run_id)
-    model_config = {
-        "penalty_params": penalty_params,
-        "exp_params": exp_params,
-    }
+    model_path, test_recons = train_model(
+        adata,
+        dataset_config,
+        penalty_params,
+        exp_params,
+        run_id,
+        eval_indices=eval_indices,
+        save_model=save_model,
+    )
     results_dict[run_id] = {
-        "model_config": model_config,
+        "model_config": {"penalty_params": penalty_params, "exp_params": exp_params},
         "test_recons": test_recons,
         "model_path": model_path,
         "seed": exp_params["seed"],
     }
 
 
-def main():
-    """Train the AMICI model."""
-    select_gpu()
-    adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
-    adata.obs_names_make_unique()
+def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_model, base_run_id=0):
+    """
+    Run hyperparameter configurations in batches of 4 parallel processes.
 
-    dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
+    Args:
+        adata: AnnData object
+        dataset_config: dict, dataset configuration
+        all_runs: list of run config dicts with penalty_params and exp_params
+        eval_indices: array-like or None, indices to evaluate reconstruction loss on
+        save_model: bool, whether to persist models to disk
+        base_run_id: int, offset added to run indices for unique naming across calls
 
-    # Define parameter grid
-    end_penalty_values = [1e-2, 1e-3, 1e-4]
-    value_l1_penalty_values = [1e-6, 1e-5, 1e-4]
-    schedule_flavors = ["linear"]
-    seeds = [22, 38, 17, 11, 42, 33, 18]
-
-    # Create all parameter combinations
-    all_runs = []
-    for item in itertools.product(end_penalty_values, schedule_flavors, value_l1_penalty_values, seeds):
-        run_params = {
-            "penalty_params": {"end_val": item[0], "flavor": item[1], "value_l1_penalty_coef": item[2]},
-            "exp_params": {"seed": item[3]},
-        }
-        all_runs.append(run_params)
-
-    # Set up parallel processing
+    Returns
+    -------
+        dict mapping run_id -> result dict
+    """
     num_agents = 4
     manager = Manager()
     results_dict = manager.dict()
 
-    # Process runs in batches
     for i in range(0, len(all_runs), num_agents):
         batch = all_runs[i : i + num_agents]
         processes = []
 
-        # Start processes for current batch
         for j, run_params in enumerate(batch):
-            run_id = f"run_{i+j}"
+            run_id = f"run_{base_run_id + i + j}"
             p = Process(
                 target=train_and_evaluate,
                 args=(
@@ -187,12 +207,13 @@ def main():
                     run_params["exp_params"],
                     results_dict,
                     run_id,
+                    eval_indices,
+                    save_model,
                 ),
             )
             p.start()
             processes.append(p)
 
-        # Wait for all processes in batch to complete
         try:
             for p in processes:
                 p.join()
@@ -203,48 +224,245 @@ def main():
             for p in processes:
                 p.join()
 
-    # Find best model
-    best_run_id = min(list(results_dict.keys()), key=lambda k: results_dict[k]["test_recons"])
-    best_model_path = results_dict[best_run_id]["model_path"]
-    best_recons = results_dict[best_run_id]["test_recons"]
+    return dict(results_dict)
 
-    # Save best model
+
+def _build_run_configs(dataset_config):
+    """
+    Build the list of hyperparameter configurations to sweep over.
+
+    If the dataset config contains a sweep_params key, those values are used;
+    otherwise the default values for the synthetic and semisynthetic datasets are used.
+
+    Args:
+        dataset_config: dict, dataset configuration optionally containing a sweep_params key
+
+    Returns
+    -------
+        list of run config dicts, each with penalty_params and exp_params keys
+    """
+    sweep = dataset_config.get("sweep_params")
+
+    if sweep is not None:
+        end_penalty_values = sweep.get("end_attention_penalty", [1e-2, 1e-3, 1e-4])
+        value_l1_penalty_values = sweep.get("value_l1_penalty_coef", [1e-6, 1e-5, 1e-4])
+        schedule_flavors = sweep.get("penalty_flavor_params", ["linear"])
+        seeds = sweep.get("seed", [22, 38, 17, 11, 42, 33, 18])
+        schedules = sweep.get("attention_penalty_schedule", [[10, 40]])
+        batch_sizes = sweep.get("batch_size", [128])
+        lrs = sweep.get("lr", [1e-3])
+        n_neighbors_values = sweep.get("n_neighbors", [50])
+    else:
+        end_penalty_values = [1e-2, 1e-3, 1e-4]
+        value_l1_penalty_values = [1e-6, 1e-5, 1e-4]
+        schedule_flavors = ["linear"]
+        seeds = [22, 38, 17, 11, 42, 33, 18]
+        schedules = [[10, 40]]
+        batch_sizes = [128]
+        lrs = [1e-3]
+        n_neighbors_values = [50]
+
+    all_runs = []
+    for end_val, flavor, value_l1, seed, schedule, batch_size, lr, n_neighbors in itertools.product(
+        end_penalty_values,
+        schedule_flavors,
+        value_l1_penalty_values,
+        seeds,
+        schedules,
+        batch_sizes,
+        lrs,
+        n_neighbors_values,
+    ):
+        all_runs.append(
+            {
+                "penalty_params": {
+                    "end_val": end_val,
+                    "flavor": flavor,
+                    "value_l1_penalty_coef": value_l1,
+                    "epoch_start": schedule[0],
+                    "epoch_end": schedule[1],
+                },
+                "exp_params": {
+                    "seed": seed,
+                    "batch_size": batch_size,
+                    "lr": lr,
+                    "n_neighbors": n_neighbors,
+                },
+            }
+        )
+    return all_runs
+
+
+def _hyperparam_key(run):
+    """
+    Return a hashable key for a run config that excludes the random seed.
+
+    Args:
+        run: dict, run config with penalty_params and exp_params keys
+
+    Returns
+    -------
+        tuple, hashable key identifying the hyperparameter configuration
+    """
+    p = run["penalty_params"]
+    e = run["exp_params"]
+    return (
+        p["end_val"],
+        p["value_l1_penalty_coef"],
+        p.get("epoch_start", 10),
+        p.get("epoch_end", 40),
+        p["flavor"],
+        int(e.get("batch_size", 128)),
+        float(e.get("lr", 1e-3)),
+        int(e.get("n_neighbors", 50)),
+    )
+
+
+def _save_best_model(adata, best_run_params, best_model_path, best_recons):
+    """
+    Copy best model to snakemake outputs and write param/loss files.
+
+    Args:
+        adata: AnnData object
+        best_run_params: dict, model config with penalty_params and exp_params
+        best_model_path: str, path to the best model directory
+        best_recons: float, reconstruction loss of the best model
+    """
     shutil.copy(os.path.join(best_model_path, "model.pt"), snakemake.output[0])  # noqa: F821
 
-    # Save best model seed
     with open(snakemake.output[1], "w") as f:  # noqa: F821
-        f.write(str(results_dict[best_run_id]["seed"]))
+        f.write(str(best_run_params["exp_params"]["seed"]))
 
-    # Save the model parameters
     with open(
         f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/model_params.json",  # noqa: F821
         "w",
     ) as f:
-        model = AMICI.load(
-            best_model_path,
-            adata=adata,
-        )
-        penalty_params = results_dict[best_run_id]["model_config"]["penalty_params"]
-        exp_params = results_dict[best_run_id]["model_config"]["exp_params"]
+        model = AMICI.load(best_model_path, adata=adata)
+        penalty_params = best_run_params["penalty_params"]
         model_config = {
             "n_heads": model.module.n_heads,
             "value_l1_penalty_coef": penalty_params["value_l1_penalty_coef"],
             "end_penalty_coef": penalty_params["end_val"],
-            "seed": exp_params["seed"],
+            "epoch_start": penalty_params.get("epoch_start", 10),
+            "epoch_end": penalty_params.get("epoch_end", 40),
             "n_neighbors": model.n_neighbors,
             "penalty_flavor": penalty_params["flavor"],
         }
         json.dump(model_config, f)
 
-    # Save the reconstruction loss
     with open(snakemake.output[2], "w") as f:  # noqa: F821
         f.write(str(best_recons))
 
-    # Clean up all sweep run directories (best model already saved to snakemake output)
-    for run_key in results_dict:
-        run_model_path = results_dict[run_key]["model_path"]
-        if os.path.exists(run_model_path):
-            shutil.rmtree(run_model_path)
+
+def main():
+    """Train the AMICI model with a hyperparameter sweep, optionally using cross-validation."""
+    select_gpu()
+    adata = sc.read_h5ad(snakemake.input.adata_path)  # noqa: F821
+    adata.obs_names_make_unique()
+
+    dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
+    use_cv = dataset_config.get("use_cross_validation", False)
+
+    all_runs = _build_run_configs(dataset_config)
+
+    if not use_cv:
+        results_dict = _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices=None, save_model=True)
+
+        best_run_id = min(results_dict.keys(), key=lambda k: results_dict[k]["test_recons"])
+        best_info = results_dict[best_run_id]
+        _save_best_model(adata, best_info["model_config"], best_info["model_path"], best_info["test_recons"])
+
+        for run_info in results_dict.values():
+            run_path = run_info["model_path"]
+            if run_path and os.path.exists(run_path):
+                shutil.rmtree(run_path)
+
+    else:
+        # Cross-validation mode: number of folds is read from the data, not hardcoded
+        n_folds = int(adata.obs.loc[adata.obs["cv_fold"] >= 0, "cv_fold"].max()) + 1
+        # cv_scores[run_idx] = list of val metrics across folds
+        cv_scores = {i: [] for i in range(len(all_runs))}
+        train_mask = adata.obs["train_test_split"] == "train"
+
+        for fold_id in range(n_folds):
+            print(f"\n=== CV fold {fold_id + 1}/{n_folds} ===")
+
+            cv_val_indices = np.where(train_mask & (adata.obs["cv_fold"] == fold_id))[0]
+
+            # Make a copy of adata where fold cells are excluded from training
+            adata_cv = adata.copy()
+            adata_cv.obs.loc[adata_cv.obs["cv_fold"] == fold_id, "train_test_split"] = "test"
+
+            fold_results = _run_sweep_parallel(
+                adata_cv,
+                dataset_config,
+                all_runs,
+                eval_indices=cv_val_indices,
+                save_model=False,
+                base_run_id=fold_id * len(all_runs),
+            )
+
+            for local_idx in range(len(all_runs)):
+                run_id = f"run_{fold_id * len(all_runs) + local_idx}"
+                cv_scores[local_idx].append(fold_results[run_id]["test_recons"])
+
+        # Average across folds and seeds to select the best hyperparameter config.
+        # Group run indices by non-seed hyperparameters; average loss over all seeds x folds.
+        hyperparam_groups: dict[tuple, dict] = {}
+        for run_idx, run in enumerate(all_runs):
+            key = _hyperparam_key(run)
+            if key not in hyperparam_groups:
+                hyperparam_groups[key] = {"run_indices": [], "run_template": run}
+            hyperparam_groups[key]["run_indices"].append(run_idx)
+
+        avg_group_scores: dict[tuple, float] = {}
+        for key, group in hyperparam_groups.items():
+            all_fold_scores = []
+            for run_idx in group["run_indices"]:
+                all_fold_scores.extend(cv_scores[run_idx])
+            avg_group_scores[key] = float(np.mean(all_fold_scores))
+
+        best_key = min(avg_group_scores, key=avg_group_scores.get)
+        best_group = hyperparam_groups[best_key]
+        best_penalty_params = dict(best_group["run_template"]["penalty_params"])
+        best_exp_params_no_seed = {k: v for k, v in best_group["run_template"]["exp_params"].items() if k != "seed"}
+        print(
+            f"\nBest hyperparams (averaged over seeds and folds): "
+            f"penalty={best_penalty_params}, exp={best_exp_params_no_seed} "
+            f"avg_val_loss={avg_group_scores[best_key]:.6f}"
+        )
+
+        # Train final model with every seed using the best hyperparams;
+        # pick the seed with the lowest test reconstruction loss.
+        all_seeds = list(dict.fromkeys(run["exp_params"]["seed"] for run in all_runs))
+        final_seed_runs = [
+            {
+                "penalty_params": best_penalty_params,
+                "exp_params": {**best_exp_params_no_seed, "seed": seed},
+            }
+            for seed in all_seeds
+        ]
+
+        print("\n=== Training final models (all seeds) on all training data ===")
+        final_results = _run_sweep_parallel(
+            adata,
+            dataset_config,
+            final_seed_runs,
+            eval_indices=None,
+            save_model=True,
+            base_run_id=0,
+        )
+
+        best_final_run_id = min(final_results.keys(), key=lambda k: final_results[k]["test_recons"])
+        best_final_info = final_results[best_final_run_id]
+        _save_best_model(
+            adata, best_final_info["model_config"], best_final_info["model_path"], best_final_info["test_recons"]
+        )
+
+        # Clean up all final model directories except the best
+        for run_id, run_info in final_results.items():
+            if run_id != best_final_run_id and run_info["model_path"] and os.path.exists(run_info["model_path"]):
+                shutil.rmtree(run_info["model_path"])
 
 
 if __name__ == "__main__":

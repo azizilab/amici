@@ -120,7 +120,15 @@ rule all:
             config.get("datasets_to_run", list(config["datasets"].keys()))
         ),
 
+def _synthetic_datasets(config):
+    return [d for d in config["datasets"] if d not in config.get("datasets_realistic", [])]
+
+def _realistic_datasets(config):
+    return config.get("datasets_realistic", [])
+
 rule generate_dataset:
+    wildcard_constraints:
+        dataset="|".join(_synthetic_datasets(config)) if _synthetic_datasets(config) else "NOMATCH"
     conda:
         "envs/amici.yaml"
     output:
@@ -129,6 +137,24 @@ rule generate_dataset:
         gpu=1
     script:
         "generate_dataset.py"
+
+rule generate_realistic_dataset:
+    wildcard_constraints:
+        dataset="|".join(_realistic_datasets(config)) if _realistic_datasets(config) else "NOMATCH"
+    conda:
+        "envs/amici.yaml"
+    input:
+        flex_h5_path=lambda wildcards: config["datasets"][wildcards.dataset]["flex_h5_path"],
+        annot_path=lambda wildcards: config["datasets"][wildcards.dataset]["annot_path"],
+        xenium_path=lambda wildcards: config["datasets"][wildcards.dataset]["xenium_path"],
+    output:
+        os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
+    params:
+        scvi_model_dir=lambda wildcards: config["datasets"][wildcards.dataset].get("scvi_model_dir", None)
+    resources:
+        gpu=1
+    script:
+        "generate_realistic_dataset.py"
 
 rule run_ground_truth_genes:
     conda:
@@ -184,10 +210,11 @@ rule train_ncem_model:
         "results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt",
     params:
         labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
+        sweep_baselines=lambda wildcards: str(config["datasets"][wildcards.dataset].get("sweep_baselines", False)).lower(),
     resources:
         gpu=1
     shell:
-        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size}"
+        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size} {params.sweep_baselines}"
 
 rule train_gitiii_model:
     conda:
@@ -278,6 +305,8 @@ rule run_nichede_gene_task_model:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
         "results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv",
+    params:
+        labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
     resources:
         mem_mb=10000
     script:
