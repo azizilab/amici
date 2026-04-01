@@ -4,10 +4,10 @@ parameters:
   end_attention_penalty:
     values:
       - 1.0e-3
-      # - 1.0e-2
+      - 1.0e-2
   attention_penalty_schedule:
     values:
-      # - [5, 15]
+      - [5, 15]
       - [10, 20]
   seed:
     values:
@@ -24,7 +24,7 @@ parameters:
   value_l1_penalty_coef:
     values:
       - 1.0e-5
-      # - 1.0e-3
+      - 1.0e-3
   batch_size:
     values:
       - 512
