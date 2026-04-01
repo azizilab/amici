@@ -32,6 +32,7 @@ def main():
     )
 
     length_scale_dfs = []
+    gt_length_scales = {}
     for interaction_name in dataset_config["gt_interactions"]:
         interaction_config = dataset_config["gt_interactions"][interaction_name]
         receiver_type = interaction_config["receiver"]
@@ -53,16 +54,33 @@ def main():
         )
         max_expl_variance_head = explained_variance.compute_max_explained_variance_head(cell_type=receiver_type)
         length_scale_df = length_scale_df[length_scale_df["head_idx"] == max_expl_variance_head]
-        length_scale_df["interaction_name"] = f"{sender_type} -> {receiver_type}"
+        label = f"{sender_type} -> {receiver_type}"
+        length_scale_df["interaction_name"] = label
         length_scale_dfs.append(length_scale_df)
+        gt_length_scales[label] = interaction_config["length_scale"]
 
     length_scale_df = pd.concat(length_scale_dfs)
 
-    sns.kdeplot(
+    ax = sns.kdeplot(
         data=length_scale_df,
         x="length_scale",
         hue="interaction_name",
     )
+
+    # Plot the ground truth interaction length scales
+    palette = sns.color_palette()
+    hue_order = length_scale_df["interaction_name"].unique().tolist()
+    for i, label in enumerate(hue_order):
+        if label in gt_length_scales:
+            color = palette[i % len(palette)]
+            ax.axvline(
+                x=gt_length_scales[label],
+                color=color,
+                linestyle="--",
+                linewidth=1.5,
+                label=f"{label} (GT)",
+            )
+
     plt.title("Length scale distributions for all interactions")
     plt.xlabel("Length scale")
     plt.ylabel("Density")
