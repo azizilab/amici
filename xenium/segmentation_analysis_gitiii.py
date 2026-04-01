@@ -11,10 +11,12 @@ from scipy.stats import fisher_exact
 from scipy.stats import chi2
 
 # %% Load the anndata object
+# %% Uses the original data from the dataset https://www.nature.com/articles/s41467-023-43458-x since the stromal cells were filtered for AMICI's training and not for GITIII. 
 adata = sc.read_h5ad(f"./data/xenium_rep1_io.h5ad")
 labels_key = "Cluster"
 
 # %% Define the cell type pairs and genes of interest 
+# %% Genes were taken from the GITIII paper Figure 5: https://www.nature.com/articles/s42256-025-01161-0
 cell_type_pairs = [
     {
         "sender_type": "Invasive_Tumor",
