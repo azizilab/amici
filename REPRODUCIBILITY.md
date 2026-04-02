@@ -20,33 +20,43 @@ Sensitivity analysis scripts (S21--S26) are standalone and train their own model
 
 ### [`benchmarks/generate_dataset.py`](benchmarks/generate_dataset.py)
 
-Generates the semisynthetic spatial transcriptomics dataset with grid structure, cell types, and subtypes. Orchestrated by the Snakefile rule `generate_dataset`.
+Generates the PBMC semisynthetic spatial transcriptomics dataset with grid structure, cell types, and subtypes. Orchestrated by the Snakefile rule `generate_dataset`.
 
-- **Figure 2a**: Spatial scatter plot of the semisynthetic dataset colored by cell type
+- **Figure 2a**: Spatial scatter plot of the PBMC semisynthetic dataset colored by cell type
+
+### [`benchmarks/generate_realistic_dataset.py`](benchmarks/generate_realistic_dataset.py)
+
+Generates the realistic breast cancer semisynthetic dataset by combining Flex scRNA-seq expression profiles with Xenium spatial coordinates. Uses real tissue geometry and cell-type composition with programmatic interactions (Macrophages→DCIS, T Cells→Endothelial, Invasive Tumor→Myoepi). Orchestrated by the Snakefile.
+
+- **Figure 2f**: Spatial scatter plot of the realistic semisynthetic dataset colored by cell type
 
 ### [`benchmarks/length_scale_task/plot_kde.py`](benchmarks/length_scale_task/plot_kde.py)
 
 KDE density plot of inferred interaction length scales. Orchestrated by Snakefile rule `plot_amici_length_scale_boxplots`.
 
-- **Figure 2b**: Density plot of AMICI's inferred length scales with ground truth overlay
+- **Figure 2b**: Density plot of AMICI's inferred length scales with ground truth overlay (PBMC)
+- **Figure 2g**: Density plot of AMICI's inferred length scales with ground truth overlay (realistic)
 
 ### [`benchmarks/gene_task/plot_boxplots.py`](benchmarks/gene_task/plot_boxplots.py)
 
 AUPRC boxplots for the gene prediction task. Uses `plot_boxplots()` from [`benchmarks/benchmark_utils.py`](benchmarks/benchmark_utils.py). Orchestrated by Snakefile rule `plot_gene_task_boxplots`.
 
-- **Figure 2c**: Gene prediction AUPRC boxplots (AMICI, GITIII, NicheDE, NCEM)
+- **Figure 2c**: Gene prediction AUPRC boxplots — PBMC (AMICI, GITIII, NicheDE, NCEM)
+- **Figure 2h**: Gene prediction AUPRC boxplots — realistic (AMICI, GITIII, NicheDE, NCEM)
 
 ### [`benchmarks/neighbor_interaction_task/plot_boxplots.py`](benchmarks/neighbor_interaction_task/plot_boxplots.py)
 
 AUPRC boxplots for the sender cell prediction task. Uses `plot_boxplots()` from [`benchmarks/benchmark_utils.py`](benchmarks/benchmark_utils.py). Orchestrated by Snakefile rule `plot_neighbor_interaction_task_boxplots`.
 
-- **Figure 2d**: Sender cell prediction AUPRC boxplots (AMICI, GITIII, CGCom)
+- **Figure 2d**: Sender cell prediction AUPRC boxplots — PBMC (AMICI, GITIII, CGCom)
+- **Figure 2i**: Sender cell prediction AUPRC boxplots — realistic (AMICI, GITIII, CGCom)
 
 ### [`benchmarks/receiver_subtype_task/plot_boxplots.py`](benchmarks/receiver_subtype_task/plot_boxplots.py)
 
 AUPRC boxplots for the receiver cell prediction task. Uses `plot_boxplots()` from [`benchmarks/benchmark_utils.py`](benchmarks/benchmark_utils.py). Orchestrated by Snakefile rule `plot_receiver_subtype_task_boxplots`.
 
-- **Figure 2e**: Receiver cell prediction AUPRC boxplots (AMICI, GITIII, CGCom)
+- **Figure 2e**: Receiver cell prediction AUPRC boxplots — PBMC (AMICI, GITIII, CGCom)
+- **Figure 2j**: Receiver cell prediction AUPRC boxplots — realistic (AMICI, GITIII, CGCom)
 
 ### [`benchmarks/gene_task/plot_pr_curves.py`](benchmarks/gene_task/plot_pr_curves.py), [`benchmarks/neighbor_interaction_task/plot_pr_curves.py`](benchmarks/neighbor_interaction_task/plot_pr_curves.py), [`benchmarks/receiver_subtype_task/plot_pr_curves.py`](benchmarks/receiver_subtype_task/plot_pr_curves.py)
 
