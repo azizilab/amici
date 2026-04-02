@@ -44,6 +44,10 @@ Find more detailed documentation on AMICI here: [AMICI documentation](https://am
 
 To get started, check out our tutorial on basic usage of AMICI here: [Basic Usage Tutorial](examples/basic_usage.ipynb).
 
+## Reproducibility
+
+See [REPRODUCIBILITY.md](REPRODUCIBILITY.md) for a mapping of paper figures to the scripts that generated them.
+
 ## Citation
 
 If you find our work useful, please cite our preprint: https://www.biorxiv.org/content/10.1101/2025.09.22.677860v1
