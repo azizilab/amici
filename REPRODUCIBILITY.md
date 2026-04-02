@@ -227,18 +227,19 @@ Compares interaction strength matrices between the high-resolution model (aggreg
 
 ## Data and Model Artifacts
 
-Some of the analyses above depend on pretrained AMICI models and preprocessed datasets. The table below lists each artifact required to reproduce the figures.
+Some of the analyses above depend on pretrained AMICI models and preprocessed datasets. The table below lists each artifact required to reproduce the figures. All datasets and models are available on [Figshare](https://doi.org/10.6084/m9.figshare.31927956).
 
 ### Cortex (MERFISH)
 
-| Dataset              | Local Dataset Path                             | Local Model Path                                                          | Model YAML Config | Figshare Link |
-| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ----------------- | ------------- |
-| MERFISH Mouse Cortex | `cortex/data/cortex_processed_2025-04-28.h5ad` | `cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05` | [`reproducibility/cortex_config.yaml`](reproducibility/cortex_config.yaml) | TBA |
+| Dataset              | Local Dataset Path                             | Local Model Path                                                          | Model YAML Config |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ----------------- |
+| MERFISH Mouse Cortex | `cortex/data/cortex_processed_2025-04-28.h5ad` | `cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05` | [`reproducibility/cortex_config.yaml`](reproducibility/cortex_config.yaml) |
 
 ### Xenium Breast Cancer
 
-| Dataset            | Local Dataset Path                                                        | Local Model Path                                                                   | Model YAML Config | Figshare Link |
-| ------------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------- |
-| Xenium Full        | `xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02` | [`reproducibility/xenium_full_config.yaml`](reproducibility/xenium_full_config.yaml) | TBA |
-| Xenium Replicate 1 | `xenium/data/xenium_sample1/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13` | [`reproducibility/xenium_rep1_config.yaml`](reproducibility/xenium_rep1_config.yaml) | TBA |
-| Xenium Replicate 2 | `xenium/data/xenium_sample1/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14` | [`reproducibility/xenium_rep2_config.yaml`](reproducibility/xenium_rep2_config.yaml) | TBA |
+| Dataset            | Local Dataset Path                                                        | Local Model Path                                                                   | Model YAML Config |
+| ------------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------- |
+| Xenium Full        | `xenium/data/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02` | [`reproducibility/xenium_full_config.yaml`](reproducibility/xenium_full_config.yaml) |
+| Xenium Replicate 1 | `xenium/data/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13` | [`reproducibility/xenium_rep1_config.yaml`](reproducibility/xenium_rep1_config.yaml) |
+| Xenium Replicate 2 | `xenium/data/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14` | [`reproducibility/xenium_rep2_config.yaml`](reproducibility/xenium_rep2_config.yaml) |
+| Xenium Low-Res     | `xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad` | `xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-03-29/xenium_42_sweep_xsjrwnof_t4t8pzvi_params_2026-03-29` | TBA |
