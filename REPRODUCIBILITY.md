@@ -130,14 +130,14 @@ Primary Xenium breast cancer analysis. Generates spatial distributions, interact
 - **Figure 4c**: Downstream gene dot plots for M1 macrophages, CD8 T cells, invasive tumor (`plot_featurewise_contributions_dotplot()`)
 - **Figure 4d**: Length scale distributions and length-scale-dependent gene analysis (`plot_length_scale_distribution()`)
 - **Fig S5c**: Explained variance by attention head (`plot_explained_variance_barplot()`)
-- **Fig S8**: Volcano plots of neighbor contribution vs Wald statistic per receiver cell type
+- **Fig S7**: Volcano plots of neighbor contribution vs Wald statistic per receiver cell type
 
 ### [`xenium/xenium_spatial_analysis.py`](xenium/xenium_spatial_analysis.py)
 
 Spatial attention pattern analysis for the Xenium dataset. Generates proximity scores, attention heatmaps, and gene expression spatial plots using `AMICIAblationModule` and `AMICIAttentionModule`.
 
 - **Figure 4e**: Four-panel spatial analysis — proximity scores, attention heatmaps, ESR1 gene expression
-- **Fig S10**: AGR3 subpopulation spatial analysis (attention + gene expression)
+- **Fig S9**: AGR3 subpopulation spatial analysis (attention + gene expression)
 
 ### [`xenium/xenium_niche_analysis.py`](xenium/xenium_niche_analysis.py)
 
@@ -145,10 +145,10 @@ Communication hub analysis. Clusters cells by AMICI interaction patterns, compar
 
 - **Figure 4f** (top): Spatial scatter plots colored by communication hub assignment
 - **Figure 4f** (bottom): Alluvial/Sankey diagrams of hub sender-receiver composition
-- **Fig S6a**: Hub vs composition cluster spatial comparison
-- **Fig S6b**: ARI/AMI comparison between hubs, composition clusters, and cell-type labels
-- **Fig S13a**: Silhouette score vs number of clusters
-- **Fig S13b**: Alluvial/Sankey diagrams for all 10 communication hubs
+- **Fig S12a**: Silhouette score vs number of clusters
+- **Fig S12b**: Alluvial/Sankey diagrams for all 10 communication hubs
+- **Fig S13a**: Hub vs composition cluster spatial comparison
+- **Fig S13b**: ARI/AMI comparison between hubs, composition clusters, and cell-type labels
 - **Fig S27**: Hub grid search heatmaps — fixed k, varying quantile threshold
 - **Fig S28**: Hub grid search heatmaps — fixed quantile, varying k
 
@@ -172,21 +172,21 @@ Cross-replicate validation of AMICI interaction predictions.
 
 Cell segmentation artifact analysis. Validates that identified genes are not artifacts of segmentation errors using a Mann-Whitney U test.
 
-- **Fig S7a**: Interaction network including stromal cells (showing segmentation artifact dominance)
-- **Fig S7b**: Segmentation validation dot plot (Mann-Whitney U test for interaction-mediated genes)
-- **Fig S11**: ESR1 segmentation overlap between invasive tumor and DCIS 2
+- **Fig S6a**: Interaction network including stromal cells (showing segmentation artifact dominance)
+- **Fig S6b**: Segmentation validation dot plot (Mann-Whitney U test for interaction-mediated genes)
+- **Fig S10**: ESR1 segmentation overlap between invasive tumor and DCIS 2
 
 ### [`xenium/segmentation_analysis_gitiii.py`](xenium/segmentation_analysis_gitiii.py)
 
 Segmentation artifact test applied to genes identified by GITIII for comparison.
 
-- **Fig S12**: GITIII segmentation validation dot plot (Mann-Whitney U test)
+- **Fig S11**: GITIII segmentation validation dot plot (Mann-Whitney U test)
 
 ### [`xenium/xenium_lr_analysis.py`](xenium/xenium_lr_analysis.py)
 
 Ligand-receptor gene cross-reference analysis. Identifies significant downstream genes that overlap with the OmniPath LR database, filtered through the segmentation artifact test.
 
-- **Fig S9**: LR gene dot plot per cell-type interaction
+- **Fig S8**: LR gene dot plot per cell-type interaction
 
 ### [`xenium/xenium_null_z_distribution.py`](xenium/xenium_null_z_distribution.py)
 
