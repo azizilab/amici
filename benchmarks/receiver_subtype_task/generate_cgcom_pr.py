@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from benchmark_utils import get_model_precision_recall_auc
 
@@ -6,6 +7,10 @@ def main():
     """Generate the precision and recall for the CGCom model for the receiver subtype task."""
     all_cgcom_scores = pd.read_csv(snakemake.input.cgcom_scores_path)  # noqa: F821
     all_gt_receiver_subtypes = pd.read_csv(snakemake.input.gt_receiver_subtypes_path)  # noqa: F821
+
+    # Replace non-finite scores so PR computation does not fail.
+    all_cgcom_scores["cgcom_scores"] = pd.to_numeric(all_cgcom_scores["cgcom_scores"], errors="coerce")
+    all_cgcom_scores["cgcom_scores"] = all_cgcom_scores["cgcom_scores"].replace([np.inf, -np.inf], 0).fillna(0)
 
     cgcom_precision, cgcom_recall, cgcom_avg_precision = get_model_precision_recall_auc(
         all_cgcom_scores,
