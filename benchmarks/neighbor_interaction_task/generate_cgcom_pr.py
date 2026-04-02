@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from benchmark_utils import get_model_precision_recall_auc
 
@@ -6,6 +7,10 @@ def main():
     """Generate the precision and recall for the CGCom model for the neighbor interaction task."""
     all_cgcom_scores = pd.read_csv(snakemake.input.cgcom_scores_path)  # noqa: F821
     all_gt_neighbor_interaction_scores = pd.read_csv(snakemake.input.gt_neighbor_interactions_path)  # noqa: F821
+
+    # Replace non-finite scores so PR computation does not fail.
+    all_cgcom_scores["cgcom_scores"] = pd.to_numeric(all_cgcom_scores["cgcom_scores"], errors="coerce")
+    all_cgcom_scores["cgcom_scores"] = all_cgcom_scores["cgcom_scores"].replace([np.inf, -np.inf], 0).fillna(0)
 
     # Only keep the scores for the rows where the cell_idx and neighbor_idx pair is present in cgcom_scores
     cgcom_intersection_scores = all_cgcom_scores.merge(
