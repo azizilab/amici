@@ -78,7 +78,7 @@ def train_model(
         )
         model = AMICI(
             adata_train,
-            n_heads=8,
+            n_heads=int(exp_params.get("n_heads", 8)),
             value_l1_penalty_coef=penalty_params.get("value_l1_penalty_coef", 1e-6),
         )
 
@@ -250,6 +250,7 @@ def _build_run_configs(dataset_config):
         seeds = sweep.get("seed", [22, 38, 17, 11, 42, 33, 18])
         schedules = sweep.get("attention_penalty_schedule", [[10, 40]])
         batch_sizes = sweep.get("batch_size", [128])
+        n_heads_values = sweep.get("n_heads", [10])
         lrs = sweep.get("lr", [1e-3])
         n_neighbors_values = sweep.get("n_neighbors", [50])
     else:
@@ -261,15 +262,16 @@ def _build_run_configs(dataset_config):
         batch_sizes = [128]
         lrs = [1e-3]
         n_neighbors_values = [50]
-
+        n_heads_values = [8]
     all_runs = []
-    for end_val, flavor, value_l1, seed, schedule, batch_size, lr, n_neighbors in itertools.product(
+    for end_val, flavor, value_l1, seed, schedule, batch_size, n_heads, lr, n_neighbors in itertools.product(
         end_penalty_values,
         schedule_flavors,
         value_l1_penalty_values,
         seeds,
         schedules,
         batch_sizes,
+        n_heads_values,
         lrs,
         n_neighbors_values,
     ):
@@ -285,6 +287,7 @@ def _build_run_configs(dataset_config):
                 "exp_params": {
                     "seed": seed,
                     "batch_size": batch_size,
+                    "n_heads": n_heads,
                     "lr": lr,
                     "n_neighbors": n_neighbors,
                 },
@@ -315,6 +318,7 @@ def _hyperparam_key(run):
         int(e.get("batch_size", 128)),
         float(e.get("lr", 1e-3)),
         int(e.get("n_neighbors", 50)),
+        int(e.get("n_heads", 8)),
     )
 
 
