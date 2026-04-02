@@ -223,12 +223,12 @@ Some of the analyses above depend on pretrained AMICI models and preprocessed da
 
 | Dataset              | Local Dataset Path                             | Local Model Path                                                          | Model YAML Config | Figshare Link |
 | -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------- | ----------------- | ------------- |
-| MERFISH Mouse Cortex | `cortex/data/cortex_processed_2025-04-28.h5ad` | `cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05` | TODO              | TODO          |
+| MERFISH Mouse Cortex | `cortex/data/cortex_processed_2025-04-28.h5ad` | `cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05` | TODO              | TBA           |
 
 ### Xenium Breast Cancer
 
 | Dataset            | Local Dataset Path                                                        | Local Model Path                                                                   | Model YAML Config | Figshare Link |
 | ------------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------- | ------------- |
-| Xenium Full        | `xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02`      | TODO              | TODO          |
-| Xenium Replicate 1 | `xenium/data/xenium_sample1/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13` | TODO              | TODO          |
-| Xenium Replicate 2 | `xenium/data/xenium_sample1/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14` | TODO              | TODO          |
+| Xenium Full        | `xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02`      | TODO              | TBA           |
+| Xenium Replicate 1 | `xenium/data/xenium_sample1/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13` | TODO              | TBA           |
+| Xenium Replicate 2 | `xenium/data/xenium_sample1/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14` | TODO              | TBA           |
