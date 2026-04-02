@@ -1,0 +1,31 @@
+attention_penalty_schedule:
+  - 10
+  - 20
+
+batch_size: 512
+end_attention_penalty: 0.001
+lr: 0.001
+n_neighbors: 50
+penalty_flavor_params: linear
+seed: 22
+value_l1_penalty_coef: 1.0e-05
+
+epochs: 400
+early_stopping: true
+early_stopping_monitor: elbo_validation
+early_stopping_patience: 10
+learning_rate_monitor: true
+
+n_heads: 8
+n_query_dim: 128
+n_head_size: 32
+n_nn_embed: 256
+n_nn_embed_hidden: 512
+
+attention_dummy_score: 3.0
+neighbor_dropout: 0.1
+attention_penalty_coef: 1.0e-06
+start_attention_penalty: 1.0e-06
+epoch_start: 10
+epoch_end: 20
+flavor: linear
