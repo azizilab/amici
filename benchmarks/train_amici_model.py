@@ -16,6 +16,10 @@ from amici import AMICI
 from amici.callbacks import AttentionPenaltyMonitor
 
 
+def _results_path():
+    return snakemake.config.get("results_path", "results/").rstrip("/")  # noqa: F821
+
+
 def train_model(
     adata: AnnData,
     dataset_config: dict,
@@ -44,9 +48,7 @@ def train_model(
         (model_path_or_None, recons_loss)
     """
     if save_model:
-        model_path = (
-            f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models/amici_model_{run_id}"  # noqa: F821
-        )
+        model_path = f"{_results_path()}/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models/amici_model_{run_id}"  # noqa: F821
     else:
         model_path = None
 
@@ -338,7 +340,7 @@ def _save_best_model(adata, best_run_params, best_model_path, best_recons):
         f.write(str(best_run_params["exp_params"]["seed"]))
 
     with open(
-        f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/model_params.json",  # noqa: F821
+        f"{_results_path()}/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/model_params.json",  # noqa: F821
         "w",
     ) as f:
         model = AMICI.load(best_model_path, adata=adata)
@@ -436,18 +438,22 @@ def main():
             f"avg_val_loss={avg_group_scores[best_key]:.6f}"
         )
 
-        # Train final model with every seed using the best hyperparams;
-        # pick the seed with the lowest test reconstruction loss.
-        all_seeds = list(dict.fromkeys(run["exp_params"]["seed"] for run in all_runs))
+        # Pick the final seed from validation folds only, then evaluate the
+        # selected final model on the held-out test split.
+        seed_scores: dict[int, list] = {}
+        for run_idx in best_group["run_indices"]:
+            seed = all_runs[run_idx]["exp_params"]["seed"]
+            seed_scores.setdefault(seed, []).extend(cv_scores[run_idx])
+        best_seed = min(seed_scores, key=lambda seed: float(np.mean(seed_scores[seed])))
+
         final_seed_runs = [
             {
                 "penalty_params": best_penalty_params,
-                "exp_params": {**best_exp_params_no_seed, "seed": seed},
+                "exp_params": {**best_exp_params_no_seed, "seed": best_seed},
             }
-            for seed in all_seeds
         ]
 
-        print("\n=== Training final models (all seeds) on all training data ===")
+        print(f"\n=== Training final model on all training data with CV-selected seed {best_seed} ===")
         final_results = _run_sweep_parallel(
             adata,
             dataset_config,
@@ -457,7 +463,7 @@ def main():
             base_run_id=0,
         )
 
-        best_final_run_id = min(final_results.keys(), key=lambda k: final_results[k]["test_recons"])
+        best_final_run_id = next(iter(final_results.keys()))
         best_final_info = final_results[best_final_run_id]
         _save_best_model(
             adata, best_final_info["model_config"], best_final_info["model_path"], best_final_info["test_recons"]

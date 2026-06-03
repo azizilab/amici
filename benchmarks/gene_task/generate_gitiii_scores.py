@@ -24,7 +24,7 @@ def main():
     adata = sc.read_h5ad(dataset_path)
 
     converted_df_path = f"../../../data/{dataset_path.split('/')[-1].split('.')[0]}_converted.csv"
-    models_dir = f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models"  # noqa: F821
+    models_dir = os.path.dirname(snakemake.input.model_path)  # noqa: F821
     gene_names = adata.var_names.tolist()
 
     convert_adata_to_csv(

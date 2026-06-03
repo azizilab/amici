@@ -14,6 +14,10 @@ from cgcom.utils import get_exp_params, get_model_params
 from gpu_utils import select_gpu
 
 
+def _results_path():
+    return snakemake.config.get("results_path", "results/").rstrip("/")  # noqa: F821
+
+
 def build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key):
     """
     Aggregate CGCom attention scores by cell type pair into a sender x receiver matrix.
@@ -40,7 +44,15 @@ def build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key):
 
 
 def train_single_run(
-    dataset_path, labels_key, lr, neighbor_threshold_ratio, run_model_path, run_results_path, train_obs_names
+    dataset_path,
+    labels_key,
+    lr,
+    neighbor_threshold_ratio,
+    run_model_path,
+    run_results_path,
+    train_obs_names,
+    val_obs_names=None,
+    test_obs_names=None,
 ):
     """
     Train a single CGCom run and return the best validation loss.
@@ -69,6 +81,7 @@ def train_single_run(
     os.makedirs(os.path.dirname(run_model_path), exist_ok=True)
 
     exp_params = get_exp_params(lr=lr, num_epochs=50, neighbor_threshold_ratio=neighbor_threshold_ratio)
+
     model_params = get_model_params(
         fc_hidden_channels_2=500,
         fc_hidden_channels_3=512,
@@ -90,6 +103,8 @@ def train_single_run(
         labels_key=labels_key,
         disable_lr_masking=True,
         train_obs_names=train_obs_names,
+        val_obs_names=val_obs_names,
+        test_obs_names=test_obs_names,
     )
 
     best_val_loss = float(min(val_losses))
@@ -109,6 +124,8 @@ def _run_sweep(
     models_dir,
     train_obs_names,
     run_prefix,
+    val_obs_names=None,
+    test_obs_names=None,
 ):
     """
     Run the hyperparameter sweep over learning rate and neighbor threshold combinations.
@@ -144,6 +161,8 @@ def _run_sweep(
             run_model_path,
             run_results_path,
             train_obs_names,
+            val_obs_names=val_obs_names,
+            test_obs_names=test_obs_names,
         )
 
         all_scores[run_id] = val_loss
@@ -169,6 +188,7 @@ def main():
 
     adata = sc.read_h5ad(dataset_path)
     train_obs_names = adata.obs_names[adata.obs["train_test_split"] == "train"].tolist()
+    test_obs_names = adata.obs_names[adata.obs["train_test_split"] == "test"].tolist()
 
     np.random.seed(42)
     torch.manual_seed(42)
@@ -189,20 +209,67 @@ def main():
     cgcom_dataset_path = dataset_path.replace(".h5ad", "_cgcom.h5ad")
     adata.write_h5ad(cgcom_dataset_path)
 
-    best_run_id, best_val_loss, _ = _run_sweep(
-        cgcom_dataset_path,
-        cgcom_labels_key,
-        all_runs,
-        models_dir,
-        train_obs_names=train_obs_names,
-        run_prefix="cgcom_sweep",
-    )
+    use_cv = dataset_config.get("use_cross_validation", False)
+    if use_cv:
+        if "cv_fold" not in adata.obs:
+            raise ValueError("use_cross_validation is true, but adata.obs['cv_fold'] is missing")
+        fold_values = sorted(int(fold) for fold in adata.obs.loc[adata.obs["cv_fold"] >= 0, "cv_fold"].unique())
+        cv_scores = {run_id: [] for run_id in range(len(all_runs))}
+
+        for fold_id in fold_values:
+            print(f"\n=== CGCom CV fold {fold_id + 1}/{len(fold_values)} ===")
+            fold_train_obs_names = adata.obs_names[
+                (adata.obs["train_test_split"] == "train") & (adata.obs["cv_fold"] != fold_id)
+            ].tolist()
+            fold_val_obs_names = adata.obs_names[
+                (adata.obs["train_test_split"] == "train") & (adata.obs["cv_fold"] == fold_id)
+            ].tolist()
+            _, _, fold_scores = _run_sweep(
+                cgcom_dataset_path,
+                cgcom_labels_key,
+                all_runs,
+                models_dir,
+                train_obs_names=fold_train_obs_names,
+                val_obs_names=fold_val_obs_names,
+                test_obs_names=test_obs_names,
+                run_prefix=f"cgcom_cv_fold_{fold_id}",
+            )
+            for run_id, score in fold_scores.items():
+                cv_scores[run_id].append(score)
+
+        avg_cv_scores = {run_id: float(np.mean(scores)) for run_id, scores in cv_scores.items()}
+        best_cv_run_id = min(avg_cv_scores, key=avg_cv_scores.get)
+        best_lr, best_ntr = all_runs[best_cv_run_id]
+        print(
+            f"\nBest CGCom CV config {best_cv_run_id}: lr={best_lr}, "
+            f"neighbor_threshold_ratio={best_ntr}, avg_val_loss={avg_cv_scores[best_cv_run_id]:.6f}"
+        )
+        best_run_id, best_val_loss, _ = _run_sweep(
+            cgcom_dataset_path,
+            cgcom_labels_key,
+            [(best_lr, best_ntr)],
+            models_dir,
+            train_obs_names=train_obs_names,
+            test_obs_names=test_obs_names,
+            run_prefix="cgcom_final",
+        )
+        final_run_prefix = "cgcom_final"
+    else:
+        best_run_id, best_val_loss, _ = _run_sweep(
+            cgcom_dataset_path,
+            cgcom_labels_key,
+            all_runs,
+            models_dir,
+            train_obs_names=train_obs_names,
+            run_prefix="cgcom_final",
+        )
+        best_lr, best_ntr = all_runs[best_run_id]
+        final_run_prefix = "cgcom_final"
 
     if best_run_id is None:
         raise RuntimeError("No runs completed successfully")
 
-    best_lr, best_ntr = all_runs[best_run_id]
-    best_run_dir = os.path.join(models_dir, f"cgcom_sweep_run_{best_run_id}")
+    best_run_dir = os.path.join(models_dir, f"{final_run_prefix}_run_{best_run_id}")
 
     print(f"Best run {best_run_id}: lr={best_lr}, neighbor_threshold_ratio={best_ntr}, val_loss={best_val_loss:.6f}")
 
@@ -223,12 +290,12 @@ def main():
             f,
         )
 
-    with open(os.path.join(models_dir, f"cgcom_sweep_run_{best_run_id}_results.json")) as f:
+    with open(os.path.join(models_dir, f"{final_run_prefix}_run_{best_run_id}_results.json")) as f:
         best_results = json.load(f)
 
     # Clean up all sweep run directories
     for run_id_cleanup in range(len(all_runs)):
-        run_dir = os.path.join(models_dir, f"cgcom_sweep_run_{run_id_cleanup}")
+        run_dir = os.path.join(models_dir, f"cgcom_final_run_{run_id_cleanup}")
         if os.path.exists(run_dir):
             shutil.rmtree(run_dir)
 
@@ -249,7 +316,7 @@ def _write_figures(best_results, adata, labels_key, models_dir, dataset, seed):
         dataset: str, dataset name
         seed: str, random seed identifier
     """
-    figures_dir = os.path.join(f"results/{dataset}_{seed}/figures")
+    figures_dir = os.path.join(f"{_results_path()}/{dataset}_{seed}/figures")
     os.makedirs(figures_dir, exist_ok=True)
 
     if best_results.get("train_losses") and best_results.get("val_losses"):

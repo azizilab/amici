@@ -13,6 +13,10 @@ from gitiii_benchmark_utils import convert_adata_to_csv
 from gpu_utils import select_gpu
 
 
+def _results_path():
+    return snakemake.config.get("results_path", "results/").rstrip("/")  # noqa: F821
+
+
 def _mark_test_cells_in_processed_csv(run_dir, test_cell_coords):
     """Set flag=False for test cells in GITIII's processed CSV, matched by (centerx, centery)."""
     processed_csv_path = os.path.join(run_dir, "data", "processed", "slide1.csv")
@@ -66,6 +70,52 @@ def train_single_run(
     return float(val_mse)
 
 
+def _get_spatial_coords(adata, mask):
+    spatial = adata.obsm["spatial"]
+    if hasattr(spatial, "iloc"):
+        spatial_x = spatial["X"].values
+        spatial_y = spatial["Y"].values
+    else:
+        spatial_x = spatial[:, 0]
+        spatial_y = spatial[:, 1]
+    return set(zip(spatial_x[mask], spatial_y[mask], strict=False))
+
+
+def _run_sweep(converted_df_path, gene_names, all_runs, models_dir, excluded_coords, run_prefix, project_root):
+    best_val_mse = float("inf")
+    best_run_id = None
+    scores = {}
+
+    for run_id, (lr, distance_threshold) in enumerate(all_runs):
+        run_dir = os.path.join(models_dir, f"{run_prefix}_run_{run_id}")
+        run_results_path = os.path.join(models_dir, f"{run_prefix}_run_{run_id}_results.json")
+
+        print(f"Run {run_id + 1}/{len(all_runs)}: lr={lr}, distance_threshold={distance_threshold}")
+
+        val_mse = train_single_run(
+            converted_df_path,
+            gene_names,
+            lr,
+            distance_threshold,
+            run_dir,
+            run_results_path,
+            excluded_coords,
+        )
+
+        if not os.path.exists(run_results_path):
+            with open(run_results_path, "w") as f:
+                json.dump({"val_mse": val_mse}, f)
+
+        os.chdir(project_root)
+        scores[run_id] = val_mse
+
+        if val_mse < best_val_mse:
+            best_val_mse = val_mse
+            best_run_id = run_id
+
+    return best_run_id, best_val_mse, scores
+
+
 def main():
     """Train the GITIII model with a hyperparameter sweep, keeping the best run."""
     select_gpu()
@@ -79,22 +129,15 @@ def main():
 
     adata = sc.read_h5ad(dataset_path)
 
-    models_dir = os.path.abspath(f"results/{dataset}_{seed}/saved_models")
+    models_dir = os.path.abspath(f"{_results_path()}/{dataset}_{seed}/saved_models")
     converted_df_path = f"../../../data/{dataset_path.split('/')[-1].split('.')[0]}_converted.csv"
 
     convert_adata_to_csv(adata, labels_key, models_dir, converted_df_path)
     abs_converted_df_path = os.path.abspath(converted_df_path)
     os.chdir(project_root)
 
-    test_mask = adata.obs["train_test_split"] == "test"
-    spatial = adata.obsm["spatial"]
-    if hasattr(spatial, "iloc"):
-        spatial_x = spatial["X"].values
-        spatial_y = spatial["Y"].values
-    else:
-        spatial_x = spatial[:, 0]
-        spatial_y = spatial[:, 1]
-    test_cell_coords = set(zip(spatial_x[test_mask], spatial_y[test_mask], strict=False))
+    test_mask = np.array(adata.obs["train_test_split"] == "test")
+    test_cell_coords = _get_spatial_coords(adata, test_mask)
 
     gene_names = adata.var_names.tolist()
 
@@ -106,40 +149,66 @@ def main():
     distance_thresholds = [50, 80, 120]
     all_runs = [(lr, dt) for lr in learning_rates for dt in distance_thresholds]
 
-    best_val_mse = float("inf")
-    best_run_id = None
+    use_cv = dataset_config.get("use_cross_validation", False)
 
-    for run_id, (lr, distance_threshold) in enumerate(all_runs):
-        run_dir = os.path.join(models_dir, f"gitiii_sweep_run_{run_id}")
-        run_results_path = os.path.join(models_dir, f"gitiii_sweep_run_{run_id}_results.json")
+    if use_cv:
+        if "cv_fold" not in adata.obs:
+            raise ValueError("use_cross_validation is true, but adata.obs['cv_fold'] is missing")
 
-        print(f"Run {run_id + 1}/{len(all_runs)}: lr={lr}, distance_threshold={distance_threshold}")
+        fold_values = sorted(int(fold) for fold in adata.obs.loc[adata.obs["cv_fold"] >= 0, "cv_fold"].unique())
+        cv_scores = {run_id: [] for run_id in range(len(all_runs))}
 
-        val_mse = train_single_run(
-            abs_converted_df_path,
-            gene_names,
-            lr,
-            distance_threshold,
-            run_dir,
-            run_results_path,
-            test_cell_coords,
+        for fold_id in fold_values:
+            print(f"\n=== GITIII CV fold {fold_id + 1}/{len(fold_values)} ===")
+            fold_mask = np.array((adata.obs["train_test_split"] == "train") & (adata.obs["cv_fold"] == fold_id))
+            excluded_coords = test_cell_coords | _get_spatial_coords(adata, fold_mask)
+            _, _, fold_scores = _run_sweep(
+                abs_converted_df_path,
+                gene_names,
+                all_runs,
+                models_dir,
+                excluded_coords,
+                f"gitiii_cv_fold_{fold_id}",
+                project_root,
+            )
+            for run_id, score in fold_scores.items():
+                cv_scores[run_id].append(score)
+
+        avg_cv_scores = {run_id: float(np.mean(scores)) for run_id, scores in cv_scores.items()}
+        best_cv_run_id = min(avg_cv_scores, key=avg_cv_scores.get)
+        best_lr, best_distance_threshold = all_runs[best_cv_run_id]
+        print(
+            f"\nBest GITIII CV config {best_cv_run_id}: lr={best_lr}, "
+            f"distance_threshold={best_distance_threshold}, avg_val_mse={avg_cv_scores[best_cv_run_id]:.6f}"
         )
 
-        if not os.path.exists(run_results_path):
-            with open(run_results_path, "w") as f:
-                json.dump({"val_mse": val_mse}, f)
-
-        os.chdir(project_root)
-
-        if val_mse < best_val_mse:
-            best_val_mse = val_mse
-            best_run_id = run_id
+        best_run_id, best_val_mse, _ = _run_sweep(
+            abs_converted_df_path,
+            gene_names,
+            [(best_lr, best_distance_threshold)],
+            models_dir,
+            test_cell_coords,
+            "gitiii_final",
+            project_root,
+        )
+        final_run_prefix = "gitiii_final"
+    else:
+        best_run_id, best_val_mse, _ = _run_sweep(
+            abs_converted_df_path,
+            gene_names,
+            all_runs,
+            models_dir,
+            test_cell_coords,
+            "gitiii_final",
+            project_root,
+        )
+        best_lr, best_distance_threshold = all_runs[best_run_id]
+        final_run_prefix = "gitiii_final"
 
     if best_run_id is None:
         raise RuntimeError("No runs completed successfully")
 
-    best_lr, best_distance_threshold = all_runs[best_run_id]
-    best_run_dir = os.path.join(models_dir, f"gitiii_sweep_run_{best_run_id}")
+    best_run_dir = os.path.join(models_dir, f"{final_run_prefix}_run_{best_run_id}")
 
     print(
         f"Best run {best_run_id}: lr={best_lr}, distance_threshold={best_distance_threshold}, "
@@ -149,7 +218,7 @@ def main():
     # If the best run directory was cleaned up by a prior run that failed after the copy step,
     # re-run training for that configuration to regenerate the model files.
     if not os.path.exists(best_run_dir):
-        run_results_path_best = os.path.join(models_dir, f"gitiii_sweep_run_{best_run_id}_results.json")
+        run_results_path_best = os.path.join(models_dir, f"{final_run_prefix}_run_{best_run_id}_results.json")
         if os.path.exists(run_results_path_best):
             os.remove(run_results_path_best)
         print(f"Best run directory missing — re-training run {best_run_id} to regenerate model files")
@@ -187,10 +256,10 @@ def main():
 
     # Clean up all sweep run directories (best model already copied to models_dir)
     for run_id_cleanup in range(len(all_runs)):
-        run_dir_cleanup = os.path.join(models_dir, f"gitiii_sweep_run_{run_id_cleanup}")
+        run_dir_cleanup = os.path.join(models_dir, f"gitiii_final_run_{run_id_cleanup}")
         if os.path.exists(run_dir_cleanup):
             shutil.rmtree(run_dir_cleanup)
-    figures_dir = f"results/{dataset}_{seed}/figures"
+    figures_dir = f"{_results_path()}/{dataset}_{seed}/figures"
     os.makedirs(figures_dir, exist_ok=True)
 
     records_df = pd.read_csv(os.path.join(models_dir, "record_GRIT.csv"))

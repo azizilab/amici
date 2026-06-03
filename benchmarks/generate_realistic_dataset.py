@@ -773,9 +773,11 @@ def main():
     )
     print(f"Successfully wrote output to {output_path}")
 
-    figure_path = (
-        f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}"  # noqa: F821
-        f"/figures/spatial_distribution.png"
+    figure_path = os.path.join(
+        snakemake.config["results_path"],  # noqa: F821
+        f"{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}",  # noqa: F821
+        "figures",
+        "spatial_distribution.png",
     )
     adata = ad.read_h5ad(output_path)
     plot_spatial_distribution(adata, figure_path)

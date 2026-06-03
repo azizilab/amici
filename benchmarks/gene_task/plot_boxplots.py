@@ -7,6 +7,7 @@ from benchmark_utils import plot_boxplots
 def main():
     """Plot the boxplots for the gene task."""
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
+    results_path = snakemake.config["results_path"]  # noqa: F821
     seeds = dataset_config["seeds"]
     amici_auprcs = []
     gitiii_auprcs = []
@@ -20,17 +21,27 @@ def main():
 
     for seed in seeds:
         try:
-            amici_pr = pd.read_csv(f"results/{snakemake.wildcards.dataset}_{seed}/amici_gene_task_pr.csv")  # noqa: F821
-            gitiii_pr = pd.read_csv(f"results/{snakemake.wildcards.dataset}_{seed}/gitiii_gene_task_pr.csv")  # noqa: F821
+            amici_pr = pd.read_csv(
+                os.path.join(results_path, f"{snakemake.wildcards.dataset}_{seed}/amici_gene_task_pr.csv")  # noqa: F821
+            )
+            gitiii_pr = pd.read_csv(
+                os.path.join(results_path, f"{snakemake.wildcards.dataset}_{seed}/gitiii_gene_task_pr.csv")  # noqa: F821
+            )
             ncem_prs = {}
             for niche_size in dataset_config["ncem_niche_sizes"]:
-                ncem_prs[niche_size] = (
-                    pd.read_csv(f"results/{snakemake.wildcards.dataset}_{seed}/ncem_{niche_size}_gene_task_pr.csv")  # noqa: F821
+                ncem_prs[niche_size] = pd.read_csv(
+                    os.path.join(
+                        results_path,
+                        f"{snakemake.wildcards.dataset}_{seed}/ncem_{niche_size}_gene_task_pr.csv",  # noqa: F821
+                    )
                 )
             nichede_prs = {}
             for niche_size in dataset_config["nichede_niche_sizes"]:
-                nichede_prs[niche_size] = (
-                    pd.read_csv(f"results/{snakemake.wildcards.dataset}_{seed}/nichede_{niche_size}_gene_task_pr.csv")  # noqa: F821
+                nichede_prs[niche_size] = pd.read_csv(
+                    os.path.join(
+                        results_path,
+                        f"{snakemake.wildcards.dataset}_{seed}/nichede_{niche_size}_gene_task_pr.csv",  # noqa: F821
+                    )
                 )
         except FileNotFoundError:
             continue

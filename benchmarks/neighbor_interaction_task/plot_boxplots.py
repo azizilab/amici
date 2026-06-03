@@ -7,6 +7,7 @@ from benchmark_utils import plot_boxplots
 def main():
     """Plot the boxplots for the neighbor interaction task."""
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
+    results_path = snakemake.config["results_path"]  # noqa: F821
     seeds = dataset_config["seeds"]
 
     amici_auprcs = []
@@ -15,13 +16,22 @@ def main():
     for seed in seeds:
         try:
             amici_pr = pd.read_csv(
-                f"results/{snakemake.wildcards.dataset}_{seed}/amici_neighbor_interaction_task_pr.csv"  # noqa: F821
+                os.path.join(
+                    results_path,
+                    f"{snakemake.wildcards.dataset}_{seed}/amici_neighbor_interaction_task_pr.csv",  # noqa: F821
+                )
             )
             gitiii_pr = pd.read_csv(
-                f"results/{snakemake.wildcards.dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv"  # noqa: F821
+                os.path.join(
+                    results_path,
+                    f"{snakemake.wildcards.dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",  # noqa: F821
+                )
             )
             cgcom_pr = pd.read_csv(
-                f"results/{snakemake.wildcards.dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv"  # noqa: F821
+                os.path.join(
+                    results_path,
+                    f"{snakemake.wildcards.dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",  # noqa: F821
+                )
             )
         except FileNotFoundError:
             continue

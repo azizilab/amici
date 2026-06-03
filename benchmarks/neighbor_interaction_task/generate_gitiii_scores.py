@@ -18,16 +18,14 @@ def main():
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     labels_key = dataset_config["labels_key"]
     dataset_path = snakemake.input.adata_path  # noqa: F821
-    dataset = snakemake.wildcards.dataset  # noqa: F821
-    seed = snakemake.wildcards.seed  # noqa: F821
 
     project_root = os.path.abspath(os.getcwd())
-    figures_dir = os.path.join(project_root, f"results/{dataset}_{seed}/figures")
+    figures_dir = os.path.join(project_root, os.path.dirname(snakemake.output[0]), "figures")  # noqa: F821
 
     adata = sc.read_h5ad(dataset_path)
 
     converted_df_path = f"../../../data/{dataset_path.split('/')[-1].split('.')[0]}_converted.csv"
-    models_dir = f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models"  # noqa: F821
+    models_dir = os.path.dirname(snakemake.input.model_path)  # noqa: F821
     gene_names = adata.var_names.tolist()
 
     convert_adata_to_csv(

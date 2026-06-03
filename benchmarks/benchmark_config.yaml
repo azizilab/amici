@@ -1,4 +1,5 @@
 dir_path: "data/"
+results_path: "results/"
 
 datasets_realistic:
   - breast_cancer
