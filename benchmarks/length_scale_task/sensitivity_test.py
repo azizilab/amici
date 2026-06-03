@@ -23,21 +23,23 @@ model = AMICI.load(model_path, adata=adata)
 
 # %%
 interaction_df = pd.read_csv(interaction_config_path)
-interaction_df
 
 # %%
 # Ground truth length scales from benchmark config
 gt_length_scales = {
-    (str(int(interaction_df.loc[idx, "sender_cell"])), str(int(interaction_df.loc[idx, "receptor_cell"]))): interaction_df.loc[
-        idx, "radius_of_effect"
-    ] for idx in interaction_df.index if interaction_df.loc[idx, "interaction_type"] == "interaction"
+    (
+        str(int(interaction_df.loc[idx, "sender_cell"])),
+        str(int(interaction_df.loc[idx, "receptor_cell"])),
+    ): interaction_df.loc[idx, "radius_of_effect"]
+    for idx in interaction_df.index
+    if interaction_df.loc[idx, "interaction_type"] == "interaction"
 }
 
 thresholds = np.arange(0.1, 1.0, 0.05).round(2).tolist()
 
 # %%
 # For each interaction, compute length scales across all thresholds
-for idx, row in interaction_df.iterrows():
+for _, row in interaction_df.iterrows():
     if row["interaction_type"] != "interaction":
         continue
 
@@ -88,7 +90,9 @@ for idx, row in interaction_df.iterrows():
         ax.axhline(y=gt_ls, color="red", linestyle="--", linewidth=1.5, label=f"GT length scale = {gt_ls}")
         ax.legend()
 
-    ax.set_title(f"Length scale sensitivity to attention threshold\n({sender_type} -> {receiver_type}, head {max_expl_variance_head})")
+    ax.set_title(
+        f"Length scale sensitivity to attention threshold\n({sender_type} -> {receiver_type}, head {max_expl_variance_head})"
+    )
     ax.set_xlabel("Attention Threshold")
     ax.set_ylabel("Length Scale")
     plt.tight_layout()
