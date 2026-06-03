@@ -22,6 +22,9 @@ def main():
             gitiii_pr = pd.read_csv(
                 os.path.join(results_path, f"{snakemake.wildcards.dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv")  # noqa: F821
             )
+            cgcom_pr = pd.read_csv(
+                os.path.join(results_path, f"{snakemake.wildcards.dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv")  # noqa: F821
+            )
             cgcom_pr = None
             if include_cgcom:
                 cgcom_pr = pd.read_csv(

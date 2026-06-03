@@ -59,6 +59,10 @@ def _results_path():
     return snakemake.config.get("results_path", "results/").rstrip("/")  # noqa: F821
 
 
+def _results_path():
+    return snakemake.config.get("results_path", "results/").rstrip("/")  # noqa: F821
+
+
 def build_cgcom_interaction_matrix(comm_csv_path, adata, labels_key):
     """
     Aggregate CGCom attention scores by cell type pair into a sender x receiver matrix.

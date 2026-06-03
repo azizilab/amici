@@ -28,6 +28,12 @@ def main():
                     f"{snakemake.wildcards.dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",  # noqa: F821
                 )
             )
+            cgcom_pr = pd.read_csv(
+                os.path.join(
+                    results_path,
+                    f"{snakemake.wildcards.dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",  # noqa: F821
+                )
+            )
             cgcom_pr = None
             if include_cgcom:
                 cgcom_pr = pd.read_csv(
