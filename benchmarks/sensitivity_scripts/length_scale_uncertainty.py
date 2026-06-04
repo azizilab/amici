@@ -71,6 +71,15 @@ os.makedirs(data_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs(figures_dir, exist_ok=True)
 
+ci_output_paths = [
+    os.path.join(figures_dir, "length_scale_bootstrap_ci.csv"),
+    os.path.join(figures_dir, "length_scale_bootstrap_ci.png"),
+    os.path.join(figures_dir, "length_scale_bootstrap_ci.svg"),
+]
+if all(os.path.exists(path) for path in ci_output_paths):
+    print("Length scale CI has already been plotted and saved. Skipping length scale uncertainty analysis.")
+    sys.exit(0)
+
 adata_path = os.path.join(data_dir, f"semisyn_{DATASET_SEED}.h5ad")
 best_model_path = os.path.join(model_dir, "best_model")
 
