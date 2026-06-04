@@ -3,6 +3,7 @@ import json
 import os
 import shutil
 import tempfile
+import traceback
 from multiprocessing import Manager, Process
 from typing import Any
 
@@ -157,21 +158,28 @@ def train_and_evaluate(
         eval_indices: array-like or None, indices to evaluate reconstruction loss on
         save_model: bool, whether to persist the model to disk
     """
-    model_path, test_recons = train_model(
-        adata,
-        dataset_config,
-        penalty_params,
-        exp_params,
-        run_id,
-        eval_indices=eval_indices,
-        save_model=save_model,
-    )
-    results_dict[run_id] = {
-        "model_config": {"penalty_params": penalty_params, "exp_params": exp_params},
-        "test_recons": test_recons,
-        "model_path": model_path,
-        "seed": exp_params["seed"],
-    }
+    try:
+        model_path, test_recons = train_model(
+            adata,
+            dataset_config,
+            penalty_params,
+            exp_params,
+            run_id,
+            eval_indices=eval_indices,
+            save_model=save_model,
+        )
+        results_dict[run_id] = {
+            "model_config": {"penalty_params": penalty_params, "exp_params": exp_params},
+            "test_recons": test_recons,
+            "model_path": model_path,
+            "seed": exp_params["seed"],
+        }
+    except KeyError:
+        results_dict[run_id] = {
+            "error": traceback.format_exc(),
+            "model_config": {"penalty_params": penalty_params, "exp_params": exp_params},
+            "seed": exp_params["seed"],
+        }
 
 
 def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_model, base_run_id=0):
@@ -193,6 +201,7 @@ def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_mode
     num_agents = 4
     manager = Manager()
     results_dict = manager.dict()
+    expected_run_ids = []
 
     for i in range(0, len(all_runs), num_agents):
         batch = all_runs[i : i + num_agents]
@@ -200,6 +209,7 @@ def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_mode
 
         for j, run_params in enumerate(batch):
             run_id = f"run_{base_run_id + i + j}"
+            expected_run_ids.append(run_id)
             p = Process(
                 target=train_and_evaluate,
                 args=(
@@ -226,7 +236,18 @@ def _run_sweep_parallel(adata, dataset_config, all_runs, eval_indices, save_mode
             for p in processes:
                 p.join()
 
-    return dict(results_dict)
+    results = dict(results_dict)
+    errors = {run_id: results[run_id]["error"] for run_id in expected_run_ids if results.get(run_id, {}).get("error")}
+    missing = [run_id for run_id in expected_run_ids if run_id not in results]
+    if errors or missing:
+        message = []
+        if missing:
+            message.append(f"Missing AMICI sweep results for runs: {missing}")
+        for run_id, error in errors.items():
+            message.append(f"{run_id} failed:\n{error}")
+        raise RuntimeError("\n\n".join(message))
+
+    return results
 
 
 def _build_run_configs(dataset_config):
