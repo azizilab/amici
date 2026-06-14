@@ -1,5 +1,4 @@
 # %% Import libraries
-import itertools
 import json
 import os
 import random
@@ -13,7 +12,6 @@ import pytorch_lightning as pl
 import scanpy as sc
 import scvi
 import torch
-import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
@@ -29,7 +27,86 @@ BASE_DATASET_SEED = 42
 SHUFFLE_SEEDS = list(range(10))
 ATTENTION_THRESHOLD = 0.1
 SHUFFLE_FRACTION = 0.5
-BASELINE_MODEL_SEED = 42
+TRAIN_SEED = 22
+
+CONFIG = {
+    "dir_path": "data/",
+    "datasets_realistic": ["breast_cancer"],
+    "datasets": {
+        "3ct_dataset_2way": {
+            "seeds": [40, 123, 6, 23, 25, 88, 72, 58, 22, 31],
+            "labels_key": "leiden",
+            "subtype_labels_key": "subtype",
+            "ncem_niche_sizes": [10, 15, 20],
+            "nichede_niche_sizes": [20, 200, 500],
+            "gt_interactions": {
+                "interaction_1": {
+                    "sender": "0",
+                    "receiver": "2",
+                    "interaction_subtype": "2_sub1",
+                    "neutral_subtype": "2_sub0",
+                    "length_scale": 10,
+                },
+                "interaction_2": {
+                    "sender": "3",
+                    "receiver": "0",
+                    "interaction_subtype": "0_sub1",
+                    "neutral_subtype": "0_sub0",
+                    "length_scale": 20,
+                },
+            },
+        },
+        "breast_cancer": {
+            "generation_type": "realistic",
+            "seeds": [42],
+            "labels_key": "cell_type",
+            "subtype_labels_key": "subtype",
+            "use_cross_validation": False,
+            "n_cv_folds": 3,
+            "sweep_baselines": True,
+            "ncem_niche_sizes": [10, 15, 20],
+            "nichede_niche_sizes": [20, 200, 500],
+            "sweep_params": {
+                "end_attention_penalty": [1.0e-5],
+                "attention_penalty_schedule": [[15, 30]],
+                "seed": [21, 22, 33, 88, 99],
+                "value_l1_penalty_coef": [1.0e-5],
+                "batch_size": [256],
+                "lr": [1.0e-3],
+                "n_neighbors": [50],
+                "penalty_flavor_params": ["linear"],
+                "n_heads": [10],
+            },
+            "flex_h5_path": "data/GSM7782698_count_raw_feature_bc_matrix.h5",
+            "annot_path": "data/41467_2023_43458_MOESM4_ESM.xlsx",
+            "xenium_path": "data/xenium_rep1_io.h5ad",
+            "scvi_model_dir": "data/scvi_model",
+            "gt_interactions": {
+                "interaction_1": {
+                    "sender": "Macrophages",
+                    "receiver": "DCIS",
+                    "interaction_subtype": "DCIS_sub1",
+                    "neutral_subtype": "DCIS_sub0",
+                    "length_scale": 40,
+                },
+                "interaction_2": {
+                    "sender": "T_Cells",
+                    "receiver": "Endothelial",
+                    "interaction_subtype": "Endothelial_sub1",
+                    "neutral_subtype": "Endothelial_sub0",
+                    "length_scale": 25,
+                },
+                "interaction_3": {
+                    "sender": "Invasive_Tumor",
+                    "receiver": "Myoepi",
+                    "interaction_subtype": "Myoepi_sub1",
+                    "neutral_subtype": "Myoepi_sub0",
+                    "length_scale": 15,
+                },
+            },
+        },
+    },
+}
 
 EXP_DEFAULTS = {
     "epochs": 400,
@@ -39,13 +116,6 @@ EXP_DEFAULTS = {
 }
 
 
-def load_config(config_path):
-    """Load the benchmark config and return the selected dataset config."""
-    with open(config_path) as f:
-        config = yaml.safe_load(f)
-    return config, config["datasets"][DATASET]
-
-
 def benchmark_path(benchmark_dir, path):
     """Resolve benchmark config paths relative to the benchmarks directory."""
     if os.path.isabs(path):
@@ -53,36 +123,22 @@ def benchmark_path(benchmark_dir, path):
     return os.path.join(benchmark_dir, path)
 
 
-def build_run_configs(dataset_config):
-    """Build AMICI sweep configs from the benchmark config."""
+def build_run_config(dataset_config):
+    """Build one fixed AMICI config from the benchmark parameter set."""
     sweep = dataset_config["sweep_params"]
-    all_runs = []
-    for end_val, flavor, value_l1, train_seed, schedule, batch_size, n_heads, lr, n_neighbors in itertools.product(
-        sweep.get("end_attention_penalty", [1e-2]),
-        sweep.get("penalty_flavor_params", ["linear"]),
-        sweep.get("value_l1_penalty_coef", [1e-6]),
-        sweep.get("seed", [42]),
-        sweep.get("attention_penalty_schedule", [[10, 40]]),
-        sweep.get("batch_size", [128]),
-        sweep.get("n_heads", [8]),
-        sweep.get("lr", [1e-3]),
-        sweep.get("n_neighbors", [50]),
-    ):
-        all_runs.append(
-            {
-                "end_val": end_val,
-                "flavor": flavor,
-                "value_l1": value_l1,
-                "train_seed": train_seed,
-                "epoch_start": schedule[0],
-                "epoch_end": schedule[1],
-                "batch_size": batch_size,
-                "n_heads": n_heads,
-                "lr": lr,
-                "n_neighbors": n_neighbors,
-            }
-        )
-    return all_runs
+    schedule = sweep["attention_penalty_schedule"][0]
+    return {
+        "end_val": sweep["end_attention_penalty"][0],
+        "flavor": sweep["penalty_flavor_params"][0],
+        "value_l1": sweep["value_l1_penalty_coef"][0],
+        "train_seed": TRAIN_SEED,
+        "epoch_start": schedule[0],
+        "epoch_end": schedule[1],
+        "batch_size": sweep["batch_size"][0],
+        "n_heads": sweep["n_heads"][0],
+        "lr": sweep["lr"][0],
+        "n_neighbors": sweep["n_neighbors"][0],
+    }
 
 
 def ensure_base_realistic_dataset(benchmark_dir, dataset_config, base_adata_path):
@@ -290,8 +346,8 @@ def plot_length_scale_boxplots(estimates_df, figures_dir):
 select_gpu()
 base_dir = os.path.dirname(os.path.abspath(__file__))
 benchmark_dir = os.path.abspath(os.path.join(base_dir, ".."))
-config_path = os.path.join(benchmark_dir, "benchmark_config.yaml")
-config, dataset_config = load_config(config_path)
+config = CONFIG
+dataset_config = config["datasets"][DATASET]
 
 data_dir = os.path.join(base_dir, "data")
 model_dir = os.path.join(base_dir, "saved_models", "length_scale_coordinate_shuffle_sensitivity")
@@ -314,7 +370,7 @@ ensure_base_realistic_dataset(benchmark_dir, dataset_config, base_adata_path)
 base_adata = sc.read_h5ad(base_adata_path)
 base_adata.obs_names_make_unique()
 
-all_runs = build_run_configs(dataset_config)
+run_config = build_run_config(dataset_config)
 estimate_records = []
 sample_records = []
 
@@ -356,14 +412,10 @@ for shuffle_seed in SHUFFLE_SEEDS:
     )
     test_indices = np.where(adata.obs["train_test_split"] == "test")[0]
 
-    run_results = []
-    for run_idx, run in enumerate(all_runs):
-        run = {**run, "shuffle_seed": shuffle_seed, "run_idx": run_idx}
-        run_path = os.path.join(dataset_model_dir, f"run_{run_idx}")
-        result_path = os.path.join(dataset_model_dir, f"run_{run_idx}_results.json")
-        run_results.append(train_or_load_run(adata, dataset_config, run, run_path, result_path, test_indices))
-
-    best_result = min(run_results, key=lambda x: x["test_loss"])
+    run = {**run_config, "shuffle_seed": shuffle_seed, "run_idx": 0}
+    run_path = os.path.join(dataset_model_dir, "run_0")
+    result_path = os.path.join(dataset_model_dir, "run_0_results.json")
+    best_result = train_or_load_run(adata, dataset_config, run, run_path, result_path, test_indices)
     if os.path.exists(best_model_path):
         shutil.rmtree(best_model_path)
     shutil.copytree(best_result["model_path"], best_model_path)
