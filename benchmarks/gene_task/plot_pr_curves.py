@@ -17,7 +17,7 @@ def main():
     amici_pr = pd.read_csv(snakemake.input.amici_pr_path)  # noqa: F821
     gitiii_pr = pd.read_csv(snakemake.input.gitiii_pr_path)  # noqa: F821
     ncem_pr_paths = snakemake.input.ncem_pr_paths  # noqa: F821
-    nichede_pr_paths = snakemake.input.nichede_pr_paths  # noqa: F821
+    # nichede_pr_paths = snakemake.input.nichede_pr_paths
 
     # Read the PR curves for NCEM and NicheDE along with the niche sizes
     ncem_prs = []
@@ -27,17 +27,17 @@ def main():
         niche_size = ncem_pr_path.split("_")[1]
         ncem_model_names.append(f"NCEM_{niche_size}")
 
-    nichede_prs = []
-    nichede_model_names = []
-    for nichede_pr_path in nichede_pr_paths:
-        nichede_prs.append(pd.read_csv(nichede_pr_path))
-        niche_size = nichede_pr_path.split("_")[1]
-        nichede_model_names.append(f"NicheDE_{niche_size}")
+    # nichede_prs = []
+    # nichede_model_names = []
+    # for nichede_pr_path in nichede_pr_paths:
+    #     nichede_prs.append(pd.read_csv(nichede_pr_path))
+    #     niche_size = nichede_pr_path.split("_")[1]
+    #     nichede_model_names.append(f"NicheDE_{niche_size}")
 
     # Plot the PR curves for all 4 models
     plot_pr_curves(
-        [amici_pr, gitiii_pr] + ncem_prs + nichede_prs,
-        ["AMICI", "GITIII"] + ncem_model_names + nichede_model_names,
+        [amici_pr, gitiii_pr] + ncem_prs,  # + nichede_prs,
+        ["AMICI", "GITIII"] + ncem_model_names,  # + nichede_model_names,
         num_positive_classes=num_positive_classes_interactions,
         save_dir=os.path.dirname(snakemake.output[0]),  # noqa: F821
         suffix="gene_task",

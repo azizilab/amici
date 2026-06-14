@@ -12,7 +12,6 @@ def main():
 
     amici_auprcs = []
     gitiii_auprcs = []
-    cgcom_auprcs = []
     for seed in seeds:
         try:
             amici_pr = pd.read_csv(
@@ -27,22 +26,15 @@ def main():
                     f"{snakemake.wildcards.dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",  # noqa: F821
                 )
             )
-            cgcom_pr = pd.read_csv(
-                os.path.join(
-                    results_path,
-                    f"{snakemake.wildcards.dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",  # noqa: F821
-                )
-            )
         except FileNotFoundError:
             continue
 
         amici_auprcs.append(amici_pr["avg_precision_score"].values[0])
         gitiii_auprcs.append(gitiii_pr["avg_precision_score"].values[0])
-        cgcom_auprcs.append(cgcom_pr["avg_precision_score"].values[0])
 
         plot_boxplots(
-            [amici_auprcs, gitiii_auprcs, cgcom_auprcs],
-            ["AMICI", "GITIII", "CGCom"],
+            [amici_auprcs, gitiii_auprcs],
+            ["AMICI", "GITIII"],
             metric_name="auprc",
             save_dir=os.path.dirname(snakemake.output[0]),  # noqa: F821
             title_task="Neighbor Interaction Task",

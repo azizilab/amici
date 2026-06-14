@@ -12,10 +12,15 @@ from gpu_utils import select_gpu
 from ncem_benchmark_utils import get_model_parameters, plot_ncem_loss_curves, train_ncem
 
 RESULTS_PATH = "results"
+NCEM_SPLIT_VERSION = 2
 
 
 def _results_path():
     return RESULTS_PATH.rstrip("/")
+
+
+def _expected_cache_metadata():
+    return {"split_version": NCEM_SPLIT_VERSION}
 
 
 def train_single_run(
@@ -29,6 +34,8 @@ def train_single_run(
     run_results_path,
     train_indices,
     eval_indices,
+    validation_indices=None,
+    scrub_neighbor_indices=None,
 ):
     """
     Train a single NCEM run, evaluate on eval_indices, and return the reconstruction loss.
@@ -46,6 +53,8 @@ def train_single_run(
         run_results_path: str, path to cache the result JSON
         train_indices: array-like, indices of training cells
         eval_indices: array-like, indices of cells to evaluate on
+        validation_indices: array-like, optional indices for NCEM validation/early stopping
+        scrub_neighbor_indices: array-like, optional indices removed as neighbor inputs
 
     Returns
     -------
@@ -55,8 +64,11 @@ def train_single_run(
     if run_results_path is not None and os.path.exists(run_results_path):
         with open(run_results_path) as f:
             cached = json.load(f)
-        print(f"  Loaded cached result: eval_recons={cached['test_recons']:.4f}")
-        return cached["test_recons"], cached["model_history"]
+        if cached.get("split_version") == NCEM_SPLIT_VERSION:
+            print(f"  Loaded cached result: eval_recons={cached['test_recons']:.4f}")
+            return cached["test_recons"], cached["model_history"]
+        print("  Ignoring cached NCEM result from an older split mode")
+        os.remove(run_results_path)
 
     model_history, trainer = train_ncem(
         adata,
@@ -68,6 +80,8 @@ def train_single_run(
         run_model_args_path,
         train_indices=train_indices,
         test_indices=eval_indices,
+        val_indices=validation_indices,
+        scrub_neighbor_indices=scrub_neighbor_indices,
     )
 
     eval_result = trainer.estimator.evaluate_any(
@@ -83,6 +97,7 @@ def train_single_run(
                 {
                     "test_recons": eval_recons,
                     "model_history": {k: [float(v) for v in vs] for k, vs in model_history.items()},
+                    **_expected_cache_metadata(),
                 },
                 f,
             )
@@ -99,6 +114,8 @@ def _run_sweep(
     train_indices,
     eval_indices,
     run_prefix,
+    validation_indices=None,
+    scrub_neighbor_indices=None,
 ):
     """
     Run the hyperparameter sweep over learning rate and l1 coefficient combinations.
@@ -112,6 +129,8 @@ def _run_sweep(
         train_indices: array-like, indices of training cells
         eval_indices: array-like, indices of cells to evaluate on
         run_prefix: str, prefix for run file names
+        validation_indices: array-like, optional indices for NCEM validation/early stopping
+        scrub_neighbor_indices: array-like, optional indices removed as neighbor inputs
 
     Returns
     -------
@@ -144,6 +163,8 @@ def _run_sweep(
             run_results_path,
             train_indices,
             eval_indices,
+            validation_indices=validation_indices,
+            scrub_neighbor_indices=scrub_neighbor_indices,
         )
 
         scores[run_id] = eval_recons
@@ -263,6 +284,8 @@ def main(
                 train_indices=fold_train_indices,
                 eval_indices=fold_val_indices,
                 run_prefix=f"ncem_{niche_size}_cv_fold_{fold_id}",
+                validation_indices=fold_val_indices,
+                scrub_neighbor_indices=np.union1d(test_indices, fold_val_indices),
             )
 
             for run_id, score in fold_scores.items():
@@ -284,6 +307,8 @@ def main(
             train_indices=train_indices,
             eval_indices=test_indices,
             run_prefix=f"ncem_{niche_size}_final",
+            validation_indices=test_indices,
+            scrub_neighbor_indices=test_indices,
         )
         all_runs_to_save = [all_runs[best_cv_run_id]]
     else:
@@ -296,6 +321,8 @@ def main(
             train_indices=train_indices,
             eval_indices=test_indices,
             run_prefix=f"ncem_{niche_size}_final",
+            validation_indices=test_indices,
+            scrub_neighbor_indices=test_indices,
         )
         all_runs_to_save = all_runs
 

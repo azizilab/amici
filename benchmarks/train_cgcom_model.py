@@ -3,15 +3,56 @@ import os
 import random
 import shutil
 
+import cgcom.scripts.train as cgcom_train
 import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import pandas as pd
 import scanpy as sc
 import torch
 from benchmark_utils import plot_interaction_graph, plot_interaction_matrix
-from cgcom.scripts import train_model
 from cgcom.utils import get_exp_params, get_model_params
 from gpu_utils import select_gpu
+from scipy.spatial import ConvexHull, QhullError, cKDTree, distance_matrix
+
+
+def _patch_cgcom_graph_builder():
+    """Avoid CGCom's O(n^2) distance dictionary for large spatial datasets."""
+
+    def build_graph_from_spatial_data(adata, exp_params):
+        if "spatial" not in adata.obsm:
+            raise ValueError("Dataset must contain spatial coordinates in adata.obsm['spatial']")
+
+        coords = np.asarray(adata.obsm["spatial"], dtype=float)
+        node_id_list = adata.obs_names.tolist()
+
+        graph = nx.DiGraph()
+        graph.add_nodes_from((i, {"pos": tuple(coord)}) for i, coord in enumerate(coords))
+
+        tree = cKDTree(coords)
+        nearest_distances, _ = tree.query(coords, k=2)
+        min_distance = float(np.min(nearest_distances[:, 1]))
+
+        if len(coords) > 2:
+            try:
+                hull_points = coords[ConvexHull(coords).vertices]
+            except QhullError:
+                hull_points = np.array([coords.min(axis=0), coords.max(axis=0)])
+        else:
+            hull_points = coords
+        max_distance = float(np.max(distance_matrix(hull_points, hull_points)))
+        threshold = min_distance + (max_distance - min_distance) * exp_params["neighbor_threshold_ratio"]
+
+        edge_list = [[int(i), int(j)] for i, j in tree.query_pairs(threshold)]
+        graph.add_edges_from(edge_list)
+
+        print(
+            f"Built CGCom spatial graph with KDTree: {len(coords)} nodes, "
+            f"{len(edge_list)} edges, threshold={threshold:.4f}"
+        )
+        return graph, edge_list, node_id_list
+
+    cgcom_train.build_graph_from_spatial_data = build_graph_from_spatial_data
 
 
 def _results_path():
@@ -48,6 +89,8 @@ def train_single_run(
     labels_key,
     lr,
     neighbor_threshold_ratio,
+    batch_size,
+    scoring_batch_size,
     run_model_path,
     run_results_path,
     train_obs_names,
@@ -80,7 +123,13 @@ def train_single_run(
 
     os.makedirs(os.path.dirname(run_model_path), exist_ok=True)
 
-    exp_params = get_exp_params(lr=lr, num_epochs=50, neighbor_threshold_ratio=neighbor_threshold_ratio)
+    exp_params = get_exp_params(
+        lr=lr,
+        num_epochs=50,
+        batch_size=batch_size,
+        neighbor_threshold_ratio=neighbor_threshold_ratio,
+    )
+    exp_params["scoring_batch_size"] = scoring_batch_size
 
     model_params = get_model_params(
         fc_hidden_channels_2=500,
@@ -95,7 +144,7 @@ def train_single_run(
         disable_lr_masking=True,
     )
 
-    _model, _model_path, train_losses, val_losses = train_model(
+    _model, _model_path, train_losses, val_losses = cgcom_train.train_model(
         exp_params,
         model_params,
         dataset_path=dataset_path,
@@ -124,6 +173,8 @@ def _run_sweep(
     models_dir,
     train_obs_names,
     run_prefix,
+    batch_size,
+    scoring_batch_size,
     val_obs_names=None,
     test_obs_names=None,
 ):
@@ -158,6 +209,8 @@ def _run_sweep(
             labels_key,
             lr,
             neighbor_threshold_ratio,
+            batch_size,
+            scoring_batch_size,
             run_model_path,
             run_results_path,
             train_obs_names,
@@ -177,6 +230,7 @@ def _run_sweep(
 def main():
     """Train the CGCom model with a hyperparameter sweep, keeping the best run."""
     select_gpu()
+    _patch_cgcom_graph_builder()
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     labels_key = dataset_config["labels_key"]
     dataset_path = snakemake.input.adata_path  # noqa: F821
@@ -195,9 +249,12 @@ def main():
     random.seed(42)
 
     sweep_baselines = dataset_config.get("sweep_baselines", False)
+    cgcom_batch_size = int(dataset_config.get("cgcom_batch_size", 32))
+    cgcom_scoring_batch_size = int(dataset_config.get("cgcom_scoring_batch_size", 4))
+    print(f"CGCom batch_size={cgcom_batch_size}, scoring_batch_size={cgcom_scoring_batch_size}")
     if sweep_baselines:
         learning_rates = [1e-3, 1e-4]
-        neighbor_threshold_ratios = [0.005, 0.01, 0.02]
+        neighbor_threshold_ratios = [0.005, 0.01, 0.0075]
         all_runs = [(lr, ntr) for lr in learning_rates for ntr in neighbor_threshold_ratios]
     else:
         all_runs = [(1e-3, 0.01)]
@@ -230,6 +287,8 @@ def main():
                 all_runs,
                 models_dir,
                 train_obs_names=fold_train_obs_names,
+                batch_size=cgcom_batch_size,
+                scoring_batch_size=cgcom_scoring_batch_size,
                 val_obs_names=fold_val_obs_names,
                 test_obs_names=test_obs_names,
                 run_prefix=f"cgcom_cv_fold_{fold_id}",
@@ -250,6 +309,8 @@ def main():
             [(best_lr, best_ntr)],
             models_dir,
             train_obs_names=train_obs_names,
+            batch_size=cgcom_batch_size,
+            scoring_batch_size=cgcom_scoring_batch_size,
             test_obs_names=test_obs_names,
             run_prefix="cgcom_final",
         )
@@ -261,6 +322,8 @@ def main():
             all_runs,
             models_dir,
             train_obs_names=train_obs_names,
+            batch_size=cgcom_batch_size,
+            scoring_batch_size=cgcom_scoring_batch_size,
             run_prefix="cgcom_final",
         )
         best_lr, best_ntr = all_runs[best_run_id]

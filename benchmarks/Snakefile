@@ -427,7 +427,7 @@ rule run_ncem_gene_task_pr:
     script:
         "gene_task/generate_ncem_pr.py"
 
-# Run PR curves for NicheDE model for gene task only
+#Run PR curves for NicheDE model for gene task only
 rule run_nichede_gene_task_pr:
     conda:
         "envs/basic.yaml"
@@ -503,7 +503,7 @@ rule plot_gene_task_pr_curves:
     input:
         amici_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_gene_task_pr.csv"),
         ncem_pr_paths=lambda wildcards: get_ncem_gene_task_pr_files(wildcards.dataset),
-        nichede_pr_paths=lambda wildcards: get_nichede_gene_task_pr_files(wildcards.dataset),
+        # nichede_pr_paths=lambda wildcards: get_nichede_gene_task_pr_files(wildcards.dataset),
         gitiii_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_gene_task_pr.csv"),
         gt_genes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv")
     output:
@@ -519,7 +519,7 @@ rule plot_neighbor_interaction_task_pr_curves:
     input:
         amici_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv"),
         gitiii_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv"),
-        cgcom_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv"),
+        # cgcom_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv"),
         gt_neighbor_interactions_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_neighbor_interactions.csv")
     output:
         os.path.join(config["results_path"], "{dataset}_{seed}/baseline_pr_curves_neighbor_interaction_task.png"),
@@ -534,7 +534,7 @@ rule plot_receiver_subtype_task_pr_curves:
     input:
         amici_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_receiver_subtype_task_pr.csv"),
         gitiii_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv"),
-        cgcom_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv"),
+        # cgcom_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv"),
         gt_receiver_subtypes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_receiver_subtypes.csv")
     output:
         os.path.join(config["results_path"], "{dataset}_{seed}/baseline_pr_curves_receiver_subtype_task.png"),
