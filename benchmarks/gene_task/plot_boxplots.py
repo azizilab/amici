@@ -9,15 +9,13 @@ def main():
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     results_path = snakemake.config["results_path"]  # noqa: F821
     seeds = dataset_config["seeds"]
+    include_nichede = not dataset_config.get("use_cross_validation", False)
+
     amici_auprcs = []
     gitiii_auprcs = []
 
-    ncem_auprcs = {}
-    # nichede_auprcs = {}
-    for niche_size in dataset_config["ncem_niche_sizes"]:
-        ncem_auprcs[niche_size] = []
-    # for niche_size in dataset_config["nichede_niche_sizes"]:
-    #     nichede_auprcs[niche_size] = []
+    ncem_auprcs = {niche_size: [] for niche_size in dataset_config["ncem_niche_sizes"]}
+    nichede_auprcs = {niche_size: [] for niche_size in dataset_config["nichede_niche_sizes"]} if include_nichede else {}
 
     for seed in seeds:
         try:
@@ -35,14 +33,16 @@ def main():
                         f"{snakemake.wildcards.dataset}_{seed}/ncem_{niche_size}_gene_task_pr.csv",  # noqa: F821
                     )
                 )
-            # nichede_prs = {}
-            # for niche_size in dataset_config["nichede_niche_sizes"]:
-            #     nichede_prs[niche_size] = pd.read_csv(
-            #         os.path.join(
-            #             results_path,
-            #             f"{snakemake.wildcards.dataset}_{seed}/nichede_{niche_size}_gene_task_pr.csv",
-            #         )
-            #     )
+
+            nichede_prs = {}
+            if include_nichede:
+                for niche_size in dataset_config["nichede_niche_sizes"]:
+                    nichede_prs[niche_size] = pd.read_csv(
+                        os.path.join(
+                            results_path,
+                            f"{snakemake.wildcards.dataset}_{seed}/nichede_{niche_size}_gene_task_pr.csv",  # noqa: F821
+                        )
+                    )
         except FileNotFoundError:
             continue
 
@@ -52,18 +52,23 @@ def main():
         for niche_size in dataset_config["ncem_niche_sizes"]:
             ncem_auprcs[niche_size].append(ncem_prs[niche_size]["avg_precision_score"].values[0])
 
-        # for niche_size in dataset_config["nichede_niche_sizes"]:
-        #     nichede_auprcs[niche_size].append(nichede_prs[niche_size]["avg_precision_score"].values[0])
+        if include_nichede:
+            for niche_size in dataset_config["nichede_niche_sizes"]:
+                nichede_auprcs[niche_size].append(nichede_prs[niche_size]["avg_precision_score"].values[0])
 
     ncem_model_names = [f"NCEM_{niche_size}" for niche_size in dataset_config["ncem_niche_sizes"]]
-    # nichede_model_names = [f"NicheDE_{niche_size}" for niche_size in dataset_config["nichede_niche_sizes"]]
+    nichede_model_names = (
+        [f"NicheDE_{niche_size}" for niche_size in dataset_config["nichede_niche_sizes"]] if include_nichede else []
+    )
 
     all_ncem_auprcs = [ncem_auprcs[niche_size] for niche_size in dataset_config["ncem_niche_sizes"]]
-    # all_nichede_auprcs = [nichede_auprcs[niche_size] for niche_size in dataset_config["nichede_niche_sizes"]]
+    all_nichede_auprcs = (
+        [nichede_auprcs[niche_size] for niche_size in dataset_config["nichede_niche_sizes"]] if include_nichede else []
+    )
 
     plot_boxplots(
-        [amici_auprcs, gitiii_auprcs] + all_ncem_auprcs,  # + all_nichede_auprcs,
-        ["AMICI", "GITIII"] + ncem_model_names,  # + nichede_model_names,
+        [amici_auprcs, gitiii_auprcs] + all_ncem_auprcs + all_nichede_auprcs,
+        ["AMICI", "GITIII"] + ncem_model_names + nichede_model_names,
         metric_name="auprc",
         save_dir=os.path.dirname(snakemake.output[0]),  # noqa: F821
         title_task="Gene Task",

@@ -9,9 +9,11 @@ def main():
     dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
     results_path = snakemake.config["results_path"]  # noqa: F821
     seeds = dataset_config["seeds"]
+    include_cgcom = not dataset_config.get("use_cross_validation", False)
 
     amici_auprcs = []
     gitiii_auprcs = []
+    cgcom_auprcs = []
     for seed in seeds:
         try:
             amici_pr = pd.read_csv(
@@ -26,21 +28,31 @@ def main():
                     f"{snakemake.wildcards.dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",  # noqa: F821
                 )
             )
+            cgcom_pr = None
+            if include_cgcom:
+                cgcom_pr = pd.read_csv(
+                    os.path.join(
+                        results_path,
+                        f"{snakemake.wildcards.dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",  # noqa: F821
+                    )
+                )
         except FileNotFoundError:
             continue
 
         amici_auprcs.append(amici_pr["avg_precision_score"].values[0])
         gitiii_auprcs.append(gitiii_pr["avg_precision_score"].values[0])
+        if include_cgcom:
+            cgcom_auprcs.append(cgcom_pr["avg_precision_score"].values[0])
 
-        plot_boxplots(
-            [amici_auprcs, gitiii_auprcs],
-            ["AMICI", "GITIII"],
-            metric_name="auprc",
-            save_dir=os.path.dirname(snakemake.output[0]),  # noqa: F821
-            title_task="Neighbor Interaction Task",
-            suffix="neighbor_interaction_task",
-            save_svg=True,
-        )
+    plot_boxplots(
+        [amici_auprcs, gitiii_auprcs] + ([cgcom_auprcs] if include_cgcom else []),
+        ["AMICI", "GITIII"] + (["CGCom"] if include_cgcom else []),
+        metric_name="auprc",
+        save_dir=os.path.dirname(snakemake.output[0]),  # noqa: F821
+        title_task="Neighbor Interaction Task",
+        suffix="neighbor_interaction_task",
+        save_svg=True,
+    )
 
     with open(snakemake.output[1], "w") as f:  # noqa: F821
         f.write("Done")
