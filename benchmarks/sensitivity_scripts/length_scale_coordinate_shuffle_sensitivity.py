@@ -26,8 +26,9 @@ DATASET = "breast_cancer"
 BASE_DATASET_SEED = 42
 SHUFFLE_SEEDS = list(range(10))
 ATTENTION_THRESHOLD = 0.1
-SHUFFLE_FRACTION = 0.5
+SHUFFLE_FRACTION = 1.0
 TRAIN_SEED = 22
+RUN_NAME = "length_scale_coordinate_full_shuffle_sensitivity"
 
 CONFIG = {
     "dir_path": "data/",
@@ -335,7 +336,7 @@ def plot_length_scale_boxplots(estimates_df, figures_dir):
 
     for ext in ("png", "svg"):
         fig.savefig(
-            os.path.join(figures_dir, f"length_scale_coordinate_shuffle_sensitivity.{ext}"),
+            os.path.join(figures_dir, f"length_scale_coordinate_full_shuffle_sensitivity.{ext}"),
             dpi=300,
             bbox_inches="tight",
         )
@@ -350,16 +351,16 @@ config = CONFIG
 dataset_config = config["datasets"][DATASET]
 
 data_dir = os.path.join(base_dir, "data")
-model_dir = os.path.join(base_dir, "saved_models", "length_scale_coordinate_shuffle_sensitivity")
-figures_dir = os.path.join(base_dir, "figures", "length_scale_coordinate_shuffle_sensitivity")
+model_dir = os.path.join(base_dir, "saved_models", RUN_NAME)
+figures_dir = os.path.join(base_dir, "figures", RUN_NAME)
 os.makedirs(data_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs(figures_dir, exist_ok=True)
 
 output_paths = [
-    os.path.join(figures_dir, "length_scale_coordinate_shuffle_estimates.csv"),
-    os.path.join(figures_dir, "length_scale_coordinate_shuffle_sensitivity.png"),
-    os.path.join(figures_dir, "length_scale_coordinate_shuffle_sensitivity.svg"),
+    os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_estimates.csv"),
+    os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_sensitivity.png"),
+    os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_sensitivity.svg"),
 ]
 if all(os.path.exists(path) for path in output_paths):
     print("Length scale coordinate shuffle sensitivity has already been plotted and saved. Skipping analysis.")
@@ -381,7 +382,10 @@ for shuffle_seed in SHUFFLE_SEEDS:
     torch.manual_seed(shuffle_seed)
     scvi.settings.seed = shuffle_seed
 
-    shuffled_adata_path = os.path.join(data_dir, f"{DATASET}_{BASE_DATASET_SEED}_coord_shuffle_{shuffle_seed}.h5ad")
+    shuffled_adata_path = os.path.join(
+        data_dir,
+        f"{DATASET}_{BASE_DATASET_SEED}_coord_full_shuffle_{shuffle_seed}.h5ad",
+    )
     dataset_model_dir = os.path.join(model_dir, f"shuffle_{shuffle_seed}")
     best_model_path = os.path.join(dataset_model_dir, "best_model")
     best_params_path = os.path.join(dataset_model_dir, "best_model_params.json")
@@ -433,8 +437,8 @@ for shuffle_seed in SHUFFLE_SEEDS:
 
 estimates_df = pd.concat(estimate_records, ignore_index=True)
 samples_df = pd.concat(sample_records, ignore_index=True)
-estimates_df.to_csv(os.path.join(figures_dir, "length_scale_coordinate_shuffle_estimates.csv"), index=False)
-samples_df.to_csv(os.path.join(figures_dir, "length_scale_coordinate_shuffle_samples.csv"), index=False)
+estimates_df.to_csv(os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_estimates.csv"), index=False)
+samples_df.to_csv(os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_samples.csv"), index=False)
 
 # %% Plot mean inferred length scales
 plot_length_scale_boxplots(estimates_df, figures_dir)
