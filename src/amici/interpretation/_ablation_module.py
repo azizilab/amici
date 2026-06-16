@@ -45,6 +45,7 @@ class AMICIAblationModule:
         ablated_neighbor_ct_sub: list[str] | None = None,
         ablated_neighbor_indices: list[int] | None = None,
         compute_z_value: bool = False,
+        attention_mask: np.ndarray | None = None,
     ) -> "AMICIAblationModule":
         """Difference in gene expression prediction error for cell type of interest when ablating neighbor cell types for a specific head of interest.
 
@@ -95,6 +96,7 @@ class AMICIAblationModule:
                 ablate_heads=head_idx is not None,
                 ablated_neighbor_ct=None,
                 head_idx=head_idx,
+                attention_mask=attention_mask,
             )
 
             # Pre-compute cell count for z-value calculation
@@ -113,6 +115,7 @@ class AMICIAblationModule:
                         ablate_heads=head_idx is not None,
                         ablated_neighbor_indices=ablated_neighbor_indices,
                         head_idx=head_idx,
+                        attention_mask=attention_mask,
                     )
                 else:
                     ablated_residuals, gene_exp = cls._get_ct_residuals_for_ablated_head(
@@ -122,6 +125,7 @@ class AMICIAblationModule:
                         ablate_heads=head_idx is not None,
                         ablated_neighbor_ct=ablated_neighbor_ct,
                         head_idx=head_idx,
+                        attention_mask=attention_mask,
                     )
 
                 # Vectorized calculations
@@ -222,6 +226,7 @@ class AMICIAblationModule:
         head_idx: int = -1,
         ablated_neighbor_ct: str | None = None,
         ablated_neighbor_indices: list[int] | None = None,
+        attention_mask: np.ndarray | None = None,
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         """Gene expression residuals and ground truth gene expression for head_idx and cell_type.
 
@@ -282,14 +287,25 @@ class AMICIAblationModule:
         labels_key = model.adata_manager.get_state_registry(REGISTRY_KEYS.LABELS_KEY).original_key
         ct_indices = np.arange(len(adata))[adata.obs[labels_key] == cell_type]
         scdl = model._make_data_loader(adata=adata, indices=ct_indices)
+        ct_attention_mask = attention_mask[ct_indices] if attention_mask is not None else None
 
         residuals = []
         gene_expressions = []
         label_mapping = model.adata_manager.get_state_registry(REGISTRY_KEYS.LABELS_KEY).categorical_mapping
+        batch_start = 0
         for tensors in scdl:
             true_X = tensors[REGISTRY_KEYS.X_KEY].cpu()
             tensors = {k: v.to(model.device) for k, v in tensors.items()}
             model.module.reset_hooks()
+            batch_attention_mask = None
+            if ct_attention_mask is not None:
+                batch_size_actual = tensors[NN_REGISTRY_KEYS.NN_IDX_KEY].shape[0]
+                batch_attention_mask = torch.tensor(
+                    ct_attention_mask[batch_start : batch_start + batch_size_actual],
+                    device=model.device,
+                    dtype=torch.int,
+                )
+                batch_start += batch_size_actual
 
             head_idxs_to_ablate = [i for i in range(model.module.n_heads) if i != head_idx] if ablate_heads else []
 
@@ -320,6 +336,7 @@ class AMICIAblationModule:
             prediction = (
                 model.module.run_with_hooks(
                     tensors,
+                    generative_kwargs={"attention_mask": batch_attention_mask},
                     fwd_hooks=[("attention_layer.hook_pattern", head_hook_fn)],
                 )[1]["prediction"]
                 .detach()

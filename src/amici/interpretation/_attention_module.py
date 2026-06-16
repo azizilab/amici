@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import torch
 import wandb
 from anndata import AnnData
 from einops import einsum, rearrange
@@ -39,6 +40,7 @@ class AMICIAttentionModule:
         indices: list[int] | None = None,
         batch_size: int | None = None,
         flavor: Literal["vanilla", "value-weighted", "info-weighted", "gene-weighted"] = "vanilla",
+        attention_mask: np.ndarray | None = None,
         prog_bar: bool = True,
     ) -> "AMICIAttentionModule":
         """Different flavors of attention patterns retrieved from cache.
@@ -82,13 +84,24 @@ class AMICIAttentionModule:
         attention_patterns = []
         nn_idxs = []
         nn_dists = []
+        batch_start = 0
         for tensors in tqdm(scdl, disable=not prog_bar):
             tensors = {k: v.to(model.device) for k, v in tensors.items()}
+            batch_attention_mask = None
+            if attention_mask is not None:
+                batch_size_actual = tensors[NN_REGISTRY_KEYS.NN_IDX_KEY].shape[0]
+                batch_attention_mask = torch.tensor(
+                    attention_mask[batch_start : batch_start + batch_size_actual],
+                    device=model.device,
+                    dtype=torch.int,
+                )
+                batch_start += batch_size_actual
             _, gen_outputs = model.module(
                 tensors,
                 generative_kwargs={
                     "return_attention_patterns": True,
                     "return_v": True,
+                    "attention_mask": batch_attention_mask,
                 },
                 compute_loss=False,
             )
