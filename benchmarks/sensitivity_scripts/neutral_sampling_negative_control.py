@@ -152,6 +152,7 @@ DATASET_CONFIGS = {
         "flex_h5_path": "data/GSM7782698_count_raw_feature_bc_matrix.h5",
         "annot_path": "data/41467_2023_43458_MOESM4_ESM.xlsx",
         "xenium_path": "data/xenium_rep1_io.h5ad",
+        "base_h5ad_path": "data/breast_cancer_42.h5ad",
         "scvi_model_dir": "data/scvi_model_neutral_control",
         "spatial_bounds": ((0, 3200), (0, 2800)),
         "n_cv_folds": 3,
@@ -303,7 +304,9 @@ def sample_existing_cells_by_neutral_subtype(adata, spatial_data, subtype_source
         sampled_adata = adata[sampled_indices].copy()
         sampled_adata.obs["source_subtype"] = source_subtype
         sampled_adata.obs["subtype"] = target_subtype
-        sampled_adata.obsm["spatial"] = spatial_data.loc[subtype_mask, ["X", "Y"]].values
+        sampled_spatial = spatial_data.loc[subtype_mask, ["X", "Y"]].copy()
+        sampled_spatial.index = sampled_adata.obs_names
+        sampled_adata.obsm["spatial"] = sampled_spatial
         sampled_adatas.append(sampled_adata)
 
     sampled = sc.concat(sampled_adatas, axis=0)
@@ -352,6 +355,41 @@ def sample_scvi_by_neutral_subtype(flex_adata, spatial_data, scvi_model, rng):
     return sampled
 
 
+def sample_cached_realistic_by_neutral_subtype(base_adata, rng):
+    """Use a cached realistic semisynthetic dataset as the source pool for a neutral control."""
+    source_pools = {
+        subtype: np.where(base_adata.obs["subtype"].astype(str).values == subtype)[0]
+        for subtype in base_adata.obs["subtype"].astype(str).unique()
+    }
+    sampled_adatas = []
+
+    for target_subtype in base_adata.obs["subtype"].astype(str).unique():
+        cell_type = target_subtype.rsplit("_sub", 1)[0]
+        source_subtype = f"{cell_type}_sub0" if target_subtype.endswith("_sub1") else target_subtype
+        if source_subtype not in source_pools:
+            print(f"Warning: No cached source pool for {source_subtype}; skipping {target_subtype}.")
+            continue
+
+        target_mask = base_adata.obs["subtype"].astype(str).values == target_subtype
+        target_obs = base_adata.obs.loc[target_mask].copy()
+        sampled_indices = rng.choice(source_pools[source_subtype], target_mask.sum(), replace=True)
+        sampled_adata = base_adata[sampled_indices].copy()
+
+        sampled_adata.obs["cell_type"] = target_obs["cell_type"].values
+        sampled_adata.obs["subtype"] = target_subtype
+        sampled_adata.obs["source_subtype"] = source_subtype
+        if "train_test_split" in target_obs:
+            sampled_adata.obs["train_test_split"] = target_obs["train_test_split"].values
+        if "cv_fold" in target_obs:
+            sampled_adata.obs["cv_fold"] = target_obs["cv_fold"].values
+        sampled_adata.obsm["spatial"] = np.asarray(base_adata.obsm["spatial"])[target_mask]
+        sampled_adatas.append(sampled_adata)
+
+    sampled = sc.concat(sampled_adatas, axis=0)
+    sampled.obs_names_make_unique()
+    return sampled
+
+
 def generate_synthetic_control(output_path, config):
     """Generate one semisynthetic negative-control dataset."""
     if os.path.exists(output_path):
@@ -376,6 +414,7 @@ def generate_synthetic_control(output_path, config):
     spatial_data = synthetic_layout(interaction_df)
     sampled = sample_existing_cells_by_neutral_subtype(adata_pp, spatial_data, neutral_source_map(interaction_df))
     sampled = create_synthetic_train_test_split(sampled)
+    sampled.obs_names_make_unique()
     sampled.write_h5ad(output_path)
 
 
@@ -383,6 +422,26 @@ def generate_realistic_control(output_path, config):
     """Generate one realistic semisynthetic negative-control dataset."""
     if os.path.exists(output_path):
         print(f"Output already exists at {output_path}, skipping.")
+        return
+
+    raw_input_paths = [
+        benchmark_path(config["flex_h5_path"]),
+        benchmark_path(config["annot_path"]),
+        benchmark_path(config["xenium_path"]),
+    ]
+    if not all(os.path.exists(path) for path in raw_input_paths):
+        base_h5ad_path = benchmark_path(config["base_h5ad_path"])
+        if not os.path.exists(base_h5ad_path):
+            missing_paths = [path for path in raw_input_paths if not os.path.exists(path)]
+            raise FileNotFoundError(
+                "Missing raw realistic inputs and cached base h5ad. "
+                f"Missing raw inputs: {missing_paths}; cached base path: {base_h5ad_path}"
+            )
+
+        print(f"Raw realistic inputs not found. Building neutral control from cached {base_h5ad_path}.")
+        base_adata = sc.read_h5ad(base_h5ad_path)
+        sampled = sample_cached_realistic_by_neutral_subtype(base_adata, np.random.default_rng(DATASET_SEED))
+        sampled.write_h5ad(output_path)
         return
 
     flex_ad = _load_flex_data(benchmark_path(config["flex_h5_path"]), benchmark_path(config["annot_path"]))
@@ -406,6 +465,7 @@ def generate_realistic_control(output_path, config):
 
     sampled = sample_scvi_by_neutral_subtype(flex_pp, spatial_data, scvi_model, np.random.default_rng(DATASET_SEED))
     sampled = create_realistic_train_test_split(sampled, n_cv_folds=config.get("n_cv_folds", 3))
+    sampled.obs_names_make_unique()
     sampled.write_h5ad(output_path)
 
 
