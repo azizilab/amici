@@ -73,6 +73,7 @@ doc = [
     "ipython",
     "sphinx-copybutton",
     "pandas",
+    "openpyxl",
 ]
 test = [
     "coverage",
