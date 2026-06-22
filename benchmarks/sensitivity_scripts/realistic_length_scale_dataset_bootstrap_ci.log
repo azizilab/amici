@@ -1,0 +1,37 @@
+/opt/conda/envs/amici/lib/python3.12/site-packages/anndata/experimental/__init__.py:48: FutureWarning: Importing CSCDataset from `anndata.experimental` is deprecated. Import anndata.abc.CSCDataset instead.
+  return module_get_attr_redirect(
+/opt/conda/envs/amici/lib/python3.12/site-packages/anndata/experimental/__init__.py:48: FutureWarning: Importing CSRDataset from `anndata.experimental` is deprecated. Import anndata.abc.CSRDataset instead.
+  return module_get_attr_redirect(
+[gpu_utils] Assigned GPU 0 (40327 MiB free)
+Processing realistic dataset seed 0
+Seed set to 0
+Seed set to 0
+Loading Flex 10x h5 file...
+Traceback (most recent call last):
+  File "/home/khushidesai/amici/benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py", line 391, in <module>
+    adata = generate_or_load_realistic_dataset(benchmark_dir, dataset_config, adata_path, dataset_seed)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/khushidesai/amici/benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py", line 134, in generate_or_load_realistic_dataset
+    realistic_dataset.generate_realistic_dataset(
+  File "/home/khushidesai/amici/benchmarks/sensitivity_scripts/../generate_realistic_dataset.py", line 96, in generate_realistic_dataset
+    flex_ad = _load_flex_data(flex_h5_path, annot_path)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/khushidesai/amici/benchmarks/sensitivity_scripts/../generate_realistic_dataset.py", line 135, in _load_flex_data
+    flex_ad = sc.read_10x_h5(flex_h5_path)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/envs/amici/lib/python3.12/site-packages/legacy_api_wrap/__init__.py", line 88, in fn_compatible
+    return fn(*args_all, **kw)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/envs/amici/lib/python3.12/site-packages/scanpy/readwrite.py", line 221, in read_10x_h5
+    with h5py.File(str(path), "r") as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/envs/amici/lib/python3.12/site-packages/h5py/_hl/files.py", line 555, in __init__
+    fid = make_fid(name, mode, userblock_size, fapl, fcpl, swmr=swmr)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/conda/envs/amici/lib/python3.12/site-packages/h5py/_hl/files.py", line 232, in make_fid
+    fid = h5f.open(name, flags, fapl=fapl)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5f.pyx", line 106, in h5py.h5f.open
+FileNotFoundError: [Errno 2] Unable to synchronously open file (unable to open file: name = '/home/khushidesai/amici/benchmarks/data/GSM7782698_count_raw_feature_bc_matrix.h5', errno = 2, error message = 'No such file or directory', flags = 0, o_flags = 0)

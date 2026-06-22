@@ -216,8 +216,8 @@ os.makedirs(figures_dir, exist_ok=True)
 
 ci_output_paths = [
     os.path.join(figures_dir, "length_scale_dataset_bootstrap_ci.csv"),
-    os.path.join(figures_dir, "length_scale_dataset_bootstrap_ci.png"),
-    os.path.join(figures_dir, "length_scale_dataset_bootstrap_ci.svg"),
+    os.path.join(figures_dir, "length_scale_dataset_bootstrap_ci_violin.png"),
+    os.path.join(figures_dir, "length_scale_dataset_bootstrap_ci_violin.svg"),
 ]
 if all(os.path.exists(path) for path in ci_output_paths):
     print("Dataset bootstrap length scale CI has already been plotted and saved. Skipping analysis.")
@@ -331,33 +331,55 @@ for (interaction_name, sender_type), group in model_estimates_df.groupby(["inter
 ci_df = pd.DataFrame(ci_records)
 ci_df.to_csv(os.path.join(figures_dir, "length_scale_dataset_bootstrap_ci.csv"), index=False)
 
-# %% Plot confidence intervals
-fig, ax = plt.subplots(figsize=(7, 4))
-y_pos = np.arange(len(ci_df))
-xerr = np.vstack(
-    [
-        ci_df["point_estimate"] - ci_df["ci_lower"],
-        ci_df["ci_upper"] - ci_df["point_estimate"],
-    ]
+# %% Plot length scale distributions
+plot_df = model_estimates_df.dropna(subset=["length_scale"]).copy()
+plot_interactions = (
+    plot_df[["interaction", "interaction_label", "gt_length_scale"]].drop_duplicates().sort_values("gt_length_scale")
 )
-ax.errorbar(
-    ci_df["point_estimate"],
-    y_pos,
-    xerr=xerr,
-    fmt="o",
-    capsize=4,
-    color="steelblue",
-)
-for y, gt in zip(y_pos, ci_df["gt_length_scale"], strict=False):
-    ax.scatter(gt, y, marker="x", color="black", zorder=3)
+positions = plot_interactions["gt_length_scale"].astype(float).to_numpy()
+violin_data = [
+    plot_df.loc[plot_df["interaction"] == interaction, "length_scale"].to_numpy()
+    for interaction in plot_interactions["interaction"]
+]
+min_spacing = np.min(np.diff(np.sort(positions))) if len(positions) > 1 else 1.0
+violin_width = max(0.8, min_spacing * 0.45)
 
-ax.set_yticks(y_pos)
-ax.set_yticklabels(ci_df["interaction_label"])
-ax.set_xlabel("Length scale")
-ax.set_title("Dataset bootstrap confidence intervals for AMICI length scales")
-ax.grid(axis="x", alpha=0.25)
+fig, ax = plt.subplots(figsize=(7, 4))
+violins = ax.violinplot(
+    violin_data,
+    positions=positions,
+    widths=violin_width,
+    showmeans=True,
+    showextrema=False,
+)
+for body in violins["bodies"]:
+    body.set_facecolor("steelblue")
+    body.set_edgecolor("black")
+    body.set_alpha(0.45)
+violins["cmeans"].set_color("black")
+violins["cmeans"].set_linewidth(1.2)
+
+rng = np.random.default_rng(0)
+for x_pos, values in zip(positions, violin_data, strict=False):
+    jitter = rng.uniform(-0.08 * violin_width, 0.08 * violin_width, size=len(values))
+    ax.scatter(np.full(len(values), x_pos) + jitter, values, color="black", s=12, alpha=0.45, zorder=3)
+
+axis_min = min(np.nanmin(plot_df["length_scale"]), np.nanmin(positions))
+axis_max = max(np.nanmax(plot_df["length_scale"]), np.nanmax(positions))
+ax.plot([axis_min, axis_max], [axis_min, axis_max], color="red", linestyle="--", linewidth=1.2)
+ax.set_xticks(positions)
+ax.set_xticklabels([f"{gt:g}" for gt in positions])
+ax.set_xlabel("Ground-truth length scale")
+ax.set_ylabel("Mean inferred length scale")
+ax.set_title("Dataset bootstrap length scale distributions for AMICI")
+ax.grid(axis="y", alpha=0.25)
 plt.tight_layout()
 
 for ext in ("png", "svg"):
     fig.savefig(os.path.join(figures_dir, f"length_scale_dataset_bootstrap_ci.{ext}"), dpi=300, bbox_inches="tight")
+    fig.savefig(
+        os.path.join(figures_dir, f"length_scale_dataset_bootstrap_ci_violin.{ext}"),
+        dpi=300,
+        bbox_inches="tight",
+    )
 plt.close(fig)
