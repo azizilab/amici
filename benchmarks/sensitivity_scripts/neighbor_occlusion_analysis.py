@@ -127,6 +127,7 @@ DATASET_CONFIGS = {
         "flex_h5_path": "data/GSM7782698_count_raw_feature_bc_matrix.h5",
         "annot_path": "data/41467_2023_43458_MOESM4_ESM.xlsx",
         "xenium_path": "data/xenium_rep1_io.h5ad",
+        "base_h5ad_path": "data/breast_cancer_42.h5ad",
         "scvi_model_dir": "data/scvi_model",
         "n_cv_folds": 3,
     },
@@ -171,6 +172,25 @@ def ensure_dataset(dataset_name, dataset_config):
         return
 
     if dataset_config["kind"] == "realistic":
+        base_h5ad_path = benchmark_path(dataset_config["base_h5ad_path"])
+        raw_input_paths = [
+            benchmark_path(dataset_config["flex_h5_path"]),
+            benchmark_path(dataset_config["annot_path"]),
+            benchmark_path(dataset_config["xenium_path"]),
+        ]
+        if not all(os.path.exists(path) for path in raw_input_paths):
+            if not os.path.exists(base_h5ad_path):
+                missing_paths = [path for path in raw_input_paths if not os.path.exists(path)]
+                raise FileNotFoundError(
+                    "Missing raw realistic inputs and cached base h5ad. "
+                    f"Missing raw inputs: {missing_paths}; cached base path: {base_h5ad_path}"
+                )
+            print(f"Raw realistic inputs not found. Using cached {base_h5ad_path}.")
+            adata = sc.read_h5ad(base_h5ad_path)
+            adata.obs_names_make_unique()
+            adata.write_h5ad(adata_path)
+            return
+
         np.random.seed(DATASET_SEED)
         torch.manual_seed(DATASET_SEED)
         scvi.settings.seed = DATASET_SEED
