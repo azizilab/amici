@@ -26,9 +26,9 @@ DATASET = "breast_cancer"
 BASE_DATASET_SEED = 42
 SHUFFLE_SEEDS = list(range(10))
 ATTENTION_THRESHOLD = 0.1
-SHUFFLE_FRACTION = 1.0
+SHUFFLE_FRACTION = 0.3
 TRAIN_SEED = 22
-RUN_NAME = "length_scale_coordinate_full_shuffle_sensitivity"
+RUN_NAME = f"length_scale_coordinate_{SHUFFLE_FRACTION}_shuffle_sensitivity"
 
 CONFIG = {
     "dir_path": "data/",
