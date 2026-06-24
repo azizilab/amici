@@ -1,37 +1,17 @@
 dir_path: "data/"
-results_path: "results/"
+results_path: "results_cv/"
 
 datasets_realistic:
   - breast_cancer
 
 datasets:
-  3ct_dataset_2way:
-    seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
-    labels_key: "leiden"
-    subtype_labels_key: "subtype"
-    ncem_niche_sizes: [10, 15, 20]
-    nichede_niche_sizes: [20, 200, 500]
-    gt_interactions:
-      interaction_1:
-        sender: "0"
-        receiver: "2"
-        interaction_subtype: "2_sub1"
-        neutral_subtype: "2_sub0"
-        length_scale: 10
-      interaction_2:
-        sender: "3"
-        receiver: "0"
-        interaction_subtype: "0_sub1"
-        neutral_subtype: "0_sub0"
-        length_scale: 20
-
   breast_cancer:
     generation_type: "realistic"
     seeds: [42]
     labels_key: "cell_type"
     subtype_labels_key: "subtype"
-    use_cross_validation: false
-    n_cv_folds: 3
+    use_cross_validation: true
+    n_cv_folds: 5
     sweep_baselines: true
     cgcom_batch_size: 32
     cgcom_scoring_batch_size: 4

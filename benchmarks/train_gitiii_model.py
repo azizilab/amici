@@ -18,7 +18,6 @@ from torch.utils.data import DataLoader, Subset
 
 GITIII_SPLIT_VERSION = 2
 
-
 def _results_path():
     return snakemake.config.get("results_path", "results/").rstrip("/")  # noqa: F821
 
