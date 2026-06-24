@@ -19,7 +19,6 @@ def main():
     ncem_pr_paths = snakemake.input.ncem_pr_paths  # noqa: F821
     nichede_pr_paths = snakemake.input.nichede_pr_paths  # noqa: F821
 
-    # Read the PR curves for NCEM and NicheDE along with the niche sizes
     ncem_prs = []
     ncem_model_names = []
     for ncem_pr_path in ncem_pr_paths:
@@ -34,7 +33,6 @@ def main():
         niche_size = nichede_pr_path.split("_")[1]
         nichede_model_names.append(f"NicheDE_{niche_size}")
 
-    # Plot the PR curves for all 4 models
     plot_pr_curves(
         [amici_pr, gitiii_pr] + ncem_prs + nichede_prs,
         ["AMICI", "GITIII"] + ncem_model_names + nichede_model_names,

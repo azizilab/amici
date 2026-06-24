@@ -11,6 +11,17 @@ import tensorflow as tf
 from gpu_utils import select_gpu
 from ncem_benchmark_utils import get_model_parameters, plot_ncem_loss_curves, train_ncem
 
+RESULTS_PATH = "results"
+NCEM_SPLIT_VERSION = 2
+
+
+def _results_path():
+    return RESULTS_PATH.rstrip("/")
+
+
+def _expected_cache_metadata():
+    return {"split_version": NCEM_SPLIT_VERSION}
+
 
 def train_single_run(
     adata,
@@ -23,6 +34,8 @@ def train_single_run(
     run_results_path,
     train_indices,
     eval_indices,
+    validation_indices=None,
+    scrub_neighbor_indices=None,
 ):
     """
     Train a single NCEM run, evaluate on eval_indices, and return the reconstruction loss.
@@ -40,6 +53,8 @@ def train_single_run(
         run_results_path: str, path to cache the result JSON
         train_indices: array-like, indices of training cells
         eval_indices: array-like, indices of cells to evaluate on
+        validation_indices: array-like, optional indices for NCEM validation/early stopping
+        scrub_neighbor_indices: array-like, optional indices removed as neighbor inputs
 
     Returns
     -------
@@ -49,8 +64,11 @@ def train_single_run(
     if run_results_path is not None and os.path.exists(run_results_path):
         with open(run_results_path) as f:
             cached = json.load(f)
-        print(f"  Loaded cached result: eval_recons={cached['test_recons']:.4f}")
-        return cached["test_recons"], cached["model_history"]
+        if cached.get("split_version") == NCEM_SPLIT_VERSION:
+            print(f"  Loaded cached result: eval_recons={cached['test_recons']:.4f}")
+            return cached["test_recons"], cached["model_history"]
+        print("  Ignoring cached NCEM result from an older split mode")
+        os.remove(run_results_path)
 
     model_history, trainer = train_ncem(
         adata,
@@ -62,6 +80,8 @@ def train_single_run(
         run_model_args_path,
         train_indices=train_indices,
         test_indices=eval_indices,
+        val_indices=validation_indices,
+        scrub_neighbor_indices=scrub_neighbor_indices,
     )
 
     eval_result = trainer.estimator.evaluate_any(
@@ -77,6 +97,7 @@ def train_single_run(
                 {
                     "test_recons": eval_recons,
                     "model_history": {k: [float(v) for v in vs] for k, vs in model_history.items()},
+                    **_expected_cache_metadata(),
                 },
                 f,
             )
@@ -93,6 +114,8 @@ def _run_sweep(
     train_indices,
     eval_indices,
     run_prefix,
+    validation_indices=None,
+    scrub_neighbor_indices=None,
 ):
     """
     Run the hyperparameter sweep over learning rate and l1 coefficient combinations.
@@ -106,6 +129,8 @@ def _run_sweep(
         train_indices: array-like, indices of training cells
         eval_indices: array-like, indices of cells to evaluate on
         run_prefix: str, prefix for run file names
+        validation_indices: array-like, optional indices for NCEM validation/early stopping
+        scrub_neighbor_indices: array-like, optional indices removed as neighbor inputs
 
     Returns
     -------
@@ -138,6 +163,8 @@ def _run_sweep(
             run_results_path,
             train_indices,
             eval_indices,
+            validation_indices=validation_indices,
+            scrub_neighbor_indices=scrub_neighbor_indices,
         )
 
         scores[run_id] = eval_recons
@@ -150,7 +177,46 @@ def _run_sweep(
     return best_run_id, best_eval_recons, scores, best_model_history
 
 
-def main(input_path, labels_key, dataset, seed, niche_size, sweep_baselines=False):
+def _save_best_run(
+    dataset,
+    seed,
+    niche_size,
+    model_dir,
+    model_path,
+    model_args_path,
+    all_runs,
+    best_run_id,
+    best_recons,
+    best_model_history,
+):
+    best_lr, best_l1_coef = all_runs[best_run_id]
+    best_run_model_path = os.path.join(model_dir, f"ncem_{niche_size}_final_run_{best_run_id}_checkpoint")
+    best_run_model_args_path = os.path.join(model_dir, f"ncem_{niche_size}_final_run_{best_run_id}.pickle")
+
+    print(f"Best final run {best_run_id}: lr={best_lr}, l1_coef={best_l1_coef}, test_recons={best_recons:.4f}")
+
+    for suffix in [".data-00000-of-00001", ".index"]:
+        src = best_run_model_path + suffix
+        if os.path.exists(src):
+            shutil.copy(src, model_path + suffix)
+    shutil.copy(best_run_model_args_path, model_args_path)
+
+    with open(f"{_results_path()}/{dataset}_{seed}/ncem_{niche_size}_model_params.json", "w") as f:
+        json.dump({"learning_rate": best_lr, "l1_coef": best_l1_coef, "test_recons": best_recons}, f)
+
+    plot_ncem_loss_curves(best_model_history, niche_size, f"{_results_path()}/{dataset}_{seed}/figures")
+
+
+def main(
+    input_path,
+    labels_key,
+    dataset,
+    seed,
+    niche_size,
+    sweep_baselines=False,
+    results_path="results",
+    use_cross_validation=False,
+):
     """
     Train the NCEM model with a hyperparameter sweep, keeping the best run.
 
@@ -162,11 +228,14 @@ def main(input_path, labels_key, dataset, seed, niche_size, sweep_baselines=Fals
         niche_size: int, number of neighbors to use
         sweep_baselines: bool, whether to sweep over multiple hyperparameter configurations
     """
+    global RESULTS_PATH
+    RESULTS_PATH = results_path
+
     adata = sc.read_h5ad(input_path)
     if "spatial" not in adata.uns:
         adata.uns["spatial"] = adata.obsm["spatial"].copy()
 
-    model_dir = f"results/{dataset}_{seed}/saved_models"
+    model_dir = f"{_results_path()}/{dataset}_{seed}/saved_models"
     model_path = os.path.join(model_dir, f"ncem_{niche_size}_checkpoint_{dataset}_{seed}")
     model_args_path = os.path.join(model_dir, f"ncem_{niche_size}_{dataset}_{seed}.pickle")
 
@@ -188,46 +257,102 @@ def main(input_path, labels_key, dataset, seed, niche_size, sweep_baselines=Fals
     random.seed(42)
     tf.random.set_seed(42)
 
-    best_run_id, best_test_recons, _, best_model_history = _run_sweep(
-        adata,
-        labels_key,
-        all_runs,
-        niche_size,
-        model_dir,
-        train_indices=train_indices,
-        eval_indices=test_indices,
-        run_prefix=f"ncem_{niche_size}_sweep",
-    )
+    use_cv = use_cross_validation
+
+    if use_cv:
+        if "cv_fold" not in adata.obs:
+            raise ValueError("use_cross_validation is true, but adata.obs['cv_fold'] is missing")
+
+        fold_values = sorted(int(fold) for fold in adata.obs.loc[adata.obs["cv_fold"] >= 0, "cv_fold"].unique())
+        cv_scores = {run_id: [] for run_id in range(len(all_runs))}
+
+        for fold_id in fold_values:
+            print(f"\n=== NCEM CV fold {fold_id + 1}/{len(fold_values)} ===")
+            fold_val_indices = np.where((adata.obs["train_test_split"] == "train") & (adata.obs["cv_fold"] == fold_id))[
+                0
+            ]
+            fold_train_indices = np.where(
+                (adata.obs["train_test_split"] == "train") & (adata.obs["cv_fold"] != fold_id)
+            )[0]
+
+            _, _, fold_scores, _ = _run_sweep(
+                adata,
+                labels_key,
+                all_runs,
+                niche_size,
+                model_dir,
+                train_indices=fold_train_indices,
+                eval_indices=fold_val_indices,
+                run_prefix=f"ncem_{niche_size}_cv_fold_{fold_id}",
+                validation_indices=fold_val_indices,
+                scrub_neighbor_indices=np.union1d(test_indices, fold_val_indices),
+            )
+
+            for run_id, score in fold_scores.items():
+                cv_scores[run_id].append(score)
+
+        avg_cv_scores = {run_id: float(np.mean(scores)) for run_id, scores in cv_scores.items()}
+        best_cv_run_id = min(avg_cv_scores, key=avg_cv_scores.get)
+        print(
+            f"\nBest NCEM CV config {best_cv_run_id}: lr={all_runs[best_cv_run_id][0]}, "
+            f"l1_coef={all_runs[best_cv_run_id][1]}, avg_val_recons={avg_cv_scores[best_cv_run_id]:.4f}"
+        )
+
+        best_run_id, best_test_recons, _, best_model_history = _run_sweep(
+            adata,
+            labels_key,
+            [all_runs[best_cv_run_id]],
+            niche_size,
+            model_dir,
+            train_indices=train_indices,
+            eval_indices=test_indices,
+            run_prefix=f"ncem_{niche_size}_final",
+            validation_indices=test_indices,
+            scrub_neighbor_indices=test_indices,
+        )
+        all_runs_to_save = [all_runs[best_cv_run_id]]
+    else:
+        best_run_id, best_test_recons, _, best_model_history = _run_sweep(
+            adata,
+            labels_key,
+            all_runs,
+            niche_size,
+            model_dir,
+            train_indices=train_indices,
+            eval_indices=test_indices,
+            run_prefix=f"ncem_{niche_size}_final",
+            validation_indices=test_indices,
+            scrub_neighbor_indices=test_indices,
+        )
+        all_runs_to_save = all_runs
 
     if best_run_id is None:
         raise RuntimeError("No runs completed successfully")
 
-    best_lr, best_l1_coef = all_runs[best_run_id]
-    best_run_model_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{best_run_id}_checkpoint")
-    best_run_model_args_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{best_run_id}.pickle")
-
-    print(f"Best run {best_run_id}: lr={best_lr}, l1_coef={best_l1_coef}, test_recons={best_test_recons:.4f}")
-
-    for suffix in [".data-00000-of-00001", ".index"]:
-        src = best_run_model_path + suffix
-        if os.path.exists(src):
-            shutil.copy(src, model_path + suffix)
-    shutil.copy(best_run_model_args_path, model_args_path)
-
-    with open(f"results/{dataset}_{seed}/ncem_{niche_size}_model_params.json", "w") as f:
-        json.dump({"learning_rate": best_lr, "l1_coef": best_l1_coef, "test_recons": best_test_recons}, f)
+    _save_best_run(
+        dataset,
+        seed,
+        niche_size,
+        model_dir,
+        model_path,
+        model_args_path,
+        all_runs_to_save,
+        best_run_id,
+        best_test_recons,
+        best_model_history,
+    )
 
     # Clean up sweep run files
     for run_id_cleanup in range(len(all_runs)):
         for suffix in [".data-00000-of-00001", ".index"]:
-            path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id_cleanup}_checkpoint") + suffix
-            if os.path.exists(path):
-                os.remove(path)
-        pickle_path = os.path.join(model_dir, f"ncem_{niche_size}_sweep_run_{run_id_cleanup}.pickle")
-        if os.path.exists(pickle_path):
-            os.remove(pickle_path)
-
-    plot_ncem_loss_curves(best_model_history, niche_size, f"results/{dataset}_{seed}/figures")
+            for prefix in [f"ncem_{niche_size}_sweep", f"ncem_{niche_size}_final"]:
+                path = os.path.join(model_dir, f"{prefix}_run_{run_id_cleanup}_checkpoint") + suffix
+                if os.path.exists(path):
+                    os.remove(path)
+        for prefix in [f"ncem_{niche_size}_sweep", f"ncem_{niche_size}_final"]:
+            pickle_path = os.path.join(model_dir, f"{prefix}_run_{run_id_cleanup}.pickle")
+            if os.path.exists(pickle_path):
+                os.remove(pickle_path)
 
 
 if __name__ == "__main__":
@@ -242,10 +367,21 @@ if __name__ == "__main__":
     seed = args[4]
     niche_size = args[5]
     sweep_baselines = len(args) > 6 and args[6].lower() == "true"
+    results_path = args[7] if len(args) > 7 else "results"
+    use_cross_validation = len(args) > 8 and args[8].lower() == "true"
 
     try:
         niche_size = int(niche_size)
-        main(input_path, labels_key, dataset, seed, niche_size, sweep_baselines=sweep_baselines)
+        main(
+            input_path,
+            labels_key,
+            dataset,
+            seed,
+            niche_size,
+            sweep_baselines=sweep_baselines,
+            results_path=results_path,
+            use_cross_validation=use_cross_validation,
+        )
         with open(output_path, "w") as f:
             f.write("Training done")
             f.flush()

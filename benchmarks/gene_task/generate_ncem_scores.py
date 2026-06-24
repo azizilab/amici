@@ -22,7 +22,7 @@ def main():
         dataset_config = snakemake.config["datasets"][snakemake.wildcards.dataset]  # noqa: F821
         labels_key = dataset_config["labels_key"]
 
-        model_dir = f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/saved_models"  # noqa: F821
+        model_dir = os.path.dirname(snakemake.input.ncem_all_train_done_path)  # noqa: F821
         model_path = os.path.join(
             model_dir,
             f"ncem_{niche_size}_checkpoint_{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}",  # noqa: F821
@@ -48,7 +48,7 @@ def main():
         interpreter.get_sender_receiver_effects(params_type="ols")
         interpreter.cv_idx = 0  # TODO: hack since this is not initialized in the model
 
-        save_dir = f"results/{snakemake.wildcards.dataset}_{snakemake.wildcards.seed}/figures"  # noqa: F821
+        save_dir = os.path.join(os.path.dirname(snakemake.output[0]), "figures")  # noqa: F821
         os.makedirs(save_dir, exist_ok=True)
 
         # Run the type coupling analysis

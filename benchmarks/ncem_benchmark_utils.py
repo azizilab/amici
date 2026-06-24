@@ -114,6 +114,8 @@ def train_ncem(
     model_args_path,
     train_indices=None,
     test_indices=None,
+    val_indices=None,
+    scrub_neighbor_indices=None,
 ):
     """
     Train the NCEM model.
@@ -128,7 +130,11 @@ def train_ncem(
         model_args_path: str, path to save the model arguments
         train_indices: np.ndarray, optional row indices into adata for training cells.
             If provided alongside test_indices, overrides NCEM's internal random split.
-            Validation is carved from train_indices (10% held out with seed 42).
+        val_indices: np.ndarray, optional row indices into adata for validation cells.
+            If provided, NCEM monitors exactly these cells instead of carving a random
+            validation split from train_indices.
+        scrub_neighbor_indices: np.ndarray, optional row indices into adata that must
+            not contribute as neighbors during training/evaluation.
         test_indices: np.ndarray, optional row indices into adata for test cells.
 
     Returns
@@ -148,19 +154,32 @@ def train_ncem(
     get_data_custom(interpreter=trainer.estimator)
 
     if train_indices is not None and test_indices is not None:
-        np.random.seed(42)
-        n_val = max(1, round(len(train_indices) * 0.1))
-        val_indices = np.random.choice(train_indices, size=n_val, replace=False)
-        train_only_indices = np.setdiff1d(train_indices, val_indices)
-
         img_key = trainer.estimator.complete_img_keys[0]
         img_keys = trainer.estimator.complete_img_keys
+        if val_indices is None:
+            np.random.seed(42)
+            n_val = max(1, round(len(train_indices) * 0.1))
+            val_indices = np.random.choice(train_indices, size=n_val, replace=False)
+            train_indices = np.setdiff1d(train_indices, val_indices)
+        if scrub_neighbor_indices is not None:
+            scrub_obs_names = set(adata.obs_names[np.asarray(scrub_neighbor_indices, dtype=int)])
+            for key, img_adata in trainer.estimator.data.img_celldata.items():
+                scrub_local_indices = np.array(
+                    [i for i, obs_name in enumerate(img_adata.obs_names) if obs_name in scrub_obs_names],
+                    dtype=int,
+                )
+                if scrub_local_indices.size == 0:
+                    continue
+                adjacency = trainer.estimator.a[key].tolil(copy=True)
+                adjacency[:, scrub_local_indices] = 0
+                trainer.estimator.a[key] = adjacency.tocsr()
+                trainer.estimator.a[key].eliminate_zeros()
         trainer.estimator.split_data_given(
             img_keys_test=img_keys,
             img_keys_train=img_keys,
             img_keys_eval=img_keys,
             nodes_idx_test={img_key: test_indices},
-            nodes_idx_train={img_key: train_only_indices},
+            nodes_idx_train={img_key: train_indices},
             nodes_idx_eval={img_key: val_indices},
         )
 

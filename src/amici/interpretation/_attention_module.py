@@ -192,14 +192,15 @@ class AMICIAttentionModule:
                 analysis to find the optimal number of clusters (2-12 range).
             random_state: Random state for KMeans clustering.
 
-        Returns:
+        Returns
+        -------
             pd.DataFrame: A DataFrame indexed by cell obs_names with the following columns:
                 - One column per cell type containing the normalized count of high-interacting
                   neighbors of that type
                 - 'hub_cluster': The assigned hub cluster label
         """
         # Get number of neighbors from column names
-        neighbor_cols = [col for col in self._attention_patterns_df.columns if col.startswith('neighbor_')]
+        neighbor_cols = [col for col in self._attention_patterns_df.columns if col.startswith("neighbor_")]
         n_neighbors = len(neighbor_cols)
 
         # Aggregate attention scores by max across all heads
@@ -210,11 +211,7 @@ class AMICIAttentionModule:
         cell_types = self._adata.obs[self._labels_key].unique()
 
         # Initialize result dataframe for high interacting counts
-        high_interacting_counts = pd.DataFrame(
-            0.0,
-            index=self._adata.obs_names,
-            columns=cell_types
-        )
+        high_interacting_counts = pd.DataFrame(0.0, index=self._adata.obs_names, columns=cell_types)
 
         # Compute interaction thresholds per receiver cell type
         interaction_thresholds = {}
@@ -222,9 +219,7 @@ class AMICIAttentionModule:
             receiver_cell_type_idxs = self._adata[self._adata.obs[self._labels_key] == cell_type].obs_names
 
             # Extract attention scores to neighbors of this cell type from all senders
-            attention_to_receiver = attention_scores_df.loc[
-                attention_scores_df.index.isin(receiver_cell_type_idxs)
-            ]
+            attention_to_receiver = attention_scores_df.loc[attention_scores_df.index.isin(receiver_cell_type_idxs)]
             attention_scores = attention_to_receiver.drop(columns=["label"]).values.flatten()
 
             # Compute quantile threshold (excluding zeros)
@@ -238,12 +233,8 @@ class AMICIAttentionModule:
         # For each cell type, compute high interacting neighbor counts
         for cell_type in cell_types:
             receiver_cell_type_idxs = self._adata[self._adata.obs[self._labels_key] == cell_type].obs_names
-            attention_to_receiver = attention_scores_df.loc[
-                attention_scores_df.index.isin(receiver_cell_type_idxs)
-            ]
-            receiver_nn_obs_names = self._nn_idxs_df.loc[
-                self._nn_idxs_df.index.isin(receiver_cell_type_idxs)
-            ]
+            attention_to_receiver = attention_scores_df.loc[attention_scores_df.index.isin(receiver_cell_type_idxs)]
+            receiver_nn_obs_names = self._nn_idxs_df.loc[self._nn_idxs_df.index.isin(receiver_cell_type_idxs)]
 
             # Get neighbor labels
             receiver_nn_labels = pd.DataFrame(
@@ -269,37 +260,29 @@ class AMICIAttentionModule:
             )
 
             # Merge attention scores with neighbor info
-            merged_attention_scores = pd.merge(
-                attention_to_receiver_melted,
-                melted_nn_obs_names,
-                left_on=["neighbor_col", "cell_idx"],
-                right_on=["neighbor_col", "index"],
-                how="inner"
-            ).drop(columns=["neighbor_col", "index"]).rename(
-                columns={"cell_idx": "receiver_idx"}
-            ).merge(
-                receiver_nn_labels.reset_index(),
-                right_on="index",
-                left_on="neighbor_idx",
-                how="left"
+            merged_attention_scores = (
+                pd.merge(
+                    attention_to_receiver_melted,
+                    melted_nn_obs_names,
+                    left_on=["neighbor_col", "cell_idx"],
+                    right_on=["neighbor_col", "index"],
+                    how="inner",
+                )
+                .drop(columns=["neighbor_col", "index"])
+                .rename(columns={"cell_idx": "receiver_idx"})
+                .merge(receiver_nn_labels.reset_index(), right_on="index", left_on="neighbor_idx", how="left")
             )
 
             # Filter by threshold and count
             threshold = interaction_thresholds[cell_type]
-            high_interacting_scores = merged_attention_scores[
-                merged_attention_scores["attention_score"] > threshold
-            ]
+            high_interacting_scores = merged_attention_scores[merged_attention_scores["attention_score"] > threshold]
 
             if len(high_interacting_scores) > 0:
                 high_interacting_counts_cell_type = (
-                    high_interacting_scores[["receiver_idx", "neighbor_label"]]
-                    .groupby(["receiver_idx"])
-                    .value_counts()
+                    high_interacting_scores[["receiver_idx", "neighbor_label"]].groupby(["receiver_idx"]).value_counts()
                 )
-                high_interacting_counts_cell_type = (
-                    high_interacting_counts_cell_type
-                    .reset_index()
-                    .pivot(columns="neighbor_label", index="receiver_idx", values="count")
+                high_interacting_counts_cell_type = high_interacting_counts_cell_type.reset_index().pivot(
+                    columns="neighbor_label", index="receiver_idx", values="count"
                 )
                 # Update the high_interacting_counts DataFrame
                 for col in high_interacting_counts_cell_type.columns:

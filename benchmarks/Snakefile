@@ -46,7 +46,7 @@ def get_gene_task_done_files(datasets_to_run):
         dataset_config = config["datasets"][dataset]
         # Generate all combinations of seeds and interaction names using itertools.product
         for seed in dataset_config["seeds"]:
-            done_files.append(expand("results/{dataset}_{seed}/gene_task_done.txt", dataset=dataset, seed=seed))
+            done_files.append(expand(os.path.join(config["results_path"], "{dataset}_{seed}/gene_task_done.txt"), dataset=dataset, seed=seed))
     return done_files
 
 def get_neighbor_interaction_task_done_files(datasets_to_run):
@@ -55,7 +55,7 @@ def get_neighbor_interaction_task_done_files(datasets_to_run):
         dataset_config = config["datasets"][dataset]
         # Generate all combinations of seeds and interaction names using itertools.product
         for seed in dataset_config["seeds"]:
-            done_files.append(expand("results/{dataset}_{seed}/neighbor_interaction_task_done.txt", dataset=dataset, seed=seed))
+            done_files.append(expand(os.path.join(config["results_path"], "{dataset}_{seed}/neighbor_interaction_task_done.txt"), dataset=dataset, seed=seed))
     return done_files
 
 def get_receiver_subtype_task_done_files(datasets_to_run):
@@ -64,15 +64,15 @@ def get_receiver_subtype_task_done_files(datasets_to_run):
         dataset_config = config["datasets"][dataset]
         # Generate all combinations of seeds and interaction names using itertools.product
         for seed in dataset_config["seeds"]:
-            done_files.append(expand("results/{dataset}_{seed}/receiver_subtype_task_done.txt", dataset=dataset, seed=seed))
+            done_files.append(expand(os.path.join(config["results_path"], "{dataset}_{seed}/receiver_subtype_task_done.txt"), dataset=dataset, seed=seed))
     return done_files
 
 def get_boxplot_done_files(datasets_to_run):
     done_files = []
     for dataset in datasets_to_run:
-        done_files.append(expand("results/{dataset}/gene_boxplots_done.txt", dataset=dataset))
-        done_files.append(expand("results/{dataset}/neighbor_interaction_boxplots_done.txt", dataset=dataset))
-        done_files.append(expand("results/{dataset}/receiver_subtype_boxplots_done.txt", dataset=dataset))
+        done_files.append(expand(os.path.join(config["results_path"], "{dataset}/gene_boxplots_done.txt"), dataset=dataset))
+        done_files.append(expand(os.path.join(config["results_path"], "{dataset}/neighbor_interaction_boxplots_done.txt"), dataset=dataset))
+        done_files.append(expand(os.path.join(config["results_path"], "{dataset}/receiver_subtype_boxplots_done.txt"), dataset=dataset))
     return done_files
 
 def get_length_scale_boxplot_done_files(datasets_to_run):
@@ -80,7 +80,7 @@ def get_length_scale_boxplot_done_files(datasets_to_run):
     for dataset in datasets_to_run:
         dataset_config = config["datasets"][dataset]
         for seed in dataset_config["seeds"]:
-            done_files.append(expand("results/{dataset}_{seed}/length_scale_boxplots_done.txt", dataset=dataset, seed=seed))
+            done_files.append(expand(os.path.join(config["results_path"], "{dataset}_{seed}/length_scale_boxplots_done.txt"), dataset=dataset, seed=seed))
     return done_files
 
 def get_ncem_gene_task_pr_files(dataset):
@@ -88,7 +88,7 @@ def get_ncem_gene_task_pr_files(dataset):
     dataset_config = config["datasets"][dataset]
     for seed in dataset_config["seeds"]:
         for ncem_niche_size in dataset_config["ncem_niche_sizes"]:
-            pr_files.extend(expand("results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_pr.csv", dataset=dataset, seed=seed, ncem_niche_size=ncem_niche_size))
+            pr_files.extend(expand(os.path.join(config["results_path"], "{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_pr.csv"), dataset=dataset, seed=seed, ncem_niche_size=ncem_niche_size))
     return pr_files
 
 def get_nichede_gene_task_pr_files(dataset):
@@ -96,7 +96,7 @@ def get_nichede_gene_task_pr_files(dataset):
     dataset_config = config["datasets"][dataset]
     for seed in dataset_config["seeds"]:
         for nichede_niche_size in dataset_config["nichede_niche_sizes"]:
-            pr_files.extend(expand("results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_pr.csv", dataset=dataset, seed=seed, nichede_niche_size=nichede_niche_size))
+            pr_files.extend(expand(os.path.join(config["results_path"], "{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_pr.csv"), dataset=dataset, seed=seed, nichede_niche_size=nichede_niche_size))
     return pr_files
 
 def get_labels_key(dataset):
@@ -162,7 +162,7 @@ rule run_ground_truth_genes:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/ground_truth_genes.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv"),
     script:
         "gene_task/generate_gt_gene_scores.py"
 
@@ -172,7 +172,7 @@ rule run_ground_truth_neighbor_interactions:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_neighbor_interactions.csv")
     script:
         "neighbor_interaction_task/generate_gt_neighbor_interaction_scores.py"
 
@@ -182,7 +182,7 @@ rule run_ground_truth_receiver_subtypes:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_receiver_subtypes.csv")
     script:
         "receiver_subtype_task/generate_gt_receiver_subtype_scores.py"
 
@@ -193,9 +193,9 @@ rule train_amici_model:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
-        "results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt",
-        "results/{dataset}_{seed}/amici_{dataset}_{seed}_mse_loss.txt"
+        os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt"),
+        os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"),
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_{dataset}_{seed}_mse_loss.txt")
     resources:
         gpu=1
     script:
@@ -207,14 +207,16 @@ rule train_ncem_model:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt",
+        os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt"),
     params:
         labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
         sweep_baselines=lambda wildcards: str(config["datasets"][wildcards.dataset].get("sweep_baselines", False)).lower(),
+        use_cross_validation=lambda wildcards: str(config["datasets"][wildcards.dataset].get("use_cross_validation", False)).lower(),
+        results_path=config["results_path"],
     resources:
         gpu=1
     shell:
-        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size} {params.sweep_baselines}"
+        "python train_ncem_model.py {input} {output} {params.labels_key} {wildcards.dataset} {wildcards.seed} {wildcards.ncem_niche_size} {params.sweep_baselines} {params.results_path} {params.use_cross_validation}"
 
 rule train_gitiii_model:
     conda:
@@ -222,7 +224,7 @@ rule train_gitiii_model:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/saved_models/GRIT_best.pth",
+        os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/GRIT_best.pth"),
     resources:
         gpu=1
     script:
@@ -234,7 +236,7 @@ rule train_cgcom_model:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt",
+        os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"),
     resources:
         gpu=1
     script:
@@ -246,10 +248,10 @@ rule run_amici_gene_task:
         "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
-        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt"),
+        best_seed_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt")
     output:
-        "results/{dataset}_{seed}/amici_gene_task_scores.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_gene_task_scores.csv"),
     resources:
         gpu=1
     script:
@@ -260,10 +262,10 @@ rule run_amici_neighbor_interaction_task:
         "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
-        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt"),
+        best_seed_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt")
     output:
-        "results/{dataset}_{seed}/amici_neighbor_interaction_scores.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_neighbor_interaction_scores.csv"),
     resources:
         gpu=1
     script:
@@ -274,10 +276,10 @@ rule run_amici_receiver_subtype_task:
         "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
-        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt"),
+        best_seed_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt")
     output:
-        "results/{dataset}_{seed}/amici_receiver_subtype_scores.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_receiver_subtype_scores.csv"),
     resources:
         gpu=1
     script:
@@ -289,9 +291,9 @@ rule run_ncem_gene_task:
         "envs/ncem.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        ncem_all_train_done_path="results/{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt"
+        ncem_all_train_done_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/ncem_{ncem_niche_size}_train_done.txt")
     output:
-        "results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv")
     resources:
         gpu=1
     script:
@@ -304,7 +306,7 @@ rule run_nichede_gene_task_model:
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad")
     output:
-        "results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv"),
     params:
         labels_key=lambda wildcards: get_labels_key(wildcards.dataset),
     resources:
@@ -318,9 +320,9 @@ rule run_gitiii_gene_task:
         "envs/gitiii.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/GRIT_best.pth")
     output:
-        "results/{dataset}_{seed}/gitiii_gene_task_scores.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_gene_task_scores.csv")
     resources:
         gpu=1
     script:
@@ -331,9 +333,9 @@ rule run_gitiii_neighbor_interaction_task:
         "envs/gitiii.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/GRIT_best.pth")
     output:
-        "results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv")
     resources:
         gpu=1
     script:
@@ -344,9 +346,9 @@ rule run_gitiii_receiver_subtype_task:
         "envs/gitiii.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/GRIT_best.pth"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/GRIT_best.pth")
     output:
-        "results/{dataset}_{seed}/gitiii_receiver_subtype_scores.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_receiver_subtype_scores.csv")
     resources:
         gpu=1
     script:
@@ -357,9 +359,9 @@ rule run_cgcom_neighbor_interaction_task:
         "envs/cgcom.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt")
     output:
-        "results/{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv")
     resources:
         gpu=1
     script:
@@ -370,9 +372,9 @@ rule run_cgcom_receiver_subtype_task:
         "envs/cgcom.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/cgcom_{dataset}_{seed}_model.pt")
     output:
-        "results/{dataset}_{seed}/cgcom_receiver_subtype_scores.csv"
+        os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_receiver_subtype_scores.csv")
     resources:
         gpu=1
     script:
@@ -383,10 +385,10 @@ rule run_amici_gene_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
-        amici_scores_path="results/{dataset}_{seed}/amici_gene_task_scores.csv"
+        gt_gene_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv"),
+        amici_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_gene_task_scores.csv")
     output:
-        "results/{dataset}_{seed}/amici_gene_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_gene_task_pr.csv"),
     script:
         "gene_task/generate_amici_pr.py"
 
@@ -394,11 +396,11 @@ rule run_amici_neighbor_interaction_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv",
-        amici_scores_path="results/{dataset}_{seed}/amici_neighbor_interaction_scores.csv",
-        gitiii_scores_path="results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+        gt_neighbor_interactions_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_neighbor_interactions.csv"),
+        amici_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_neighbor_interaction_scores.csv"),
+        gitiii_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv")
     output:
-        "results/{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv"),
     script:
         "neighbor_interaction_task/generate_amici_pr.py"
 
@@ -406,10 +408,10 @@ rule run_amici_receiver_subtype_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv",
-        amici_scores_path="results/{dataset}_{seed}/amici_receiver_subtype_scores.csv",
+        gt_receiver_subtypes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_receiver_subtypes.csv"),
+        amici_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_receiver_subtype_scores.csv"),
     output:
-        "results/{dataset}_{seed}/amici_receiver_subtype_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/amici_receiver_subtype_task_pr.csv"),
     script:
         "receiver_subtype_task/generate_amici_pr.py"
 
@@ -418,22 +420,22 @@ rule run_ncem_gene_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
-        ncem_scores_path="results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv"
+        gt_gene_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv"),
+        ncem_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_scores.csv")
     output:
-        "results/{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/ncem_{ncem_niche_size}_gene_task_pr.csv"),
     script:
         "gene_task/generate_ncem_pr.py"
 
-# Run PR curves for NicheDE model for gene task only
+#Run PR curves for NicheDE model for gene task only
 rule run_nichede_gene_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
-        nichede_scores_path="results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv"
+        gt_gene_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv"),
+        nichede_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_scores.csv")
     output:
-        "results/{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/nichede_{nichede_niche_size}_gene_task_pr.csv"),
     script:
         "gene_task/generate_nichede_pr.py"
 
@@ -442,10 +444,10 @@ rule run_gitiii_gene_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_gene_scores_path="results/{dataset}_{seed}/ground_truth_genes.csv",
-        gitiii_scores_path="results/{dataset}_{seed}/gitiii_gene_task_scores.csv"
+        gt_gene_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv"),
+        gitiii_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_gene_task_scores.csv")
     output:
-        "results/{dataset}_{seed}/gitiii_gene_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_gene_task_pr.csv"),
     script:
         "gene_task/generate_gitiii_pr.py"
 
@@ -453,10 +455,10 @@ rule run_gitiii_neighbor_interaction_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv",
-        gitiii_scores_path="results/{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv"
+        gt_neighbor_interactions_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_neighbor_interactions.csv"),
+        gitiii_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_neighbor_interaction_scores.csv")
     output:
-        "results/{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv"),
     script:
         "neighbor_interaction_task/generate_gitiii_pr.py"
 
@@ -464,10 +466,10 @@ rule run_gitiii_receiver_subtype_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv",
-        gitiii_scores_path="results/{dataset}_{seed}/gitiii_receiver_subtype_scores.csv"
+        gt_receiver_subtypes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_receiver_subtypes.csv"),
+        gitiii_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_receiver_subtype_scores.csv")
     output:
-        "results/{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv"),
     script:
         "receiver_subtype_task/generate_gitiii_pr.py"
 
@@ -476,10 +478,10 @@ rule run_cgcom_neighbor_interaction_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv",
-        cgcom_scores_path="results/{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv"
+        gt_neighbor_interactions_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_neighbor_interactions.csv"),
+        cgcom_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_neighbor_interaction_scores.csv")
     output:
-        "results/{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv"),
     script:
         "neighbor_interaction_task/generate_cgcom_pr.py"
 
@@ -487,10 +489,10 @@ rule run_cgcom_receiver_subtype_task_pr:
     conda:
         "envs/basic.yaml"
     input:
-        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv",
-        cgcom_scores_path="results/{dataset}_{seed}/cgcom_receiver_subtype_scores.csv"
+        gt_receiver_subtypes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_receiver_subtypes.csv"),
+        cgcom_scores_path=os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_receiver_subtype_scores.csv")
     output:
-        "results/{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv",
+        os.path.join(config["results_path"], "{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv"),
     script:
         "receiver_subtype_task/generate_cgcom_pr.py"
 
@@ -499,14 +501,16 @@ rule plot_gene_task_pr_curves:
     conda:
         "envs/basic.yaml"
     input:
-        amici_pr_path="results/{dataset}_{seed}/amici_gene_task_pr.csv",
+        amici_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_gene_task_pr.csv"),
         ncem_pr_paths=lambda wildcards: get_ncem_gene_task_pr_files(wildcards.dataset),
-        nichede_pr_paths=lambda wildcards: get_nichede_gene_task_pr_files(wildcards.dataset),
-        gitiii_pr_path="results/{dataset}_{seed}/gitiii_gene_task_pr.csv",
-        gt_genes_path="results/{dataset}_{seed}/ground_truth_genes.csv"
+        nichede_pr_paths=lambda wildcards: []
+        if config["datasets"][wildcards.dataset].get("use_cross_validation", False)
+        else get_nichede_gene_task_pr_files(wildcards.dataset),
+        gitiii_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_gene_task_pr.csv"),
+        gt_genes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_genes.csv")
     output:
-        "results/{dataset}_{seed}/baseline_pr_curves_gene_task.png",
-        "results/{dataset}_{seed}/gene_task_done.txt"
+        os.path.join(config["results_path"], "{dataset}_{seed}/baseline_pr_curves_gene_task.png"),
+        os.path.join(config["results_path"], "{dataset}_{seed}/gene_task_done.txt")
     script:
         "gene_task/plot_pr_curves.py"
 
@@ -515,13 +519,20 @@ rule plot_neighbor_interaction_task_pr_curves:
     conda:
         "envs/basic.yaml"
     input:
-        amici_pr_path="results/{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv",
-        gitiii_pr_path="results/{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv",
-        cgcom_pr_path="results/{dataset}_{seed}/cgcom_neighbor_interaction_task_pr.csv",
-        gt_neighbor_interactions_path="results/{dataset}_{seed}/ground_truth_neighbor_interactions.csv"
+        amici_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_neighbor_interaction_task_pr.csv"),
+        gitiii_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_neighbor_interaction_task_pr.csv"),
+        cgcom_pr_paths=lambda wildcards: []
+        if config["datasets"][wildcards.dataset].get("use_cross_validation", False)
+        else [
+            os.path.join(
+                config["results_path"],
+                f"{wildcards.dataset}_{wildcards.seed}/cgcom_neighbor_interaction_task_pr.csv",
+            )
+        ],
+        gt_neighbor_interactions_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_neighbor_interactions.csv")
     output:
-        "results/{dataset}_{seed}/baseline_pr_curves_neighbor_interaction_task.png",
-        "results/{dataset}_{seed}/neighbor_interaction_task_done.txt",
+        os.path.join(config["results_path"], "{dataset}_{seed}/baseline_pr_curves_neighbor_interaction_task.png"),
+        os.path.join(config["results_path"], "{dataset}_{seed}/neighbor_interaction_task_done.txt"),
     script:
         "neighbor_interaction_task/plot_pr_curves.py"
 
@@ -530,13 +541,20 @@ rule plot_receiver_subtype_task_pr_curves:
     conda:
         "envs/basic.yaml"
     input:
-        amici_pr_path="results/{dataset}_{seed}/amici_receiver_subtype_task_pr.csv",
-        gitiii_pr_path="results/{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv",
-        cgcom_pr_path="results/{dataset}_{seed}/cgcom_receiver_subtype_task_pr.csv",
-        gt_receiver_subtypes_path="results/{dataset}_{seed}/ground_truth_receiver_subtypes.csv"
+        amici_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/amici_receiver_subtype_task_pr.csv"),
+        gitiii_pr_path=os.path.join(config["results_path"], "{dataset}_{seed}/gitiii_receiver_subtype_task_pr.csv"),
+        cgcom_pr_paths=lambda wildcards: []
+        if config["datasets"][wildcards.dataset].get("use_cross_validation", False)
+        else [
+            os.path.join(
+                config["results_path"],
+                f"{wildcards.dataset}_{wildcards.seed}/cgcom_receiver_subtype_task_pr.csv",
+            )
+        ],
+        gt_receiver_subtypes_path=os.path.join(config["results_path"], "{dataset}_{seed}/ground_truth_receiver_subtypes.csv")
     output:
-        "results/{dataset}_{seed}/baseline_pr_curves_receiver_subtype_task.png",
-        "results/{dataset}_{seed}/receiver_subtype_task_done.txt",
+        os.path.join(config["results_path"], "{dataset}_{seed}/baseline_pr_curves_receiver_subtype_task.png"),
+        os.path.join(config["results_path"], "{dataset}_{seed}/receiver_subtype_task_done.txt"),
     script:
         "receiver_subtype_task/plot_pr_curves.py"
 
@@ -546,11 +564,11 @@ rule plot_amici_length_scale_boxplots:
         "envs/amici.yaml"
     input:
         adata_path=os.path.join(config["dir_path"], "{dataset}_{seed}.h5ad"),
-        model_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt",
-        best_seed_path="results/{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt"
+        model_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_model/model.pt"),
+        best_seed_path=os.path.join(config["results_path"], "{dataset}_{seed}/saved_models/amici_{dataset}_{seed}_best_seed.txt")
     output:
-        "results/{dataset}_{seed}/length_scale_distribution.png",
-        "results/{dataset}_{seed}/length_scale_boxplots_done.txt"
+        os.path.join(config["results_path"], "{dataset}_{seed}/length_scale_distribution.png"),
+        os.path.join(config["results_path"], "{dataset}_{seed}/length_scale_boxplots_done.txt")
     resources:
         gpu=1
     script:
@@ -565,8 +583,8 @@ rule plot_gene_task_boxplots:
             config.get("datasets_to_run", list(config["datasets"].keys()))
         )
     output:
-        "results/{dataset}/baseline_auprc_boxplots_gene_task.png",
-        "results/{dataset}/gene_boxplots_done.txt"
+        os.path.join(config["results_path"], "{dataset}/baseline_auprc_boxplots_gene_task.png"),
+        os.path.join(config["results_path"], "{dataset}/gene_boxplots_done.txt")
     script:
         "gene_task/plot_boxplots.py"
 
@@ -579,8 +597,8 @@ rule plot_neighbor_interaction_task_boxplots:
             config.get("datasets_to_run", list(config["datasets"].keys()))
         )
     output:
-        "results/{dataset}/baseline_auprc_boxplots_neighbor_interaction_task.png",
-        "results/{dataset}/neighbor_interaction_boxplots_done.txt"
+        os.path.join(config["results_path"], "{dataset}/baseline_auprc_boxplots_neighbor_interaction_task.png"),
+        os.path.join(config["results_path"], "{dataset}/neighbor_interaction_boxplots_done.txt")
     script:
         "neighbor_interaction_task/plot_boxplots.py"
 
@@ -593,7 +611,7 @@ rule plot_receiver_subtype_task_boxplots:
             config.get("datasets_to_run", list(config["datasets"].keys()))
         )
     output:
-        "results/{dataset}/baseline_auprc_boxplots_receiver_subtype_task.png",
-        "results/{dataset}/receiver_subtype_boxplots_done.txt"
+        os.path.join(config["results_path"], "{dataset}/baseline_auprc_boxplots_receiver_subtype_task.png"),
+        os.path.join(config["results_path"], "{dataset}/receiver_subtype_boxplots_done.txt")
     script:
         "receiver_subtype_task/plot_boxplots.py"

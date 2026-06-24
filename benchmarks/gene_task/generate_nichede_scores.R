@@ -17,7 +17,7 @@ library(stringr)
 print("Successfully installed dependencies...")
 
 # Load the dataset
-dataset_path <- snakemake@input[[1]]
+dataset_path <- snakemake@input[[1]] # noqa: F821
 
 seurat_dataset_path <- str_replace(dataset_path, ".h5ad", ".rds")
 
@@ -41,7 +41,7 @@ if (ncol(seurat_obj) > MAX_CELLS) {
 }
 
 # Create deconvolution matrix with cell type labels
-labels_key <- snakemake@params[["labels_key"]]
+labels_key <- snakemake@params[["labels_key"]] # noqa: F821
 cell_types <- seurat_obj[[labels_key]][, 1]
 cell_names <- colnames(seurat_obj)
 cell_type_mat <- matrix(0, nrow=length(cell_names), ncol=length(unique(cell_types)))
@@ -110,7 +110,7 @@ print("Successfully formatted data for NicheDE...")
 nichede_obj <- CreateNicheDEObjectFromSeurat(
   seurat_object=seurat_obj,
   assay="RNA",
-  sigma=as.integer(snakemake@wildcards[["nichede_niche_size"]]),
+  sigma=as.integer(snakemake@wildcards[["nichede_niche_size"]]), # noqa: F821
   deconv_mat=cell_type_mat,
   library_mat=library_mat
 )
@@ -166,4 +166,4 @@ create_interaction_df <- function(gene_by_cell_type_pvals_pos) {
 gene_by_cell_type_pvals_df <- create_interaction_df(positive_pvals)
 
 # Write to CSV files
-write.csv(gene_by_cell_type_pvals_df, snakemake@output[[1]], row.names=FALSE)
+write.csv(gene_by_cell_type_pvals_df, snakemake@output[[1]], row.names=FALSE) # noqa: F821
