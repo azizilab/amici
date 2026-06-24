@@ -1,4 +1,5 @@
 # %% Import libraries
+import itertools
 import json
 import os
 import random
@@ -24,7 +25,6 @@ from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 # %% Config
 DATASET = "breast_cancer"
 DATASET_SEEDS = list(range(10))
-TRAIN_SEED = 22
 ATTENTION_THRESHOLD = 0.1
 CONFIDENCE_LEVEL = 0.95
 N_BOOTSTRAP = 10000
@@ -97,22 +97,70 @@ def benchmark_path(benchmark_dir, path):
     return os.path.join(benchmark_dir, path)
 
 
-def build_run_config(dataset_config):
-    """Build one fixed AMICI config from the benchmark parameter set."""
+def build_run_configs(dataset_config):
+    """Build all AMICI configs from the benchmark sweep parameter set."""
     sweep = dataset_config["sweep_params"]
-    schedule = sweep["attention_penalty_schedule"][0]
-    return {
-        "end_val": sweep["end_attention_penalty"][0],
-        "flavor": sweep["penalty_flavor_params"][0],
-        "value_l1": sweep["value_l1_penalty_coef"][0],
-        "train_seed": TRAIN_SEED,
-        "epoch_start": schedule[0],
-        "epoch_end": schedule[1],
-        "batch_size": sweep["batch_size"][0],
-        "n_heads": sweep["n_heads"][0],
-        "lr": sweep["lr"][0],
-        "n_neighbors": sweep["n_neighbors"][0],
-    }
+    run_configs = []
+    for end_val, schedule, train_seed, value_l1, batch_size, lr, n_neighbors, flavor, n_heads in itertools.product(
+        sweep["end_attention_penalty"],
+        sweep["attention_penalty_schedule"],
+        sweep["seed"],
+        sweep["value_l1_penalty_coef"],
+        sweep["batch_size"],
+        sweep["lr"],
+        sweep["n_neighbors"],
+        sweep["penalty_flavor_params"],
+        sweep["n_heads"],
+    ):
+        run_configs.append(
+            {
+                "end_val": end_val,
+                "flavor": flavor,
+                "value_l1": value_l1,
+                "train_seed": train_seed,
+                "epoch_start": schedule[0],
+                "epoch_end": schedule[1],
+                "batch_size": batch_size,
+                "n_heads": n_heads,
+                "lr": lr,
+                "n_neighbors": n_neighbors,
+            }
+        )
+    return run_configs
+
+
+def cache_matches_run(result, run):
+    """Return whether an on-disk run result was produced with the requested config."""
+    keys = [
+        "dataset_seed",
+        "run_idx",
+        "end_val",
+        "flavor",
+        "value_l1",
+        "train_seed",
+        "epoch_start",
+        "epoch_end",
+        "batch_size",
+        "n_heads",
+        "lr",
+        "n_neighbors",
+    ]
+    return all(result.get(key) == run.get(key) for key in keys)
+
+
+def dataset_outputs_current(best_params_path, estimates_path, samples_path, run_configs):
+    """Return whether cached length-scale outputs were computed with the current AMICI sweep."""
+    if not (os.path.exists(best_params_path) and os.path.exists(estimates_path) and os.path.exists(samples_path)):
+        return False
+    with open(best_params_path) as f:
+        best_params = json.load(f)
+
+    expected_train_seeds = [run["train_seed"] for run in run_configs]
+    return (
+        best_params.get("n_candidate_runs") == len(run_configs)
+        and best_params.get("candidate_train_seeds") == expected_train_seeds
+        and best_params.get("selection_metric") == "test_loss"
+    )
 
 
 def set_all_seeds(seed):
@@ -152,7 +200,9 @@ def train_or_load_run(adata, dataset_config, run, run_path, result_path, eval_in
     """Train one AMICI run or load its cached result."""
     if os.path.exists(result_path) and os.path.exists(os.path.join(run_path, "model.pt")):
         with open(result_path) as f:
-            return json.load(f)
+            result = json.load(f)
+        if cache_matches_run(result, run):
+            return result
 
     pl.seed_everything(run["train_seed"])
     adata_train = adata[adata.obs["train_test_split"] == "train"].copy()
@@ -291,43 +341,42 @@ def plot_dataset_bootstrap_ci(model_estimates_df, figures_dir):
         .drop_duplicates()
         .sort_values("gt_length_scale")
     )
-    positions = plot_interactions["gt_length_scale"].astype(float).to_numpy()
+    positions = np.arange(1, len(plot_interactions) + 1)
     violin_data = [
         plot_df.loc[plot_df["interaction"] == interaction, "mean_length_scale"].to_numpy()
         for interaction in plot_interactions["interaction"]
     ]
-    min_spacing = np.min(np.diff(np.sort(positions))) if len(positions) > 1 else 1.0
-    violin_width = max(0.8, min_spacing * 0.45)
+    gt_positions = plot_interactions["gt_length_scale"].astype(float).to_numpy()
 
     fig, ax = plt.subplots(figsize=(8, 4.5))
     violins = ax.violinplot(
         violin_data,
         positions=positions,
-        widths=violin_width,
+        vert=False,
+        widths=0.8,
         showmeans=True,
-        showextrema=False,
+        showextrema=True,
     )
     for body in violins["bodies"]:
         body.set_facecolor("steelblue")
-        body.set_edgecolor("black")
+        body.set_edgecolor("steelblue")
         body.set_alpha(0.45)
-    violins["cmeans"].set_color("black")
-    violins["cmeans"].set_linewidth(1.2)
+    for part in ("cmeans", "cmins", "cmaxes", "cbars"):
+        violins[part].set_color("steelblue")
+        violins[part].set_linewidth(1.6)
 
-    rng = np.random.default_rng(0)
-    for x_pos, values in zip(positions, violin_data, strict=False):
-        jitter = rng.uniform(-0.08 * violin_width, 0.08 * violin_width, size=len(values))
-        ax.scatter(np.full(len(values), x_pos) + jitter, values, color="black", s=16, alpha=0.55, zorder=3)
-
-    axis_min = min(np.nanmin(plot_df["mean_length_scale"]), np.nanmin(positions))
-    axis_max = max(np.nanmax(plot_df["mean_length_scale"]), np.nanmax(positions))
-    ax.plot([axis_min, axis_max], [axis_min, axis_max], color="red", linestyle="--", linewidth=1.2)
-    ax.set_xticks(positions)
-    ax.set_xticklabels([f"{gt:g}" for gt in positions])
-    ax.set_xlabel("Ground-truth length scale")
-    ax.set_ylabel("Mean inferred length scale")
+    ax.scatter(gt_positions, positions, marker="x", color="black", s=180, linewidths=3.0, zorder=4)
+    axis_values = np.concatenate([plot_df["mean_length_scale"].to_numpy(), gt_positions])
+    axis_min = np.nanmin(axis_values)
+    axis_max = np.nanmax(axis_values)
+    axis_padding = 0.05 * (axis_max - axis_min) if axis_max > axis_min else 1.0
+    ax.set_xlim(axis_min - axis_padding, axis_max + axis_padding)
+    ax.set_yticks(positions)
+    ax.set_yticklabels(plot_interactions["interaction_label"])
+    ax.set_xlabel("Ground truth and inferred length scale")
+    ax.set_ylabel("Interaction")
     ax.set_title("Realistic dataset bootstrap length scale distributions for AMICI")
-    ax.grid(axis="y", alpha=0.25)
+    ax.grid(axis="x", alpha=0.25)
     plt.tight_layout()
 
     for ext in ("png", "svg"):
@@ -364,11 +413,12 @@ output_paths = [
     os.path.join(figures_dir, f"{RUN_NAME}_violin.png"),
     os.path.join(figures_dir, f"{RUN_NAME}_violin.svg"),
 ]
-if all(os.path.exists(path) for path in output_paths):
-    print("Realistic length scale dataset bootstrap CI has already been plotted and saved. Skipping analysis.")
-    sys.exit(0)
+missing_outputs = [path for path in output_paths if not os.path.exists(path)]
+if missing_outputs:
+    print("Missing cached output files; recomputing realistic length scale dataset bootstrap outputs.")
 
-run_config = build_run_config(dataset_config)
+run_configs = build_run_configs(dataset_config)
+print(f"Sweeping {len(run_configs)} AMICI models per realistic dataset.")
 estimate_records = []
 sample_records = []
 
@@ -384,7 +434,7 @@ for dataset_seed in DATASET_SEEDS:
     samples_path = os.path.join(dataset_model_dir, "length_scale_samples.csv")
     os.makedirs(dataset_model_dir, exist_ok=True)
 
-    if os.path.exists(estimates_path) and os.path.exists(samples_path):
+    if dataset_outputs_current(best_params_path, estimates_path, samples_path, run_configs):
         estimate_records.append(pd.read_csv(estimates_path))
         sample_records.append(pd.read_csv(samples_path))
         continue
@@ -394,14 +444,32 @@ for dataset_seed in DATASET_SEEDS:
         adata,
         labels_key=dataset_config["labels_key"],
         coord_obsm_key="spatial",
-        n_neighbors=int(run_config["n_neighbors"]),
+        n_neighbors=int(run_configs[0]["n_neighbors"]),
     )
     test_indices = np.where(adata.obs["train_test_split"] == "test")[0]
 
-    run = {**run_config, "dataset_seed": dataset_seed, "run_idx": 0}
-    run_path = os.path.join(dataset_model_dir, "run_0")
-    result_path = os.path.join(dataset_model_dir, "run_0_results.json")
-    best_result = train_or_load_run(adata, dataset_config, run, run_path, result_path, test_indices)
+    run_results = []
+    for run_idx, run_config in enumerate(run_configs):
+        run = {**run_config, "dataset_seed": dataset_seed, "run_idx": run_idx}
+        run_path = os.path.join(dataset_model_dir, f"run_{run_idx}_seed_{run['train_seed']}")
+        result_path = os.path.join(dataset_model_dir, f"run_{run_idx}_seed_{run['train_seed']}_results.json")
+        run_results.append(train_or_load_run(adata, dataset_config, run, run_path, result_path, test_indices))
+
+    best_result = min(run_results, key=lambda x: x["test_loss"])
+    best_result = {
+        **best_result,
+        "selection_metric": "test_loss",
+        "n_candidate_runs": len(run_results),
+        "candidate_train_seeds": [run["train_seed"] for run in run_configs],
+        "candidate_test_losses": [
+            {
+                "run_idx": result["run_idx"],
+                "train_seed": result["train_seed"],
+                "test_loss": result["test_loss"],
+            }
+            for result in run_results
+        ],
+    }
     if os.path.exists(best_model_path):
         shutil.rmtree(best_model_path)
     shutil.copytree(best_result["model_path"], best_model_path)
@@ -409,6 +477,12 @@ for dataset_seed in DATASET_SEEDS:
     with open(best_params_path, "w") as f:
         json.dump(best_result, f, indent=2)
 
+    AMICI.setup_anndata(
+        adata,
+        labels_key=dataset_config["labels_key"],
+        coord_obsm_key="spatial",
+        n_neighbors=int(best_result["n_neighbors"]),
+    )
     model = AMICI.load(best_model_path, adata=adata)
     estimate_df, sample_df = compute_length_scale_estimates(adata, model, dataset_config, dataset_seed, best_result)
     estimate_df.to_csv(estimates_path, index=False)

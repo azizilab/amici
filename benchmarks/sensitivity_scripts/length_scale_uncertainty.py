@@ -239,43 +239,42 @@ plot_df = length_scale_df.dropna(subset=["length_scale"]).copy()
 plot_interactions = (
     plot_df[["interaction", "interaction_label", "gt_length_scale"]].drop_duplicates().sort_values("gt_length_scale")
 )
-positions = plot_interactions["gt_length_scale"].astype(float).to_numpy()
+positions = np.arange(1, len(plot_interactions) + 1)
 violin_data = [
     plot_df.loc[plot_df["interaction"] == interaction, "length_scale"].to_numpy()
     for interaction in plot_interactions["interaction"]
 ]
-min_spacing = np.min(np.diff(np.sort(positions))) if len(positions) > 1 else 1.0
-violin_width = max(0.8, min_spacing * 0.45)
+gt_positions = plot_interactions["gt_length_scale"].astype(float).to_numpy()
 
-fig, ax = plt.subplots(figsize=(7, 4))
+fig, ax = plt.subplots(figsize=(8, 4.5))
 violins = ax.violinplot(
     violin_data,
     positions=positions,
-    widths=violin_width,
+    vert=False,
+    widths=0.8,
     showmeans=True,
-    showextrema=False,
+    showextrema=True,
 )
 for body in violins["bodies"]:
     body.set_facecolor("steelblue")
-    body.set_edgecolor("black")
+    body.set_edgecolor("steelblue")
     body.set_alpha(0.45)
-violins["cmeans"].set_color("black")
-violins["cmeans"].set_linewidth(1.2)
+for part in ("cmeans", "cmins", "cmaxes", "cbars"):
+    violins[part].set_color("steelblue")
+    violins[part].set_linewidth(1.6)
 
-rng = np.random.default_rng(0)
-for x_pos, values in zip(positions, violin_data, strict=False):
-    jitter = rng.uniform(-0.08 * violin_width, 0.08 * violin_width, size=len(values))
-    ax.scatter(np.full(len(values), x_pos) + jitter, values, color="black", s=8, alpha=0.35, zorder=3)
-
-axis_min = min(np.nanmin(plot_df["length_scale"]), np.nanmin(positions))
-axis_max = max(np.nanmax(plot_df["length_scale"]), np.nanmax(positions))
-ax.plot([axis_min, axis_max], [axis_min, axis_max], color="red", linestyle="--", linewidth=1.2)
-ax.set_xticks(positions)
-ax.set_xticklabels([f"{gt:g}" for gt in positions])
-ax.set_xlabel("Ground-truth length scale")
-ax.set_ylabel("Inferred length scale")
+ax.scatter(gt_positions, positions, marker="x", color="black", s=180, linewidths=3.0, zorder=4)
+axis_values = np.concatenate([plot_df["length_scale"].to_numpy(), gt_positions])
+axis_min = np.nanmin(axis_values)
+axis_max = np.nanmax(axis_values)
+axis_padding = 0.05 * (axis_max - axis_min) if axis_max > axis_min else 1.0
+ax.set_xlim(axis_min - axis_padding, axis_max + axis_padding)
+ax.set_yticks(positions)
+ax.set_yticklabels(plot_interactions["interaction_label"])
+ax.set_xlabel("Ground truth and inferred length scale")
+ax.set_ylabel("Interaction")
 ax.set_title("Bootstrap length scale distributions for AMICI")
-ax.grid(axis="y", alpha=0.25)
+ax.grid(axis="x", alpha=0.25)
 plt.tight_layout()
 
 for ext in ("png", "svg"):
