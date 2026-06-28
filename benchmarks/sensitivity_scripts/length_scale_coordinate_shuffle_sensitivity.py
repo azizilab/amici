@@ -27,8 +27,10 @@ BASE_DATASET_SEED = 42
 SHUFFLE_SEEDS = list(range(10))
 ATTENTION_THRESHOLD = 0.1
 SHUFFLE_FRACTION = 0.3
+SHUFFLE_LABEL = f"{SHUFFLE_FRACTION:g}".replace(".", "p")
 TRAIN_SEED = 22
-RUN_NAME = f"length_scale_coordinate_{SHUFFLE_FRACTION}_shuffle_sensitivity"
+RUN_NAME = f"length_scale_coordinate_{SHUFFLE_LABEL}_shuffle_sensitivity"
+OUTPUT_PREFIX = f"length_scale_coordinate_{SHUFFLE_LABEL}_shuffle"
 
 CONFIG = {
     "dir_path": "data/",
@@ -162,8 +164,8 @@ def ensure_base_realistic_dataset(benchmark_dir, dataset_config, base_adata_path
     )
 
 
-def shuffle_half_coordinates_within_cell_type(adata, labels_key, shuffle_seed):
-    """Permute coordinates for half of cells within each cell type."""
+def shuffle_coordinates_within_cell_type(adata, labels_key, shuffle_seed):
+    """Permute coordinates for the configured fraction of cells within each cell type."""
     rng = np.random.default_rng(shuffle_seed)
     adata = adata.copy()
     spatial = np.asarray(adata.obsm["spatial"]).copy()
@@ -183,15 +185,38 @@ def shuffle_half_coordinates_within_cell_type(adata, labels_key, shuffle_seed):
 
     adata.obsm["spatial"] = spatial
     adata.obs["coordinate_shuffle_seed"] = shuffle_seed
+    adata.obs["coordinate_shuffle_fraction"] = SHUFFLE_FRACTION
     adata.obs["coordinates_shuffled"] = shuffled
     return adata
+
+
+def cache_matches_run(result, run):
+    """Return whether an on-disk run result was produced with the requested config."""
+    keys = [
+        "shuffle_seed",
+        "shuffle_fraction",
+        "run_idx",
+        "end_val",
+        "flavor",
+        "value_l1",
+        "train_seed",
+        "epoch_start",
+        "epoch_end",
+        "batch_size",
+        "n_heads",
+        "lr",
+        "n_neighbors",
+    ]
+    return all(result.get(key) == run.get(key) for key in keys)
 
 
 def train_or_load_run(adata, dataset_config, run, run_path, result_path, eval_indices):
     """Train one AMICI run or load its cached result."""
     if os.path.exists(result_path) and os.path.exists(os.path.join(run_path, "model.pt")):
         with open(result_path) as f:
-            return json.load(f)
+            result = json.load(f)
+        if cache_matches_run(result, run):
+            return result
 
     pl.seed_everything(run["train_seed"])
     adata_train = adata[adata.obs["train_test_split"] == "train"].copy()
@@ -336,7 +361,7 @@ def plot_length_scale_boxplots(estimates_df, figures_dir):
 
     for ext in ("png", "svg"):
         fig.savefig(
-            os.path.join(figures_dir, f"length_scale_coordinate_full_shuffle_sensitivity.{ext}"),
+            os.path.join(figures_dir, f"{OUTPUT_PREFIX}_sensitivity.{ext}"),
             dpi=300,
             bbox_inches="tight",
         )
@@ -358,9 +383,9 @@ os.makedirs(model_dir, exist_ok=True)
 os.makedirs(figures_dir, exist_ok=True)
 
 output_paths = [
-    os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_estimates.csv"),
-    os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_sensitivity.png"),
-    os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_sensitivity.svg"),
+    os.path.join(figures_dir, f"{OUTPUT_PREFIX}_estimates.csv"),
+    os.path.join(figures_dir, f"{OUTPUT_PREFIX}_sensitivity.png"),
+    os.path.join(figures_dir, f"{OUTPUT_PREFIX}_sensitivity.svg"),
 ]
 if all(os.path.exists(path) for path in output_paths):
     print("Length scale coordinate shuffle sensitivity has already been plotted and saved. Skipping analysis.")
@@ -384,7 +409,7 @@ for shuffle_seed in SHUFFLE_SEEDS:
 
     shuffled_adata_path = os.path.join(
         data_dir,
-        f"{DATASET}_{BASE_DATASET_SEED}_coord_full_shuffle_{shuffle_seed}.h5ad",
+        f"{DATASET}_{BASE_DATASET_SEED}_coord_{SHUFFLE_LABEL}_shuffle_{shuffle_seed}.h5ad",
     )
     dataset_model_dir = os.path.join(model_dir, f"shuffle_{shuffle_seed}")
     best_model_path = os.path.join(dataset_model_dir, "best_model")
@@ -401,7 +426,7 @@ for shuffle_seed in SHUFFLE_SEEDS:
     if os.path.exists(shuffled_adata_path):
         adata = sc.read_h5ad(shuffled_adata_path)
     else:
-        adata = shuffle_half_coordinates_within_cell_type(
+        adata = shuffle_coordinates_within_cell_type(
             base_adata,
             dataset_config["labels_key"],
             shuffle_seed,
@@ -416,7 +441,7 @@ for shuffle_seed in SHUFFLE_SEEDS:
     )
     test_indices = np.where(adata.obs["train_test_split"] == "test")[0]
 
-    run = {**run_config, "shuffle_seed": shuffle_seed, "run_idx": 0}
+    run = {**run_config, "shuffle_seed": shuffle_seed, "shuffle_fraction": SHUFFLE_FRACTION, "run_idx": 0}
     run_path = os.path.join(dataset_model_dir, "run_0")
     result_path = os.path.join(dataset_model_dir, "run_0_results.json")
     best_result = train_or_load_run(adata, dataset_config, run, run_path, result_path, test_indices)
@@ -437,8 +462,8 @@ for shuffle_seed in SHUFFLE_SEEDS:
 
 estimates_df = pd.concat(estimate_records, ignore_index=True)
 samples_df = pd.concat(sample_records, ignore_index=True)
-estimates_df.to_csv(os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_estimates.csv"), index=False)
-samples_df.to_csv(os.path.join(figures_dir, "length_scale_coordinate_full_shuffle_samples.csv"), index=False)
+estimates_df.to_csv(os.path.join(figures_dir, f"{OUTPUT_PREFIX}_estimates.csv"), index=False)
+samples_df.to_csv(os.path.join(figures_dir, f"{OUTPUT_PREFIX}_samples.csv"), index=False)
 
 # %% Plot mean inferred length scales
 plot_length_scale_boxplots(estimates_df, figures_dir)

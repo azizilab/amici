@@ -157,6 +157,7 @@ class AMICIModule(HookedRootModule, BaseModuleClass):
         return_attention_patterns: bool = False,
         return_attention_scores: bool = False,
         return_v: bool = False,
+        attention_mask=None,
     ):
         return_attention_patterns = self.attention_penalty_coef > 0.0 or return_attention_patterns
         return_v = self.value_l1_penalty_coef > 0.0 or return_v
@@ -172,11 +173,11 @@ class AMICIModule(HookedRootModule, BaseModuleClass):
 
         kv_embed = self.kv_embed(nn_embed)
         kv_embed = rearrange(kv_embed, "b n (h d) -> b n h d", h=self.n_heads)
-        attention_mask = None
         if self.training and self.neighbor_dropout > 0.0:
-            attention_mask = (
+            dropout_mask = (
                 torch.rand((kv_embed.shape[0], kv_embed.shape[1]), device=kv_embed.device) > self.neighbor_dropout
             ).int()
+            attention_mask = dropout_mask if attention_mask is None else attention_mask * dropout_mask
 
         attn_outs = self.attention_layer(
             query_embed,

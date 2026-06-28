@@ -7,6 +7,7 @@ def get_amici_gene_task_scores(
     adata,
     sender_type,
     receiver_type,
+    attention_mask=None,
 ):
     """
     Get the AMICI scores for predicting significant genes task between a sender and receiver cell type.
@@ -32,6 +33,7 @@ def get_amici_gene_task_scores(
         adata=adata,
         ablated_neighbor_ct_sub=[sender_type],
         compute_z_value=True,
+        attention_mask=attention_mask,
     )
 
     # Get the ablation scores dataframe and keep only ablation columns
@@ -71,6 +73,7 @@ def get_amici_gene_task_scores(
 def get_amici_neighbor_interaction_scores(
     model,
     adata,
+    attention_mask=None,
 ):
     """
     Get the AMICI scores for predicting the interacting neighbor task for all sender-receiver interactions.
@@ -85,6 +88,7 @@ def get_amici_neighbor_interaction_scores(
     """
     attention_patterns = model.get_attention_patterns(
         adata=adata,
+        attention_mask=attention_mask,
     )
 
     attention_patterns_df = attention_patterns._attention_patterns_df.drop(columns=["label", "head"])
@@ -116,6 +120,7 @@ def get_amici_neighbor_interaction_scores(
 def get_amici_receiver_subtype_scores(
     model,
     adata,
+    attention_mask=None,
 ):
     """
     Get the AMICI scores for predicting the interacting receiver subtype task.
@@ -130,6 +135,7 @@ def get_amici_receiver_subtype_scores(
     """
     attention_patterns = model.get_attention_patterns(
         adata=adata,
+        attention_mask=attention_mask,
     )
 
     attention_patterns_df = attention_patterns._attention_patterns_df
