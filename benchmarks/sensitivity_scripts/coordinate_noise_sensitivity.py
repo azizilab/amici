@@ -36,7 +36,7 @@ from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 # %% Config
 RUN_NAME = "coordinate_noise_sensitivity"
 DATASET_SEEDS = list(range(10))
-NOISE_MAX_SIGMAS = [0.0, 0.05, 0.1, 0.25, 0.5, 1.0, 2.0]
+NOISE_MAX_SIGMAS = [2.0]
 NOISE_RANDOM_SEED_OFFSET = 1000
 
 EXP_DEFAULTS = {
@@ -421,24 +421,62 @@ def compute_pr_metrics(model, adata, dataset_config):
     }
 
 
+def expected_summary_index():
+    """Return the complete set of dataset/noise/task rows expected in the summary CSV."""
+    task_names = ["Neighbor Interaction Task", "Gene Task", "Receiver Subtype Task"]
+    expected = []
+    for dataset_name in DATASET_CONFIGS:
+        for dataset_seed in DATASET_SEEDS:
+            for max_sigma in NOISE_MAX_SIGMAS:
+                for task_name in task_names:
+                    expected.append((dataset_name, dataset_seed, float(max_sigma), task_name))
+    return set(expected)
+
+
+def summary_is_complete(summary_df):
+    """Return whether the summary CSV contains every requested dataset seed and task."""
+    required_cols = {"dataset", "dataset_seed", "noise_max_sigma", "task", "auprc"}
+    if not required_cols.issubset(summary_df.columns):
+        return False
+
+    observed = set(
+        zip(
+            summary_df["dataset"],
+            summary_df["dataset_seed"].astype(int),
+            summary_df["noise_max_sigma"].astype(float),
+            summary_df["task"],
+            strict=False,
+        )
+    )
+    return expected_summary_index().issubset(observed)
+
+
 def plot_summary(summary_df):
-    """Plot mean AUPRC across dataset seeds for each coordinate-noise level."""
+    """Plot every dataset seed as a point, with mean and SD over seeds."""
     task_names = ["Neighbor Interaction Task", "Gene Task", "Receiver Subtype Task"]
     dataset_names = list(DATASET_CONFIGS)
-    fig, axes = plt.subplots(len(dataset_names), len(task_names), figsize=(16, 8), squeeze=False, sharex=True)
+    fig, axes = plt.subplots(len(dataset_names), 1, figsize=(9, 7), squeeze=False, sharex=True)
+    rng = np.random.default_rng(0)
 
     for row_idx, dataset_name in enumerate(dataset_names):
         dataset_df = summary_df[summary_df["dataset"] == dataset_name]
-        for col_idx, task_name in enumerate(task_names):
-            ax = axes[row_idx][col_idx]
+        ax = axes[row_idx][0]
+        for task_idx, task_name in enumerate(task_names):
             task_df = dataset_df[dataset_df["task"] == task_name]
-            stats = task_df.groupby("noise_max_sigma")["auprc"].agg(["mean", "std"]).reset_index()
-            ax.errorbar(stats["noise_max_sigma"], stats["mean"], yerr=stats["std"], marker="o")
-            ax.set_title(f"{dataset_name}\n{task_name}", fontsize=10)
-            ax.set_xlabel("Maximum Gaussian noise sigma")
-            ax.set_ylabel("AUPRC")
-            ax.set_ylim(0, 1)
-            ax.grid(axis="y", alpha=0.3)
+            y = task_df["auprc"].to_numpy()
+            x = np.full(len(task_df), task_idx, dtype=float) + rng.normal(0, 0.035, size=len(task_df))
+            ax.scatter(x, y, alpha=0.75, s=36, label=task_name if row_idx == 0 else None)
+            mean = np.nanmean(y)
+            std = np.nanstd(y, ddof=1) if len(y) > 1 else 0.0
+            ax.errorbar(task_idx, mean, yerr=std, marker="_", color="black", markersize=24, capsize=5)
+
+        sigma_label = ", ".join(f"{sigma:g}" for sigma in NOISE_MAX_SIGMAS)
+        ax.set_title(f"{dataset_name}: max sigma {sigma_label}", fontsize=11)
+        ax.set_xticks(range(len(task_names)))
+        ax.set_xticklabels(task_names, rotation=15, ha="right")
+        ax.set_ylabel("AUPRC")
+        ax.set_ylim(0, 1)
+        ax.grid(axis="y", alpha=0.3)
 
     fig.suptitle("AMICI sensitivity to left-to-right coordinate noise", fontsize=14)
     plt.tight_layout()
@@ -478,6 +516,13 @@ def plot_representative_pr_curves(pr_curve_records):
 
 # %% Train AMICI across datasets and coordinate-noise levels
 summary_path = os.path.join(figure_dir, f"{RUN_NAME}_summary.csv")
+if os.path.exists(summary_path):
+    cached_summary_df = pd.read_csv(summary_path)
+    if summary_is_complete(cached_summary_df):
+        print(f"Found complete cached summary at {summary_path}. Regenerating plots without training.")
+        plot_summary(cached_summary_df)
+        sys.exit(0)
+
 summary_records = []
 pr_curve_records = {
     dataset_name: {"Neighbor Interaction Task": {}, "Gene Task": {}, "Receiver Subtype Task": {}}
@@ -510,12 +555,9 @@ for dataset_name, dataset_config in DATASET_CONFIGS.items():
                         "model_path": result["model_path"],
                     }
                 )
-                if dataset_seed == DATASET_SEEDS[0]:
-                    pr_curve_records[dataset_name][task_name][max_sigma] = pr
 
             pd.DataFrame(summary_records).to_csv(summary_path, index=False)
 
 summary_df = pd.DataFrame(summary_records)
 summary_df.to_csv(summary_path, index=False)
 plot_summary(summary_df)
-plot_representative_pr_curves(pr_curve_records)

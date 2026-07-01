@@ -2,23 +2,20 @@ import fcntl
 import os
 import subprocess
 
-# Module-level reference keeps the lock file open (and the OS-level lock held)
-# until the process exits, even if the caller doesn't keep a reference.
+# Keep the lock handle alive for the process lifetime.
 _gpu_lock_file = None
 
 
 def select_gpu():
-    """Find a free GPU, claim it with a file lock, and set CUDA_VISIBLE_DEVICES.
+    """Select a CUDA GPU for the current process.
 
-    Queries nvidia-smi for free memory, tries each GPU (most-free first), and
-    acquires an exclusive non-blocking flock on /tmp/snakemake_gpu_locks/gpu_N.lock.
-    The lock is held for the lifetime of the process so that parallel Snakemake
-    jobs cannot claim the same device.
+    GPUs are tried in descending free-memory order. The first available GPU lock
+    is claimed and exposed as CUDA device 0. If all locks are already held, the
+    process shares the GPU with the most free memory.
 
-    Sets os.environ["CUDA_VISIBLE_DEVICES"] so that PyTorch, TensorFlow, and
-    scvi-tools all see only the chosen GPU as device 0.
-
-    Falls back silently if nvidia-smi is unavailable (CPU-only environment).
+    Returns
+    -------
+        None. Sets ``CUDA_VISIBLE_DEVICES`` when a GPU can be selected.
     """
     global _gpu_lock_file
 
@@ -33,9 +30,9 @@ def select_gpu():
         for line in result.stdout.strip().split("\n"):
             idx, mem_free = line.split(",")
             gpus.append((int(idx.strip()), int(mem_free.strip())))
-        gpus.sort(key=lambda x: x[1], reverse=True)  # prefer GPU with most free memory
+        gpus.sort(key=lambda x: x[1], reverse=True)
     except (subprocess.CalledProcessError, FileNotFoundError, ValueError):
-        return  # no nvidia-smi; leave device selection to defaults
+        return
 
     lock_dir = "/tmp/snakemake_gpu_locks"
     os.makedirs(lock_dir, exist_ok=True)
@@ -45,7 +42,6 @@ def select_gpu():
         lock_file = open(lock_path, "w")
         try:
             fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Lock acquired — keep file open so the OS holds it until process exits.
             _gpu_lock_file = lock_file
             os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_idx)
             _configure_tf(gpu_idx)
@@ -54,12 +50,25 @@ def select_gpu():
         except OSError:
             lock_file.close()
 
-    # All GPUs are locked by sibling jobs. Fall back to default (likely GPU 0).
+    if gpus:
+        gpu_idx, mem_free = gpus[0]
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_idx)
+        _configure_tf(gpu_idx)
+        print(f"[gpu_utils] All GPU locks are held; sharing GPU {gpu_idx} ({mem_free} MiB free)")
+        return
     print("[gpu_utils] All GPUs locked by other jobs; falling back to default device selection.")
 
 
 def _configure_tf(gpu_idx):
-    """Restrict TensorFlow to the selected GPU if TF is already imported."""
+    """Restrict TensorFlow to a selected GPU if TensorFlow is loaded.
+
+    Args:
+        gpu_idx: Physical GPU index selected by ``select_gpu``.
+
+    Returns
+    -------
+        None.
+    """
     try:
         import tensorflow as tf
 
