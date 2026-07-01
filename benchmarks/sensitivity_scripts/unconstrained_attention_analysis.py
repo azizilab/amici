@@ -50,6 +50,7 @@ class UnconstrainedAttentionAMICI(AMICI):
 RUN_NAME = "unconstrained_attention_analysis"
 SYNTHETIC_DATASET_SEEDS = [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
 REALISTIC_DATASET_SEEDS = list(range(10))
+ATTENTION_THRESHOLD = 0.1
 
 SYNTHETIC_CONFIG = {
     "dataset_type": "synthetic",
@@ -589,6 +590,166 @@ def plot_task_boxplots(results_df, figures_dir):
     plt.close(fig)
 
 
+def compute_length_scale_samples_for_dataset(dataset_config, benchmark_dir, data_dir, model_dir, results_dir):
+    """Compute length-scale samples for cached best models of one dataset type."""
+    dataset_type = dataset_config["dataset_type"]
+    length_scale_path = os.path.join(results_dir, f"{dataset_type}_length_scale_samples.csv")
+    if os.path.exists(length_scale_path):
+        return pd.read_csv(length_scale_path)
+
+    sample_records = []
+    for dataset_seed in dataset_config["seeds"]:
+        print(f"Computing length scales for {dataset_type} seed {dataset_seed}")
+        if dataset_type == "synthetic":
+            adata, _ = generate_or_load_synthetic_dataset(dataset_config, data_dir, dataset_seed)
+        else:
+            adata, _ = generate_or_load_realistic_dataset(benchmark_dir, dataset_config, data_dir, dataset_seed)
+
+        dataset_model_dir = os.path.join(model_dir, dataset_type, f"dataset_seed_{dataset_seed}")
+        best_model_path = os.path.join(dataset_model_dir, "best_model")
+        best_params_path = os.path.join(dataset_model_dir, "best_model_params.json")
+        if not (os.path.exists(os.path.join(best_model_path, "model.pt")) and os.path.exists(best_params_path)):
+            print(f"Skipping {dataset_type} seed {dataset_seed}; cached best model is missing.")
+            continue
+
+        with open(best_params_path) as f:
+            best_result = json.load(f)
+
+        UnconstrainedAttentionAMICI.setup_anndata(
+            adata,
+            labels_key=dataset_config["labels_key"],
+            coord_obsm_key="spatial",
+            n_neighbors=int(best_result["n_neighbors"]),
+        )
+        model = UnconstrainedAttentionAMICI.load(best_model_path, adata=adata)
+        explained_variance = model.get_expl_variance_scores(adata=adata)
+        attention_patterns = model.get_attention_patterns(adata=adata)
+        attention_df = attention_patterns._attention_patterns_df.copy()
+        nn_idxs_df = attention_patterns._nn_idxs_df.copy()
+        nn_idxs_df["cell_idx"] = adata.obs_names
+        labels = adata.obs[dataset_config["labels_key"]]
+        coords = np.asarray(adata.obsm["spatial"], dtype=float)
+        obs_position = pd.Series(np.arange(adata.n_obs), index=adata.obs_names)
+
+        for interaction_name, interaction_config in dataset_config["gt_interactions"].items():
+            receiver_type = interaction_config["receiver"]
+            sender_type = interaction_config["sender"]
+            best_head = explained_variance.compute_max_explained_variance_head(cell_type=receiver_type)
+            receiver_attention_df = attention_df.loc[
+                (attention_df["label"] == receiver_type) & (attention_df["head"] == best_head)
+            ]
+            attention_long_df = receiver_attention_df.melt(
+                id_vars=["cell_idx"],
+                value_vars=[f"neighbor_{idx}" for idx in range(model.n_neighbors)],
+                var_name="neighbor_col",
+                value_name="attention_score",
+            )
+            nn_long_df = nn_idxs_df.melt(
+                id_vars=["cell_idx"],
+                value_vars=[f"neighbor_{idx}" for idx in range(model.n_neighbors)],
+                var_name="neighbor_col",
+                value_name="neighbor_idx",
+            )
+            length_scale_df = pd.merge(attention_long_df, nn_long_df, on=["cell_idx", "neighbor_col"], how="inner")
+            length_scale_df["neighbor_label"] = labels.reindex(length_scale_df["neighbor_idx"]).to_numpy()
+            length_scale_df = length_scale_df.loc[
+                (length_scale_df["neighbor_label"] == sender_type)
+                & (length_scale_df["attention_score"] >= ATTENTION_THRESHOLD)
+            ].copy()
+            if length_scale_df.empty:
+                length_scale_df["length_scale"] = []
+            else:
+                cell_positions = obs_position.reindex(length_scale_df["cell_idx"]).to_numpy(dtype=int)
+                neighbor_positions = obs_position.reindex(length_scale_df["neighbor_idx"]).to_numpy(dtype=int)
+                length_scale_df["length_scale"] = np.linalg.norm(
+                    coords[cell_positions] - coords[neighbor_positions],
+                    axis=1,
+                )
+            length_scale_df["dataset_type"] = dataset_type
+            length_scale_df["dataset_seed"] = dataset_seed
+            length_scale_df["interaction"] = interaction_name
+            length_scale_df["interaction_label"] = f"{sender_type} -> {receiver_type}"
+            length_scale_df["receiver_type"] = receiver_type
+            length_scale_df["sender_type"] = sender_type
+            length_scale_df["head_idx"] = best_head
+            length_scale_df["gt_length_scale"] = interaction_config["length_scale"]
+            length_scale_df["best_test_loss"] = best_result["test_loss"]
+            length_scale_df["best_train_seed"] = best_result["train_seed"]
+            sample_records.append(length_scale_df)
+
+    if sample_records:
+        samples_df = pd.concat(sample_records, ignore_index=True)
+    else:
+        samples_df = pd.DataFrame()
+    samples_df.to_csv(length_scale_path, index=False)
+    return samples_df
+
+
+def plot_length_scale_distributions(length_scale_df, figures_dir):
+    """Plot predicted length-scale distributions with ground truth marked by x."""
+    if length_scale_df.empty:
+        print("No length-scale samples available; skipping length-scale distribution plot.")
+        return
+
+    dataset_types = ["synthetic", "realistic_semisynthetic"]
+    dataset_titles = {
+        "synthetic": "Synthetic",
+        "realistic_semisynthetic": "Realistic semi-synthetic",
+    }
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), squeeze=False)
+
+    for ax, dataset_type in zip(axes[0], dataset_types, strict=False):
+        plot_df = length_scale_df[length_scale_df["dataset_type"] == dataset_type].dropna(subset=["length_scale"])
+        interactions = (
+            plot_df[["interaction", "interaction_label", "gt_length_scale"]]
+            .drop_duplicates()
+            .sort_values("gt_length_scale")
+        )
+        positions = np.arange(1, len(interactions) + 1)
+        violin_data = [
+            plot_df.loc[plot_df["interaction"] == interaction, "length_scale"].to_numpy()
+            for interaction in interactions["interaction"]
+        ]
+        if not violin_data:
+            ax.set_title(dataset_titles[dataset_type])
+            ax.text(0.5, 0.5, "No length-scale samples", ha="center", va="center", transform=ax.transAxes)
+            continue
+
+        violins = ax.violinplot(
+            violin_data,
+            positions=positions,
+            vert=False,
+            widths=0.8,
+            showmeans=True,
+            showextrema=True,
+        )
+        for body in violins["bodies"]:
+            body.set_facecolor("steelblue")
+            body.set_edgecolor("steelblue")
+            body.set_alpha(0.45)
+        for part in ("cmeans", "cmins", "cmaxes", "cbars"):
+            violins[part].set_color("steelblue")
+            violins[part].set_linewidth(1.4)
+
+        gt_positions = interactions["gt_length_scale"].astype(float).to_numpy()
+        ax.scatter(gt_positions, positions, marker="x", color="black", s=130, linewidths=2.5, zorder=4)
+        ax.set_yticks(positions)
+        ax.set_yticklabels(interactions["interaction_label"])
+        ax.set_xlabel("Predicted length scale")
+        ax.set_title(dataset_titles[dataset_type])
+        ax.grid(axis="x", alpha=0.25)
+
+    fig.suptitle("Unconstrained positional-embedding AMICI length-scale distributions", fontsize=13)
+    plt.tight_layout()
+    for ext in ("png", "svg"):
+        fig.savefig(
+            os.path.join(figures_dir, f"{RUN_NAME}_length_scale_distributions.{ext}"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+    plt.close(fig)
+
+
 # %% Run analysis
 select_gpu()
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -607,3 +768,12 @@ for dataset_config in (SYNTHETIC_CONFIG, REALISTIC_CONFIG):
 results_df = pd.concat(all_results, ignore_index=True)
 results_df.to_csv(os.path.join(results_dir, "unconstrained_attention_task_scores.csv"), index=False)
 plot_task_boxplots(results_df, figures_dir)
+
+length_scale_results = []
+for dataset_config in (SYNTHETIC_CONFIG, REALISTIC_CONFIG):
+    length_scale_results.append(
+        compute_length_scale_samples_for_dataset(dataset_config, benchmark_dir, data_dir, model_dir, results_dir)
+    )
+length_scale_df = pd.concat(length_scale_results, ignore_index=True)
+length_scale_df.to_csv(os.path.join(results_dir, "unconstrained_attention_length_scale_samples.csv"), index=False)
+plot_length_scale_distributions(length_scale_df, figures_dir)
