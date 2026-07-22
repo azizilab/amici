@@ -49,13 +49,16 @@ def default_subset_sizes(n_obs):
     return sizes
 
 
-def subset_adata(adata, n_cells, seed):
-    """Create a reproducible random subset of the AnnData object."""
-    if n_cells >= adata.n_obs:
-        return adata.copy()
+def subset_adata(adata, n_cells, n_genes, seed):
+    """Create a reproducible random cell and gene subset."""
     rng = np.random.default_rng(seed)
-    indices = rng.choice(adata.n_obs, size=n_cells, replace=False)
-    return adata[indices].copy()
+    cell_indices = np.arange(adata.n_obs)
+    gene_indices = np.arange(adata.n_vars)
+    if n_cells < adata.n_obs:
+        cell_indices = rng.choice(adata.n_obs, size=n_cells, replace=False)
+    if n_genes < adata.n_vars:
+        gene_indices = rng.choice(adata.n_vars, size=n_genes, replace=False)
+    return adata[cell_indices, gene_indices].copy()
 
 
 def run_single_benchmark(adata_subset, accelerator, max_epochs):
@@ -110,6 +113,7 @@ def run_single_benchmark(adata_subset, accelerator, max_epochs):
 
     return {
         "n_cells": adata_subset.n_obs,
+        "n_genes": adata_subset.n_vars,
         "runtime_setup_s": t_setup_end - t_setup_start,
         "runtime_train_s": t_train_end - t_train_start,
         "runtime_total_s": (t_setup_end - t_setup_start) + (t_train_end - t_train_start),
@@ -119,31 +123,32 @@ def run_single_benchmark(adata_subset, accelerator, max_epochs):
     }
 
 
-def run_benchmarks(adata, subset_sizes, accelerator, max_epochs, seed):
-    """Run benchmarks for all subset sizes on a given accelerator."""
+def run_benchmarks(adata, subset_sizes, gene_sizes, accelerator, max_epochs, seed):
+    """Run benchmarks for all cell and gene subset sizes on a given accelerator."""
     results = []
     for n_cells in subset_sizes:
-        print(f"Benchmarking n_cells={n_cells} on {accelerator}...")
-        adata_subset = subset_adata(adata, n_cells, seed)
+        for n_genes in gene_sizes:
+            print(f"Benchmarking n_cells={n_cells}, n_genes={n_genes} on {accelerator}...")
+            adata_subset = subset_adata(adata, n_cells, n_genes, seed)
 
-        try:
-            result = run_single_benchmark(adata_subset, accelerator, max_epochs)
-            results.append(result)
-            print(
-                f"  Runtime: {result['runtime_total_s']:.2f}s "
-                f"(setup={result['runtime_setup_s']:.2f}s, train={result['runtime_train_s']:.2f}s), "
-                f"Peak memory: {result['peak_memory_gb']:.3f} GB"
-            )
-        except RuntimeError as e:
-            if "out of memory" in str(e).lower():
-                print(f"  CUDA OOM at n_cells={n_cells}, skipping.")
-            else:
-                raise
+            try:
+                result = run_single_benchmark(adata_subset, accelerator, max_epochs)
+                results.append(result)
+                print(
+                    f"  Runtime: {result['runtime_total_s']:.2f}s "
+                    f"(setup={result['runtime_setup_s']:.2f}s, train={result['runtime_train_s']:.2f}s), "
+                    f"Peak memory: {result['peak_memory_gb']:.3f} GB"
+                )
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    print(f"  CUDA OOM at n_cells={n_cells}, n_genes={n_genes}, skipping.")
+                else:
+                    raise
 
-        del adata_subset
-        gc.collect()
-        if accelerator == "gpu":
-            torch.cuda.empty_cache()
+            del adata_subset
+            gc.collect()
+            if accelerator == "gpu":
+                torch.cuda.empty_cache()
 
     return results
 
@@ -162,6 +167,13 @@ def parse_args():
         nargs="+",
         default=None,
         help="List of subset sizes (default: geometric progression up to dataset size)",
+    )
+    parser.add_argument(
+        "--gene-sizes",
+        type=int,
+        nargs="+",
+        default=None,
+        help="List of gene subset sizes (default: all genes only)",
     )
     parser.add_argument(
         "--max-epochs", type=int, default=50, help="Number of training epochs per run"
@@ -185,7 +197,12 @@ def main():
     print(f"Loaded dataset with {adata.n_obs} cells, {adata.n_vars} genes")
 
     subset_sizes = args.subset_sizes or default_subset_sizes(adata.n_obs)
+    gene_sizes = args.gene_sizes or [adata.n_vars]
+    gene_sizes = [s for s in gene_sizes if s <= adata.n_vars]
+    if not gene_sizes:
+        raise ValueError("All requested gene sizes exceed the number of genes in the dataset")
     print(f"Subset sizes: {subset_sizes}")
+    print(f"Gene sizes: {gene_sizes}")
 
     accelerators = []
     if args.accelerator in ("cpu", "both"):
@@ -203,7 +220,7 @@ def main():
         print(f"Running benchmarks on {accel.upper()}")
         print(f"{'='*60}")
 
-        results = run_benchmarks(adata, subset_sizes, accel, args.max_epochs, args.seed)
+        results = run_benchmarks(adata, subset_sizes, gene_sizes, accel, args.max_epochs, args.seed)
 
         output_path = os.path.join(args.output_dir, f"benchmark_results_{accel}.json")
         payload = {
@@ -218,6 +235,9 @@ def main():
                 "seed": args.seed,
                 "data_path": args.data_path,
                 "total_dataset_cells": adata.n_obs,
+                "total_dataset_genes": adata.n_vars,
+                "subset_sizes": subset_sizes,
+                "gene_sizes": gene_sizes,
             },
             "results": results,
         }

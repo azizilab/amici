@@ -27,23 +27,42 @@ def print_peak_memory(results, accelerator):
 
 def plot_benchmark(results, metadata, accelerator, output_dir):
     """Create a single runtime plot for this accelerator."""
-    n_cells = [r["n_cells"] for r in results]
-    runtime_setup = [r["runtime_setup_s"] for r in results]
-    runtime_train = [r["runtime_train_s"] for r in results]
-    runtime_total = [r["runtime_total_s"] for r in results]
-
     accel_label = accelerator.upper()
     max_epochs = metadata["train_params"]["max_epochs"]
+    gene_sizes = sorted({r.get("n_genes", metadata.get("total_dataset_genes")) for r in results})
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    ax.plot(n_cells, runtime_total, "o-", color="tab:blue", label="Total", linewidth=2)
-    ax.plot(
-        n_cells, runtime_train, "s--", color="tab:orange", label="Training", linewidth=1.5
-    )
-    ax.plot(
-        n_cells, runtime_setup, "^--", color="tab:green", label="Setup (NN)", linewidth=1.5
-    )
+    if len(gene_sizes) == 1:
+        n_cells = [r["n_cells"] for r in results]
+        runtime_setup = [r["runtime_setup_s"] for r in results]
+        runtime_train = [r["runtime_train_s"] for r in results]
+        runtime_total = [r["runtime_total_s"] for r in results]
+        ax.plot(n_cells, runtime_total, "o-", color="tab:blue", label="Total", linewidth=2)
+        ax.plot(
+            n_cells, runtime_train, "s--", color="tab:orange", label="Training", linewidth=1.5
+        )
+        ax.plot(
+            n_cells, runtime_setup, "^--", color="tab:green", label="Setup (NN)", linewidth=1.5
+        )
+    else:
+        cmap = plt.get_cmap("viridis", len(gene_sizes))
+        for idx, n_genes in enumerate(gene_sizes):
+            filtered = sorted(
+                [r for r in results if r.get("n_genes", metadata.get("total_dataset_genes")) == n_genes],
+                key=lambda r: r["n_cells"],
+            )
+            n_cells = [r["n_cells"] for r in filtered]
+            runtime_total = [r["runtime_total_s"] for r in filtered]
+            ax.plot(
+                n_cells,
+                runtime_total,
+                "o-",
+                color=cmap(idx),
+                label=f"{n_genes:,} genes",
+                linewidth=2,
+                markersize=5,
+            )
     ax.set_xlabel("Number of Cells", fontsize=12)
     ax.set_ylabel("Wall-Clock Time (seconds)", fontsize=12)
     ax.set_title(f"Runtime vs. Dataset Size ({accel_label}, {max_epochs} epochs)", fontsize=13)
@@ -69,15 +88,23 @@ def plot_combined(all_results, all_metadata, output_dir):
     colors = {"cpu": "tab:blue", "gpu": "tab:orange"}
     markers = {"cpu": "o", "gpu": "s"}
 
-    # Use only subset sizes common to both accelerators for a fair comparison
+    # Use only subset sizes and the largest shared gene count for a fair comparison.
     common_sizes = None
+    common_genes = None
     for results in all_results.values():
         sizes = {r["n_cells"] for r in results}
         common_sizes = sizes if common_sizes is None else common_sizes & sizes
+        genes = {r.get("n_genes", None) for r in results}
+        common_genes = genes if common_genes is None else common_genes & genes
+
+    selected_genes = max(common_genes) if common_genes else None
 
     max_epochs = None
     for accelerator, results in all_results.items():
-        filtered = [r for r in results if r["n_cells"] in common_sizes]
+        filtered = [
+            r for r in results
+            if r["n_cells"] in common_sizes and r.get("n_genes", None) == selected_genes
+        ]
         n_cells = [r["n_cells"] for r in filtered]
         runtime_total = [r["runtime_total_s"] for r in filtered]
         label = accelerator.upper()
@@ -89,7 +116,10 @@ def plot_combined(all_results, all_metadata, output_dir):
 
     ax_left.set_xlabel("Number of Cells", fontsize=12)
     ax_left.set_ylabel("Wall-Clock Time (seconds)", fontsize=12)
-    ax_left.set_title(f"Runtime vs. Dataset Size ({max_epochs} epochs)", fontsize=13)
+    title = f"Runtime vs. Dataset Size ({max_epochs} epochs)"
+    if selected_genes is not None:
+        title += f", {selected_genes:,} genes"
+    ax_left.set_title(title, fontsize=13)
     ax_left.set_xscale("log")
     ax_left.legend(fontsize=11)
     ax_left.grid(True, alpha=0.3)
@@ -121,13 +151,14 @@ def write_csv(all_results, all_metadata, output_dir):
     csv_path = os.path.join(output_dir, "benchmark_results.csv")
 
     with open(csv_path, "w") as f:
-        f.write("accelerator,n_cells,runtime_setup_s,runtime_train_s,runtime_total_s,peak_memory_gb\n")
+        f.write("accelerator,n_cells,n_genes,runtime_setup_s,runtime_train_s,runtime_total_s,peak_memory_gb\n")
         for accelerator in ("cpu", "gpu"):
             if accelerator not in all_results:
                 continue
             for r in all_results[accelerator]:
+                n_genes = r.get("n_genes", all_metadata[accelerator].get("total_dataset_genes", ""))
                 f.write(
-                    f"{accelerator},{r['n_cells']},{r['runtime_setup_s']:.2f},"
+                    f"{accelerator},{r['n_cells']},{n_genes},{r['runtime_setup_s']:.2f},"
                     f"{r['runtime_train_s']:.2f},{r['runtime_total_s']:.2f},"
                     f"{r['peak_memory_gb']:.3f}\n"
                 )
