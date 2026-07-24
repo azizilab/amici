@@ -15,6 +15,16 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
+from amici_benchmark_utils import (  # noqa: E402
+    get_amici_gene_task_scores,
+    get_amici_neighbor_interaction_scores,
+    get_amici_receiver_subtype_scores,
+)
+from benchmark_utils import (  # noqa: E402
+    get_interaction_gt_neighbor_classes,
+    get_model_precision_recall_auc,
+    get_receiver_gt_ranked_genes,
+)
 from generate_realistic_dataset import generate_realistic_dataset  # noqa: E402
 from gpu_utils import select_gpu  # noqa: E402
 
@@ -31,6 +41,29 @@ SHUFFLE_LABEL = f"{SHUFFLE_FRACTION:g}".replace(".", "p")
 TRAIN_SEED = 22
 RUN_NAME = f"length_scale_coordinate_{SHUFFLE_LABEL}_shuffle_sensitivity"
 OUTPUT_PREFIX = f"length_scale_coordinate_{SHUFFLE_LABEL}_shuffle"
+AUPRC_RUN_NAME = "length_scale_coordinate_shuffle_auprc_comparison"
+AUPRC_OUTPUT_PREFIX = "length_scale_coordinate_shuffle_auprc"
+
+COORDINATE_SHUFFLE_CONDITIONS = [
+    {
+        "shuffle_fraction": 0.3,
+        "shuffle_label": "0.3",
+        "data_template": f"{DATASET}_{BASE_DATASET_SEED}_coord_0p3_shuffle_{{seed}}.h5ad",
+        "model_run_name": "length_scale_coordinate_0p3_shuffle_sensitivity",
+    },
+    {
+        "shuffle_fraction": 0.5,
+        "shuffle_label": "0.5",
+        "data_template": f"{DATASET}_{BASE_DATASET_SEED}_coord_shuffle_{{seed}}.h5ad",
+        "model_run_name": "length_scale_coordinate_shuffle_sensitivity",
+    },
+    {
+        "shuffle_fraction": 1.0,
+        "shuffle_label": "1.0",
+        "data_template": f"{DATASET}_{BASE_DATASET_SEED}_coord_full_shuffle_{{seed}}.h5ad",
+        "model_run_name": "length_scale_coordinate_full_shuffle_sensitivity",
+    },
+]
 
 CONFIG = {
     "dir_path": "data/",
@@ -368,6 +401,183 @@ def plot_length_scale_boxplots(estimates_df, figures_dir):
     plt.close(fig)
 
 
+def build_task_ground_truth(adata, dataset_config):
+    """Compute ground-truth labels for the three benchmark tasks."""
+    subtype_key = dataset_config["subtype_labels_key"]
+    labels_key = dataset_config["labels_key"]
+
+    gt_gene_records = []
+    for interaction_name, interaction_config in dataset_config["gt_interactions"].items():
+        gt_gene_scores = get_receiver_gt_ranked_genes(
+            adata,
+            interaction_config["receiver"],
+            interaction_config["interaction_subtype"],
+            interaction_config["neutral_subtype"],
+            subtype_key,
+        )
+        gt_gene_scores["interaction"] = interaction_name
+        gt_gene_records.append(gt_gene_scores)
+    gt_gene_scores_df = pd.concat(gt_gene_records, ignore_index=True)
+
+    receiver_mask = np.zeros(len(adata.obs_names), dtype=bool)
+    for interaction_config in dataset_config["gt_interactions"].values():
+        receiver_mask |= adata.obs[subtype_key] == interaction_config["interaction_subtype"]
+    gt_receiver_classes_df = pd.DataFrame({"cell_idx": adata.obs_names, "class": receiver_mask.astype(float)})
+
+    gt_neighbor_classes_df = get_interaction_gt_neighbor_classes(
+        adata,
+        dataset_config["gt_interactions"],
+        labels_key,
+    )
+    return gt_gene_scores_df, gt_neighbor_classes_df, gt_receiver_classes_df
+
+
+def evaluate_tasks(model, adata, dataset_config):
+    """Evaluate gene, neighbor-interaction, and receiver-subtype AUPRC tasks."""
+    gt_gene_scores_df, gt_neighbor_classes_df, gt_receiver_classes_df = build_task_ground_truth(adata, dataset_config)
+    task_records = []
+
+    try:
+        gene_score_records = []
+        for interaction_name, interaction_config in dataset_config["gt_interactions"].items():
+            gene_scores = get_amici_gene_task_scores(
+                model,
+                adata,
+                interaction_config["sender"],
+                interaction_config["receiver"],
+            )
+            gene_scores["interaction"] = interaction_name
+            gene_score_records.append(gene_scores)
+        gene_scores_df = pd.concat(gene_score_records, ignore_index=True)
+        _, _, auprc = get_model_precision_recall_auc(
+            gene_scores_df,
+            gt_gene_scores_df,
+            merge_cols=["gene", "interaction"],
+            scores_col="amici_scores",
+            gt_class_col="class",
+        )
+        task_records.append({"task": "Gene", "auprc": auprc, "status": "success", "error": None})
+    except Exception as exc:  # noqa: BLE001
+        task_records.append({"task": "Gene", "auprc": np.nan, "status": "failed", "error": repr(exc)})
+
+    try:
+        neighbor_scores_df = get_amici_neighbor_interaction_scores(model, adata)
+        _, _, auprc = get_model_precision_recall_auc(
+            neighbor_scores_df,
+            gt_neighbor_classes_df,
+            merge_cols=["cell_idx", "neighbor_idx"],
+            scores_col="amici_scores",
+            gt_class_col="class",
+        )
+        task_records.append({"task": "Neighbor interaction", "auprc": auprc, "status": "success", "error": None})
+    except Exception as exc:  # noqa: BLE001
+        task_records.append({"task": "Neighbor interaction", "auprc": np.nan, "status": "failed", "error": repr(exc)})
+
+    try:
+        receiver_scores_df = get_amici_receiver_subtype_scores(model, adata)
+        _, _, auprc = get_model_precision_recall_auc(
+            receiver_scores_df,
+            gt_receiver_classes_df,
+            merge_cols=["cell_idx"],
+            scores_col="amici_scores",
+            gt_class_col="class",
+        )
+        task_records.append({"task": "Receiver subtype", "auprc": auprc, "status": "success", "error": None})
+    except Exception as exc:  # noqa: BLE001
+        task_records.append({"task": "Receiver subtype", "auprc": np.nan, "status": "failed", "error": repr(exc)})
+
+    return pd.DataFrame(task_records)
+
+
+def evaluate_cached_shuffle_auprcs(condition, data_dir, model_root_dir, figures_dir, dataset_config):
+    """Load cached shuffled datasets/models and compute AUPRCs."""
+    records = []
+    for shuffle_seed in SHUFFLE_SEEDS:
+        condition_dir = os.path.join(model_root_dir, condition["model_run_name"], f"shuffle_{shuffle_seed}")
+        result_path = os.path.join(condition_dir, "task_auprc_scores.csv")
+        model_path = os.path.join(condition_dir, "best_model")
+        adata_path = os.path.join(data_dir, condition["data_template"].format(seed=shuffle_seed))
+
+        if os.path.exists(result_path):
+            task_df = pd.read_csv(result_path)
+        else:
+            if not os.path.exists(os.path.join(model_path, "model.pt")):
+                raise FileNotFoundError(f"Missing cached AMICI model: {model_path}")
+            if not os.path.exists(adata_path):
+                raise FileNotFoundError(f"Missing cached shuffled AnnData: {adata_path}")
+
+            adata = sc.read_h5ad(adata_path)
+            adata.obs_names_make_unique()
+            AMICI.setup_anndata(
+                adata,
+                labels_key=dataset_config["labels_key"],
+                coord_obsm_key="spatial",
+                n_neighbors=int(dataset_config["sweep_params"].get("n_neighbors", [50])[0]),
+            )
+            model = AMICI.load(model_path, adata=adata)
+            task_df = evaluate_tasks(model, adata, dataset_config)
+            task_df.to_csv(result_path, index=False)
+
+        task_df["shuffle_seed"] = shuffle_seed
+        task_df["shuffle_fraction"] = condition["shuffle_fraction"]
+        task_df["shuffle_label"] = condition["shuffle_label"]
+        task_df["model_path"] = model_path
+        records.append(task_df)
+
+    condition_df = pd.concat(records, ignore_index=True)
+    condition_df.to_csv(
+        os.path.join(figures_dir, f"{AUPRC_OUTPUT_PREFIX}_{condition['shuffle_label'].replace('.', 'p')}.csv"),
+        index=False,
+    )
+    return condition_df
+
+
+def plot_cached_shuffle_auprcs(auprc_df, figures_dir):
+    """Plot task AUPRCs across coordinate shuffling fractions."""
+    task_order = ["Gene", "Neighbor interaction", "Receiver subtype"]
+    fraction_order = ["0.3", "0.5", "1.0"]
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4), sharey=True)
+    rng = np.random.default_rng(0)
+    colors = ["#4C78A8", "#F58518", "#54A24B"]
+    for ax, task in zip(axes, task_order, strict=False):
+        subset = auprc_df[(auprc_df["task"] == task) & (auprc_df["status"] == "success")]
+        box_data = [
+            subset.loc[subset["shuffle_label"] == label, "auprc"].dropna().to_numpy() for label in fraction_order
+        ]
+        ax.boxplot(
+            box_data,
+            labels=fraction_order,
+            patch_artist=True,
+            boxprops={"facecolor": "#d9d9d9", "alpha": 0.7},
+            medianprops={"color": "black"},
+        )
+        for x_pos, values in enumerate(box_data, start=1):
+            jitter = rng.uniform(-0.08, 0.08, size=len(values))
+            ax.scatter(
+                np.full(len(values), x_pos) + jitter,
+                values,
+                color=colors[x_pos - 1],
+                s=18,
+                alpha=0.75,
+                zorder=3,
+            )
+        ax.set_title(task)
+        ax.set_xlabel("Coordinate shuffle fraction")
+        ax.grid(axis="y", alpha=0.25)
+    axes[0].set_ylabel("AUPRC")
+    fig.suptitle("AMICI task recovery after coordinate shuffling", y=1.03)
+    plt.tight_layout()
+
+    for ext in ("png", "svg"):
+        fig.savefig(
+            os.path.join(figures_dir, f"{AUPRC_OUTPUT_PREFIX}_boxplots.{ext}"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+    plt.close(fig)
+
+
 # %% Setup paths
 select_gpu()
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -378,9 +588,11 @@ dataset_config = config["datasets"][DATASET]
 data_dir = os.path.join(base_dir, "data")
 model_dir = os.path.join(base_dir, "saved_models", RUN_NAME)
 figures_dir = os.path.join(base_dir, "figures", RUN_NAME)
+auprc_figures_dir = os.path.join(base_dir, "figures", AUPRC_RUN_NAME)
 os.makedirs(data_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
 os.makedirs(figures_dir, exist_ok=True)
+os.makedirs(auprc_figures_dir, exist_ok=True)
 
 output_paths = [
     os.path.join(figures_dir, f"{OUTPUT_PREFIX}_estimates.csv"),
@@ -388,8 +600,7 @@ output_paths = [
     os.path.join(figures_dir, f"{OUTPUT_PREFIX}_sensitivity.svg"),
 ]
 if all(os.path.exists(path) for path in output_paths):
-    print("Length scale coordinate shuffle sensitivity has already been plotted and saved. Skipping analysis.")
-    sys.exit(0)
+    print("Length scale coordinate shuffle sensitivity has already been plotted and saved. Continuing to AUPRCs.")
 
 base_adata_path = benchmark_path(benchmark_dir, os.path.join(config["dir_path"], f"{DATASET}_{BASE_DATASET_SEED}.h5ad"))
 ensure_base_realistic_dataset(benchmark_dir, dataset_config, base_adata_path)
@@ -467,3 +678,21 @@ samples_df.to_csv(os.path.join(figures_dir, f"{OUTPUT_PREFIX}_samples.csv"), ind
 
 # %% Plot mean inferred length scales
 plot_length_scale_boxplots(estimates_df, figures_dir)
+
+# %% Evaluate cached AMICI models for three coordinate shuffling fractions
+auprc_records = []
+model_root_dir = os.path.join(base_dir, "saved_models")
+for condition in COORDINATE_SHUFFLE_CONDITIONS:
+    auprc_records.append(
+        evaluate_cached_shuffle_auprcs(
+            condition,
+            data_dir,
+            model_root_dir,
+            auprc_figures_dir,
+            dataset_config,
+        )
+    )
+
+auprc_df = pd.concat(auprc_records, ignore_index=True)
+auprc_df.to_csv(os.path.join(auprc_figures_dir, f"{AUPRC_OUTPUT_PREFIX}_summary.csv"), index=False)
+plot_cached_shuffle_auprcs(auprc_df, auprc_figures_dir)
