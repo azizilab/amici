@@ -19,7 +19,11 @@ import scanpy as sc
 import scvi
 import torch
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SENSITIVITY_DIR = os.path.dirname(SCRIPT_DIR)
+BENCHMARK_DIR = os.path.abspath(os.path.join(SENSITIVITY_DIR, ".."))
+sys.path.insert(0, BENCHMARK_DIR)
+sys.path.insert(0, SENSITIVITY_DIR)
 
 import generate_realistic_dataset as realistic_dataset  # noqa: E402
 from amici_benchmark_utils import (  # noqa: E402
@@ -54,7 +58,7 @@ class UnimodalAttentionAMICI(AMICI):
 
 
 # %% Config
-RUN_NAME = "unimodal_attention_analysis"
+RUN_NAME = "unimodal_attention_sweep"
 SYNTHETIC_DATASET_SEEDS = [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
 REALISTIC_DATASET_SEEDS = list(range(10))
 ATTENTION_THRESHOLD = 0.1
@@ -82,10 +86,10 @@ SYNTHETIC_CONFIG = {
         },
     },
     "sweep_params": {
-        "end_attention_penalty": [1e-2, 1e-3, 1e-4],
+        "end_attention_penalty": [3e-3, 3e-4, 3e-5],
         "attention_penalty_schedule": [[10, 40]],
-        "seed": [22, 38, 42],
-        "value_l1_penalty_coef": [1e-6, 1e-5, 1e-4],
+        "seed": [21, 33, 88, 99],
+        "value_l1_penalty_coef": [3e-6, 3e-5],
         "batch_size": [128],
         "lr": [1e-3],
         "n_neighbors": [50],
@@ -131,13 +135,13 @@ REALISTIC_CONFIG = {
     "sweep_params": {
         "end_attention_penalty": [1e-5],
         "attention_penalty_schedule": [[15, 30]],
-        "seed": [21, 22, 33, 88, 99],
+        "seed": [21, 22, 33, 88, 99, 42],
         "value_l1_penalty_coef": [1e-5],
         "batch_size": [256],
         "lr": [1e-3],
         "n_neighbors": [50],
         "penalty_flavor_params": ["linear"],
-        "n_heads": [10],
+        "n_heads": [10, 12],
     },
 }
 
@@ -597,13 +601,29 @@ def plot_task_boxplots(results_df, figures_dir):
     plt.close(fig)
 
 
+def first_existing_path(*paths):
+    """Return the first existing path, otherwise the first candidate."""
+    for path in paths:
+        if os.path.exists(path):
+            return path
+    return paths[0]
+
+
 def plot_variant_comparison(unimodal_df, base_dir, figures_dir):
     """Save AUPRC boxplots comparing cached unconstrained and unimodal runs."""
-    unconstrained_path = os.path.join(
-        base_dir,
-        "results",
-        "unconstrained_attention_analysis",
-        "unconstrained_attention_task_scores.csv",
+    unconstrained_path = first_existing_path(
+        os.path.join(
+            base_dir,
+            "results",
+            "unconstrained_attention_sweep",
+            "unconstrained_attention_task_scores.csv",
+        ),
+        os.path.join(
+            base_dir,
+            "results",
+            "unconstrained_attention_analysis",
+            "unconstrained_attention_task_scores.csv",
+        ),
     )
     if not os.path.exists(unconstrained_path):
         print(f"Missing cached unconstrained results: {unconstrained_path}")
@@ -1011,12 +1031,12 @@ def plot_length_scale_distributions(length_scale_df, figures_dir):
 
 # %% Run analysis
 select_gpu()
-base_dir = os.path.dirname(os.path.abspath(__file__))
-benchmark_dir = os.path.abspath(os.path.join(base_dir, ".."))
-data_dir = os.path.join(base_dir, "data")
-model_dir = os.path.join(base_dir, "saved_models", RUN_NAME)
-results_dir = os.path.join(base_dir, "results", RUN_NAME)
-figures_dir = os.path.join(base_dir, "figures", RUN_NAME)
+base_dir = SENSITIVITY_DIR
+benchmark_dir = BENCHMARK_DIR
+data_dir = os.path.join(SENSITIVITY_DIR, "data")
+model_dir = os.path.join(SENSITIVITY_DIR, "saved_models", RUN_NAME)
+results_dir = os.path.join(SENSITIVITY_DIR, "results", RUN_NAME)
+figures_dir = os.path.join(SENSITIVITY_DIR, "figures", RUN_NAME)
 for path in (data_dir, model_dir, results_dir, figures_dir):
     os.makedirs(path, exist_ok=True)
 
@@ -1029,8 +1049,14 @@ results_df.to_csv(os.path.join(results_dir, "unimodal_attention_task_scores.csv"
 plot_task_boxplots(results_df, figures_dir)
 plot_variant_comparison(results_df, base_dir, figures_dir)
 
-unconstrained_model_dir = os.path.join(base_dir, "saved_models", "unconstrained_attention_analysis")
-unconstrained_results_dir = os.path.join(base_dir, "results", "unconstrained_attention_analysis")
+unconstrained_model_dir = first_existing_path(
+    os.path.join(base_dir, "saved_models", "unconstrained_attention_sweep"),
+    os.path.join(base_dir, "saved_models", "unconstrained_attention_analysis"),
+)
+unconstrained_results_dir = first_existing_path(
+    os.path.join(base_dir, "results", "unconstrained_attention_sweep"),
+    os.path.join(base_dir, "results", "unconstrained_attention_analysis"),
+)
 comparison_pr_curves = [
     compute_cached_variant_pr_curves(
         "Unconstrained",

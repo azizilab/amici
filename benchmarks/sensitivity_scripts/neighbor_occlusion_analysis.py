@@ -35,8 +35,8 @@ from amici import AMICI  # noqa: E402
 from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 
 # %% Config
-RUN_NAME = "neighbor_occlusion_analysis"
-DATASET_SEED = 42
+RUN_NAME = "neighbor_occlusion_analysis_best_params"
+DEFAULT_RANDOM_SEED = 42
 OCCLUSION_FRACTIONS = [0.0, 0.25, 0.5, 0.75]
 OCCLUSION_SEEDS = [0, 1, 2]
 BASELINE_OCCLUSION_SEED = 0
@@ -91,15 +91,17 @@ REALISTIC_INTERACTIONS = {
 DATASET_CONFIGS = {
     "3ct_dataset_2way": {
         "kind": "synthetic",
+        "dataset_seed": 58,
         "labels_key": "leiden",
         "subtype_key": "subtype",
         "gt_interactions": SYNTHETIC_INTERACTIONS,
+        "source_h5ad_path": "sensitivity_scripts/data/semisyn_58.h5ad",
         "run": {
-            "end_val": 1e-3,
-            "value_l1": 1e-5,
-            "train_seed": 22,
+            "end_val": 3e-3,
+            "value_l1": 3e-6,
+            "train_seed": 88,
             "epoch_start": 10,
-            "epoch_end": 30,
+            "epoch_end": 40,
             "batch_size": 128,
             "n_heads": 8,
             "lr": 1e-3,
@@ -109,13 +111,14 @@ DATASET_CONFIGS = {
     },
     "breast_cancer": {
         "kind": "realistic",
+        "dataset_seed": 2,
         "labels_key": "cell_type",
         "subtype_key": "subtype",
         "gt_interactions": REALISTIC_INTERACTIONS,
         "run": {
             "end_val": 1e-5,
             "value_l1": 1e-5,
-            "train_seed": 22,
+            "train_seed": 99,
             "epoch_start": 15,
             "epoch_end": 30,
             "batch_size": 256,
@@ -127,7 +130,7 @@ DATASET_CONFIGS = {
         "flex_h5_path": "data/GSM7782698_count_raw_feature_bc_matrix.h5",
         "annot_path": "data/41467_2023_43458_MOESM4_ESM.xlsx",
         "xenium_path": "data/xenium_rep1_io.h5ad",
-        "base_h5ad_path": "data/breast_cancer_42.h5ad",
+        "base_h5ad_path": "sensitivity_scripts/data/realistic_length_scale_dataset_bootstrap_ci/breast_cancer_2.h5ad",
         "scvi_model_dir": "data/scvi_model",
         "n_cv_folds": 3,
     },
@@ -151,28 +154,40 @@ def benchmark_path(path):
     return path if os.path.isabs(path) else os.path.join(benchmark_dir, path)
 
 
-def dataset_path(dataset_name):
+def dataset_path(dataset_name, dataset_config):
     """Return the cached h5ad path for this analysis."""
-    return os.path.join(data_dir, f"{dataset_name}_{DATASET_SEED}.h5ad")
+    return os.path.join(data_dir, f"{dataset_name}_{dataset_config['dataset_seed']}.h5ad")
 
 
 def ensure_dataset(dataset_name, dataset_config):
     """Generate the real-interaction semisynthetic dataset if it is not already cached."""
-    adata_path = dataset_path(dataset_name)
+    dataset_seed = int(dataset_config["dataset_seed"])
+    adata_path = dataset_path(dataset_name, dataset_config)
     if os.path.exists(adata_path):
         return
 
+    source_h5ad_path = dataset_config.get("source_h5ad_path")
+    if source_h5ad_path:
+        source_h5ad_path = benchmark_path(source_h5ad_path)
+        if os.path.exists(source_h5ad_path):
+            shutil.copyfile(source_h5ad_path, adata_path)
+            return
+
     if dataset_config["kind"] == "synthetic":
         interaction_df = _create_interaction_df(dataset_config["gt_interactions"])
-        random.seed(DATASET_SEED)
-        np.random.seed(DATASET_SEED)
-        torch.random.manual_seed(DATASET_SEED)
-        scvi.settings.seed = DATASET_SEED
+        random.seed(dataset_seed)
+        np.random.seed(dataset_seed)
+        torch.random.manual_seed(dataset_seed)
+        scvi.settings.seed = dataset_seed
         generate_synthetic_dataset(interaction_df, adata_path)
         return
 
     if dataset_config["kind"] == "realistic":
         base_h5ad_path = benchmark_path(dataset_config["base_h5ad_path"])
+        if os.path.exists(base_h5ad_path):
+            shutil.copyfile(base_h5ad_path, adata_path)
+            return
+
         raw_input_paths = [
             benchmark_path(dataset_config["flex_h5_path"]),
             benchmark_path(dataset_config["annot_path"]),
@@ -191,9 +206,9 @@ def ensure_dataset(dataset_name, dataset_config):
             adata.write_h5ad(adata_path)
             return
 
-        np.random.seed(DATASET_SEED)
-        torch.manual_seed(DATASET_SEED)
-        scvi.settings.seed = DATASET_SEED
+        np.random.seed(dataset_seed)
+        torch.manual_seed(dataset_seed)
+        scvi.settings.seed = dataset_seed
         generate_realistic_dataset(
             benchmark_path(dataset_config["flex_h5_path"]),
             benchmark_path(dataset_config["annot_path"]),
@@ -482,18 +497,18 @@ def plot_auprc_and_attention_stability(summary_df):
 
 # %% Train models, occlude neighbors, and compute PR curves
 select_gpu()
-random.seed(DATASET_SEED)
-np.random.seed(DATASET_SEED)
-torch.random.manual_seed(DATASET_SEED)
-torch.manual_seed(DATASET_SEED)
-scvi.settings.seed = DATASET_SEED
+random.seed(DEFAULT_RANDOM_SEED)
+np.random.seed(DEFAULT_RANDOM_SEED)
+torch.random.manual_seed(DEFAULT_RANDOM_SEED)
+torch.manual_seed(DEFAULT_RANDOM_SEED)
+scvi.settings.seed = DEFAULT_RANDOM_SEED
 
 summary_records = []
 pr_curve_records = {}
 
 for dataset_name, dataset_config in DATASET_CONFIGS.items():
     ensure_dataset(dataset_name, dataset_config)
-    adata = sc.read_h5ad(dataset_path(dataset_name))
+    adata = sc.read_h5ad(dataset_path(dataset_name, dataset_config))
     adata.obs_names_make_unique()
 
     setup_inference_anndata(adata, dataset_config)
