@@ -189,12 +189,15 @@ def radius_neighbor_indices(adata, radius):
 
 def compute_radius_composition_features(adata, radius):
     cell_types = list(adata.obs[LABELS_KEY].unique())
-    labels = adata.obs[LABELS_KEY]
-    rows = []
-    for obs_name, neigh_names in zip(adata.obs_names, radius_neighbor_indices(adata, radius)):
-        counts = labels.loc[neigh_names].value_counts()
-        rows.append(counts.reindex(cell_types, fill_value=0))
-    counts_df = pd.DataFrame(rows, index=adata.obs_names, columns=cell_types)
+    coords = spatial_coords(adata)
+    nbrs = NearestNeighbors(radius=radius).fit(coords)
+    graph = nbrs.radius_neighbors_graph(coords, mode="connectivity").tocsr()
+    graph.setdiag(0)
+    graph.eliminate_zeros()
+
+    labels_onehot = pd.get_dummies(adata.obs[LABELS_KEY]).reindex(columns=cell_types, fill_value=0)
+    counts = graph @ sparse.csr_matrix(labels_onehot.to_numpy(dtype=float))
+    counts_df = pd.DataFrame(np.asarray(counts.todense()), index=adata.obs_names, columns=cell_types)
     return normalize_composition(counts_df)
 
 
@@ -267,7 +270,16 @@ def comparison_metrics(adata, attention_df, baseline_df, cluster_col, feature_co
     baseline_labels = baseline_df.loc[adata.obs_names, cluster_col].astype(str).values
     cell_type_labels = adata.obs[LABELS_KEY].astype(str).values
     values = baseline_df.loc[adata.obs_names, feature_cols].values
-    sil = silhouette_score(values, baseline_labels) if len(set(baseline_labels)) > 1 else np.nan
+    sil = (
+        silhouette_score(
+            values,
+            baseline_labels,
+            sample_size=min(10000, len(baseline_labels)),
+            random_state=SEED,
+        )
+        if len(set(baseline_labels)) > 1
+        else np.nan
+    )
     overlap_df, overlap_score = matched_cluster_overlap(attention_labels, baseline_labels)
     return {
         "n_cells": adata.n_obs,
