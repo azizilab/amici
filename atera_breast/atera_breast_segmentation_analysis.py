@@ -18,22 +18,22 @@ labels_key = "celltype_train_grouped"
 # %% Define the cell type pairs and receiver genes of interest
 cell_type_pairs = [
     {
-        "sender_type": "Myoepithelial",
-        "receiver_type": "CAFs",
-        "genes": ["COL15A1", "SPRY2", "COL1A1", "COL3A1", "COL6A1", "FN1"],
-        "label": "Myoepithelial -> CAFs",
-    },
-    {
         "sender_type": "CAFs",
-        "receiver_type": "Endothelial",
-        "genes": ["COL15A1", "SPRY1", "LAMB1", "HSPG2", "COL4A1", "VWF", "GAS6", "PLXNB", "TIE1", "SPRY2"],
-        "label": "CAFs -> Endothelial",
+        "receiver_type": "High_Grade_DCIS",
+        "genes": ["MYLK", "TPM2"],
+        "label": "CAFs -> High_Grade_DCIS",
     },
     {
-        "sender_type": "Pericytes",
-        "receiver_type": "Endothelial",
-        "genes": ["ENG", "PECAM1", "ENTPD1", "PLVAP", "SELP", "ACKR1", "STOM"],
-        "label": "Pericytes -> Endothelial",
+        "sender_type": "Basal_DCIS",
+        "receiver_type": "High_Grade_DCIS",
+        "genes": ["MYLK", "TPM2"],
+        "label": "Basal_DCIS -> High_Grade_DCIS",
+    },
+    {
+        "sender_type": "Endothelial",
+        "receiver_type": "High_Grade_DCIS",
+        "genes": ["MYLK", "TPM2"],
+        "label": "Endothelial -> High_Grade_DCIS",
     },
 ]
 near_threshold = 20.0

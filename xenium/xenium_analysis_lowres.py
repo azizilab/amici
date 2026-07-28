@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 
 from scipy.stats import pearsonr
 from amici import AMICI
+from amici.interpretation._ablation_module import AMICIAblationModule
 
 # %%
 # Create color palette for each cell type of interest
@@ -86,18 +87,30 @@ AMICI.setup_anndata(
     n_neighbors=50,
 )
 model_new = AMICI.load(new_model_path, adata=adata_new)
+ablation_cache_dir = "./figures/cached_ablation_scores"
+os.makedirs(ablation_cache_dir, exist_ok=True)
 
 # %% Compute interaction matrices for both models
-ablation_old = model_old.get_neighbor_ablation_scores(
-    adata=adata_old,
-    compute_z_value=True,
-)
+old_ablation_cache_path = os.path.join(ablation_cache_dir, "highres_model_ablation_scores.pkl")
+if os.path.exists(old_ablation_cache_path):
+    ablation_old = AMICIAblationModule.load_object(old_ablation_cache_path)
+else:
+    ablation_old = model_old.get_neighbor_ablation_scores(
+        adata=adata_old,
+        compute_z_value=True,
+    )
+    ablation_old.save_object(old_ablation_cache_path)
 interaction_matrix_old = ablation_old._get_interaction_weight_matrix()
 
-ablation_new = model_new.get_neighbor_ablation_scores(
-    adata=adata_new,
-    compute_z_value=True,
-)
+new_ablation_cache_path = os.path.join(ablation_cache_dir, "lowres_model_ablation_scores.pkl")
+if os.path.exists(new_ablation_cache_path):
+    ablation_new = AMICIAblationModule.load_object(new_ablation_cache_path)
+else:
+    ablation_new = model_new.get_neighbor_ablation_scores(
+        adata=adata_new,
+        compute_z_value=True,
+    )
+    ablation_new.save_object(new_ablation_cache_path)
 interaction_matrix_new = ablation_new._get_interaction_weight_matrix()
 
 # %% Aggregate the old model's high-res interaction matrix to lowres cell types

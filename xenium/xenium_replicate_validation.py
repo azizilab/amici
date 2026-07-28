@@ -7,6 +7,7 @@ import seaborn as sns
 import os
 from sklearn.cluster import KMeans
 from amici import AMICI
+from amici.interpretation._ablation_module import AMICIAblationModule
 from scipy.stats import spearmanr
 from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
 
@@ -83,16 +84,29 @@ AMICI.setup_anndata(
     coord_obsm_key="spatial",
     n_neighbors=50,
 )
+ablation_cache_dir = "./figures/cached_ablation_scores"
+os.makedirs(ablation_cache_dir, exist_ok=True)
 
 # %% Compute the ablation scores for the two models
-ablation_residuals_rep1 = model_rep1.get_neighbor_ablation_scores(
-    adata=adata_rep1,
-    compute_z_value=True,
-)
-ablation_residuals_rep2 = model_rep2.get_neighbor_ablation_scores(
-    adata=adata_rep2,
-    compute_z_value=True,
-)
+rep1_ablation_cache_path = os.path.join(ablation_cache_dir, "rep1_ablation_scores.pkl")
+if os.path.exists(rep1_ablation_cache_path):
+    ablation_residuals_rep1 = AMICIAblationModule.load_object(rep1_ablation_cache_path)
+else:
+    ablation_residuals_rep1 = model_rep1.get_neighbor_ablation_scores(
+        adata=adata_rep1,
+        compute_z_value=True,
+    )
+    ablation_residuals_rep1.save_object(rep1_ablation_cache_path)
+
+rep2_ablation_cache_path = os.path.join(ablation_cache_dir, "rep2_ablation_scores.pkl")
+if os.path.exists(rep2_ablation_cache_path):
+    ablation_residuals_rep2 = AMICIAblationModule.load_object(rep2_ablation_cache_path)
+else:
+    ablation_residuals_rep2 = model_rep2.get_neighbor_ablation_scores(
+        adata=adata_rep2,
+        compute_z_value=True,
+    )
+    ablation_residuals_rep2.save_object(rep2_ablation_cache_path)
 
 # %% Visualize the heatmap of the interaction scores
 ablation_residuals_rep1.plot_interaction_weight_heatmap(save_png=True, save_svg=True, save_dir="./figures/rep1")
