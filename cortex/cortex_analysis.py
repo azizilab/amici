@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pytorch_lightning as pl
 from amici import AMICI
+from amici.interpretation._ablation_module import AMICIAblationModule
 from amici.interpretation import (
     AMICICounterfactualAttentionModule,
     AMICIAttentionModule,
@@ -59,6 +60,8 @@ labels_key = "subclass"
 adata = sc.read_h5ad(f"./data/cortex_processed_{data_date}.h5ad")
 adata.obsm["spatial"] = adata.obs[["centroid_x", "centroid_y"]].values
 model_path = f"./saved_models/cortex_{seed}_sweep_{wandb_sweep_id}_{wandb_run_id}_params_{model_date}"
+ablation_cache_dir = "./figures/cached_ablation_scores"
+os.makedirs(ablation_cache_dir, exist_ok=True)
 
 model = AMICI.load(
     model_path,
@@ -196,13 +199,19 @@ def visualize_spatial_distribution_per_slice(adata, labels_key="subclass", x_lim
 visualize_spatial_distribution_per_slice(adata)
 
 # %% Visualize directed graph of interactions between cell types
-ablation_residuals = model.get_neighbor_ablation_scores(
-    adata=adata,
-    compute_z_value=True,
-)
+ablation_cache_path = os.path.join(ablation_cache_dir, "all_cell_types_ablation_scores.pkl")
+if os.path.exists(ablation_cache_path):
+    ablation_residuals = AMICIAblationModule.load_object(ablation_cache_path)
+else:
+    ablation_residuals = model.get_neighbor_ablation_scores(
+        adata=adata,
+        compute_z_value=True,
+    )
+    ablation_residuals.save_object(ablation_cache_path)
 
 # %% Plot the interaction weight matrix as a heatmap
 ablation_residuals.plot_interaction_weight_heatmap(save_png=True, save_svg=True, save_dir="./figures")
+plt.close("all")
 
 # %% Grab quantile to get threshold for weight matrix
 interaction_weight_matrix_df = ablation_residuals._get_interaction_weight_matrix()
@@ -211,6 +220,7 @@ quantile = 0.86
 weight_threshold = np.quantile(interaction_weight_matrix, quantile)
 print(f"{quantile} quantile threshold: {weight_threshold:.2f}")
 
+plt.figure(figsize=(8, 5))
 sns.kdeplot(
     x=interaction_weight_matrix
 )

@@ -14,7 +14,8 @@ import torch
 import wandb
 from anndata import AnnData
 from matplotlib.lines import Line2D
-from scipy.stats import norm
+from scipy.spatial.distance import cdist
+from scipy.stats import mannwhitneyu, norm
 from scvi import REGISTRY_KEYS
 from statsmodels.stats.multitest import multipletests
 
@@ -688,6 +689,90 @@ class AMICIAblationModule:
         if show:
             plt.show()
 
+    def _get_segmentation_artifact_genes(
+        self,
+        genes,
+        sender_types,
+        receiver_type,
+        adata,
+        near_threshold=20.0,
+        far_threshold=100.0,
+        pval_threshold=0.1,
+        coord_obsm_key="spatial",
+    ):
+        """Return plotted genes flagged by the segmentation artifact test."""
+        if adata is None:
+            raise ValueError("segmentation_adata must be provided when flag_segmentation_artifacts=True.")
+        if coord_obsm_key not in adata.obsm:
+            raise KeyError(f"{coord_obsm_key!r} not found in segmentation_adata.obsm.")
+        if self._labels_key not in adata.obs:
+            raise KeyError(f"{self._labels_key!r} not found in segmentation_adata.obs.")
+
+        genes = [gene for gene in genes if gene in adata.var_names]
+        if len(genes) == 0:
+            return set()
+
+        labels = adata.obs[self._labels_key].astype(str)
+        receiver_mask = labels == str(receiver_type)
+        if receiver_mask.sum() == 0:
+            return set()
+
+        coords = np.asarray(adata.obsm[coord_obsm_key])
+        receiver_coords = coords[receiver_mask.to_numpy()]
+        receiver_indices = np.flatnonzero(receiver_mask.to_numpy())
+        gene_indices = [adata.var_names.get_loc(gene) for gene in genes]
+        flagged_genes = set()
+
+        for sender_type in sender_types:
+            sender_mask = labels == str(sender_type)
+            if sender_mask.sum() == 0:
+                continue
+
+            sender_coords = coords[sender_mask.to_numpy()]
+            sender_indices = np.flatnonzero(sender_mask.to_numpy())
+            receiver_to_sender = cdist(receiver_coords, sender_coords)
+            sender_to_receiver = receiver_to_sender.T
+
+            near_receiver_indices = receiver_indices[receiver_to_sender.min(axis=1) <= near_threshold]
+            far_sender_indices = sender_indices[sender_to_receiver.min(axis=1) >= far_threshold]
+            if len(near_receiver_indices) < 2 or len(far_sender_indices) < 2:
+                continue
+
+            n_sample = min(len(near_receiver_indices), len(far_sender_indices))
+            rng_seed = abs(hash((str(sender_type), str(receiver_type)))) % (2**32)
+            rng = np.random.default_rng(rng_seed)
+            near_receiver_indices = rng.choice(near_receiver_indices, size=n_sample, replace=False)
+            far_sender_indices = rng.choice(far_sender_indices, size=n_sample, replace=False)
+
+            near_expr = adata.X[near_receiver_indices][:, gene_indices]
+            far_sender_expr = adata.X[far_sender_indices][:, gene_indices]
+            if hasattr(near_expr, "toarray"):
+                near_expr = near_expr.toarray()
+            if hasattr(far_sender_expr, "toarray"):
+                far_sender_expr = far_sender_expr.toarray()
+            near_expr = np.asarray(near_expr)
+            far_sender_expr = np.asarray(far_sender_expr)
+
+            for idx, gene in enumerate(genes):
+                _, pval = mannwhitneyu(
+                    near_expr[:, idx],
+                    far_sender_expr[:, idx],
+                    alternative="greater",
+                )
+                if pval < pval_threshold:
+                    flagged_genes.add(gene)
+        return flagged_genes
+
+    @staticmethod
+    def _mark_segmentation_artifact_gene_labels(dotplot_fig, flagged_genes):
+        """Color and bold gene tick labels flagged by the segmentation test."""
+        axes = dotplot_fig.get_axes()
+        for ax in axes.values():
+            for label in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
+                if label.get_text() in flagged_genes:
+                    label.set_color("crimson")
+                    label.set_fontweight("bold")
+
     def plot_featurewise_contributions_dotplot(
         self,
         cell_type=None,
@@ -703,6 +788,12 @@ class AMICIAblationModule:
         save_png=False,
         save_svg=False,
         save_dir="./figures",
+        flag_segmentation_artifacts=False,
+        segmentation_adata=None,
+        segmentation_near_threshold=20.0,
+        segmentation_far_threshold=100.0,
+        segmentation_pval_threshold=0.1,
+        segmentation_coord_obsm_key="spatial",
     ):
         """Plots a dotplot of the top genes by color_by and size_by for a given cell type and head index.
 
@@ -721,6 +812,12 @@ class AMICIAblationModule:
             save_png (bool, optional): Whether to save the plot as a png.
             save_svg (bool, optional): Whether to save the plot as a svg.
             save_dir (str, optional): The directory to save the plot to.
+            flag_segmentation_artifacts (bool, optional): Whether to highlight genes passing the segmentation artifact test.
+            segmentation_adata (AnnData, optional): AnnData used for segmentation testing when flag_segmentation_artifacts is True.
+            segmentation_near_threshold (float, optional): Maximum receiver-to-sender distance for near receivers.
+            segmentation_far_threshold (float, optional): Minimum sender-to-receiver distance for far senders.
+            segmentation_pval_threshold (float, optional): Mann-Whitney U p-value threshold for flagging genes.
+            segmentation_coord_obsm_key (str, optional): obsm key containing spatial coordinates for segmentation testing.
         """
         assert color_by in [
             "z_value",
@@ -798,6 +895,18 @@ class AMICIAblationModule:
             dot_color_df.rename(columns={col: col.replace(f"_{color_by}", "")}, inplace=True)
 
         neighbor_cell_types = [ct.replace(f"_{size_by}", "") for ct in size_by_cols]
+        segmentation_flagged_genes = set()
+        if flag_segmentation_artifacts:
+            segmentation_flagged_genes = self._get_segmentation_artifact_genes(
+                genes=gene_names,
+                sender_types=neighbor_cell_types,
+                receiver_type=cell_type,
+                adata=segmentation_adata,
+                near_threshold=segmentation_near_threshold,
+                far_threshold=segmentation_far_threshold,
+                pval_threshold=segmentation_pval_threshold,
+                coord_obsm_key=segmentation_coord_obsm_key,
+            )
 
         head_idx_str = f"head {head_idx}" if head_idx is not None else "all heads"
         score_titles = {
@@ -824,6 +933,8 @@ class AMICIAblationModule:
             colorbar_title=score_titles[color_by],
             return_fig=True,
         )
+        if segmentation_flagged_genes:
+            self._mark_segmentation_artifact_gene_labels(fig, segmentation_flagged_genes)
 
         def _plot_size_legend(self, size_legend_ax, step, dot_max, dot_min):
             """

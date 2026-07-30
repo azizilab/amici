@@ -12,6 +12,7 @@ import distinctipy
 
 from scvi import REGISTRY_KEYS
 from amici import AMICI
+from amici.interpretation._ablation_module import AMICIAblationModule
 from amici.interpretation import (
     AMICICounterfactualAttentionModule,
     AMICIAttentionModule,
@@ -61,6 +62,8 @@ model_path = os.path.join(
     saved_models_dir,
     f"xenium_{seed}_sweep_{wandb_sweep_id}_{wandb_run_id}_params_{model_date}",
 )
+ablation_cache_dir = "./figures/cached_ablation_scores"
+os.makedirs(ablation_cache_dir, exist_ok=True)
 
 
 # %% Select subset of cell types for interpretation and visualize
@@ -148,13 +151,19 @@ AMICI.setup_anndata(
 
 
 # %% Visualize directed graph of interactions between cell types
-ablation_residuals = model.get_neighbor_ablation_scores(
-    adata=adata,
-    compute_z_value=True,
-)
+ablation_cache_path = os.path.join(ablation_cache_dir, "all_cell_types_ablation_scores.pkl")
+if os.path.exists(ablation_cache_path):
+    ablation_residuals = AMICIAblationModule.load_object(ablation_cache_path)
+else:
+    ablation_residuals = model.get_neighbor_ablation_scores(
+        adata=adata,
+        compute_z_value=True,
+    )
+    ablation_residuals.save_object(ablation_cache_path)
 
 # %% Plot the interaction weight matrix as a heatmap
 ablation_residuals.plot_interaction_weight_heatmap(save_png=True, save_svg=True, save_dir="./figures")
+plt.close("all")
 
 # %% Grab 90 quantile to get threshold for weight matrix
 interaction_weight_matrix_df = ablation_residuals._get_interaction_weight_matrix()
@@ -163,6 +172,7 @@ quantile = 0.80
 weight_threshold = np.quantile(interaction_weight_matrix, quantile)
 print(f"{quantile} quantile threshold: {weight_threshold:.2f}")
 
+plt.figure(figsize=(8, 5))
 sns.kdeplot(
     x=interaction_weight_matrix
 )
