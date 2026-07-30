@@ -19,6 +19,7 @@ pl.seed_everything(seed)
 labels_key = "celltype_manual_fine"
 data_date = "2026-07-25"
 model_date = "2026-07-26"
+cosmx_pixel_size_um = 0.12028
 adata = sc.read_h5ad(f"./data/human_tonsil_filtered_{data_date}.h5ad")
 adata_train = sc.read_h5ad(f"./data/human_tonsil_filtered_train_{data_date}.h5ad")
 adata_test = sc.read_h5ad(f"./data/human_tonsil_filtered_test_{data_date}.h5ad")
@@ -49,6 +50,73 @@ print(f"Loaded {adata.n_obs} cells x {adata.n_vars} genes")
 print(f"Train cells: {adata_train.n_obs}; test cells: {adata_test.n_obs}")
 print(f"Loading model from {model_path}")
 print(adata.obs[labels_key].value_counts().to_string())
+
+
+# %% Plot helpers
+def plot_length_scale_distribution_um(
+    counterfactual_attention_patterns,
+    head_idxs,
+    sender_types,
+    attention_threshold=0.1,
+    sample_threshold=0.001,
+    max_length_scale_px=150,
+    palette=None,
+    save_dir=figures_dir,
+    output_prefix="human_tonsil",
+    show=True,
+):
+    """Plot human tonsil length scales in micrometers from pixel-trained coordinates."""
+    head_idxs = list(head_idxs)
+    length_scale_df = counterfactual_attention_patterns._calculate_length_scales(
+        head_idxs=head_idxs,
+        sender_types=sender_types,
+        attention_threshold=attention_threshold,
+        sample_threshold=sample_threshold,
+    )
+    length_scale_df["length_scale_px"] = length_scale_df["length_scale"]
+    length_scale_df["length_scale_um"] = length_scale_df["length_scale_px"] * cosmx_pixel_size_um
+    length_scale_df.to_csv(
+        os.path.join(save_dir, f"{output_prefix}_length_scale_distribution_um.csv"),
+        index=False,
+    )
+
+    median_length_scale = length_scale_df.groupby(["sender_type", "head_idx"])["length_scale_um"].median()
+    max_per_sender = median_length_scale.groupby("sender_type").max()
+    sender_types_order = list(max_per_sender.sort_values(ascending=False).index)
+
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(
+        data=length_scale_df,
+        x="head_idx",
+        y="length_scale_um",
+        hue="sender_type",
+        hue_order=sender_types_order,
+        palette=palette,
+        dodge=True,
+        fliersize=0.05,
+    )
+    plt.ylim(0, max_length_scale_px * cosmx_pixel_size_um)
+    plt.xlabel("Head Index")
+    plt.ylabel("Length scale (um)")
+    query_label = counterfactual_attention_patterns._counterfactual_attention_df["query_label"].unique()[0]
+    plt.title(f"Length Scale Distribution for {query_label}")
+    plt.legend(title="Sender Cell Type", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.tight_layout()
+    plt.savefig(
+        os.path.join(save_dir, f"{output_prefix}_length_scale_distribution_um.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        os.path.join(save_dir, f"{output_prefix}_length_scale_distribution_um.svg"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    if show:
+        plt.show()
+    plt.close()
+
+    return length_scale_df
 
 
 # %% Visualize spatial distribution
@@ -256,13 +324,13 @@ attention_patterns.plot_attention_summary(
 )
 
 # %% Define a target cell type for focused interpretation
-receiver_ct = "GC B cell (resting)"
+receiver_ct = "CD4 T cell"
 sender_cts = [
-    "Tfh cell",
-    "Follicular dendritic cell",
-    "Mast cell",
-    "Squamous epithelium (activated)",
-    "Macrophage (GPNMB+)"
+    "CD8 T cell",
+    "Fibroblast",
+    "Macrophage (C1Q+)",
+    "Naive B cell (mantle zone)",
+    "pDC",
 ]
 sender_cts = [ct for ct in sender_cts if ct in adata.obs[labels_key].astype(str).unique()]
 head_idx = min(4, model.module.n_heads - 1)
@@ -309,6 +377,8 @@ ablation_ct_residuals.plot_featurewise_contributions_heatmap(
 )
 ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     cell_type=receiver_ct,
+    flag_segmentation_artifacts=True,
+    segmentation_adata=adata,
     color_by="diff",
     size_by="z_value",
     n_top_genes=10,
@@ -326,16 +396,16 @@ counterfactual_attention_patterns = model.get_counterfactual_attention_patterns(
 )
 
 # %% Plot length scales and counterfactual attention summaries
-counterfactual_attention_patterns.plot_length_scale_distribution(
+plot_length_scale_distribution_um(
+    counterfactual_attention_patterns=counterfactual_attention_patterns,
     head_idxs=[head_idx],
     sender_types=sender_cts,
     attention_threshold=0.1,
     sample_threshold=0.001,
-    max_length_scale=150,
+    max_length_scale_px=150,
     palette=CELL_TYPE_PALETTE,
-    save_png=True,
-    save_svg=True,
     save_dir=figures_dir,
+    output_prefix=f"human_tonsil_head_{head_idx}",
     show=True,
 )
 
@@ -352,15 +422,17 @@ for idx in range(model.module.n_heads):
         save_dir=figures_dir,
     )
 
-counterfactual_attention_patterns.plot_length_scale_distribution(
+plot_length_scale_distribution_um(
+    counterfactual_attention_patterns=counterfactual_attention_patterns,
     head_idxs=range(model.module.n_heads),
     sender_types=sender_cts,
     attention_threshold=0.1,
     sample_threshold=0.01,
-    max_length_scale=300,
+    max_length_scale_px=300,
     palette=CELL_TYPE_PALETTE,
-    save_png=True,
-    save_svg=True,
     save_dir=figures_dir,
+    output_prefix="human_tonsil_all_heads",
     show=True,
 )
+
+# %%
