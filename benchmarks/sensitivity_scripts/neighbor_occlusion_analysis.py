@@ -1,4 +1,5 @@
 # %% Import libraries
+import itertools
 import json
 import os
 import random
@@ -96,17 +97,16 @@ DATASET_CONFIGS = {
         "subtype_key": "subtype",
         "gt_interactions": SYNTHETIC_INTERACTIONS,
         "source_h5ad_path": "sensitivity_scripts/data/semisyn_58.h5ad",
-        "run": {
-            "end_val": 3e-3,
-            "value_l1": 3e-6,
-            "train_seed": 88,
-            "epoch_start": 10,
-            "epoch_end": 40,
-            "batch_size": 128,
-            "n_heads": 8,
-            "lr": 1e-3,
-            "n_neighbors": 50,
-            "flavor": "linear",
+        "sweep_params": {
+            "end_attention_penalty": [3e-3, 3e-4, 3e-5],
+            "attention_penalty_schedule": [[10, 40]],
+            "seed": [21, 33, 88, 99],
+            "value_l1_penalty_coef": [3e-6, 3e-5],
+            "batch_size": [128],
+            "lr": [1e-3],
+            "n_neighbors": [50],
+            "penalty_flavor_params": ["linear"],
+            "n_heads": [8],
         },
     },
     "breast_cancer": {
@@ -115,24 +115,22 @@ DATASET_CONFIGS = {
         "labels_key": "cell_type",
         "subtype_key": "subtype",
         "gt_interactions": REALISTIC_INTERACTIONS,
-        "run": {
-            "end_val": 1e-5,
-            "value_l1": 1e-5,
-            "train_seed": 99,
-            "epoch_start": 15,
-            "epoch_end": 30,
-            "batch_size": 256,
-            "n_heads": 10,
-            "lr": 1e-3,
-            "n_neighbors": 50,
-            "flavor": "linear",
+        "sweep_params": {
+            "end_attention_penalty": [1e-5],
+            "attention_penalty_schedule": [[15, 30]],
+            "seed": [21, 22, 33, 88, 99],
+            "value_l1_penalty_coef": [1e-5],
+            "batch_size": [256],
+            "lr": [1e-3],
+            "n_neighbors": [50],
+            "penalty_flavor_params": ["linear"],
+            "n_heads": [10],
         },
         "flex_h5_path": "data/GSM7782698_count_raw_feature_bc_matrix.h5",
         "annot_path": "data/41467_2023_43458_MOESM4_ESM.xlsx",
         "xenium_path": "data/xenium_rep1_io.h5ad",
         "base_h5ad_path": "sensitivity_scripts/data/realistic_length_scale_dataset_bootstrap_ci/breast_cancer_2.h5ad",
         "scvi_model_dir": "data/scvi_model",
-        "n_cv_folds": 3,
     },
 }
 
@@ -215,32 +213,58 @@ def ensure_dataset(dataset_name, dataset_config):
             benchmark_path(dataset_config["xenium_path"]),
             adata_path,
             scvi_model_dir=benchmark_path(dataset_config["scvi_model_dir"]),
-            n_cv_folds=dataset_config.get("n_cv_folds", 3),
         )
         return
 
     raise ValueError(f"Unknown dataset kind: {dataset_config['kind']}")
 
 
-def train_or_load_model(dataset_name, adata, dataset_config):
-    """Train one AMICI model for the base dataset, or load the cached model."""
-    run = dataset_config["run"]
-    model_path = os.path.join(saved_models_dir, dataset_name, "model")
-    result_path = os.path.join(saved_models_dir, dataset_name, "result.json")
+def build_sweep_runs(dataset_config):
+    """Build the AMICI sweep used to select the occlusion model."""
+    sweep = dataset_config["sweep_params"]
+    run_configs = []
+    for run_idx, (end_val, schedule, train_seed, value_l1, batch_size, lr, n_neighbors, flavor, n_heads) in enumerate(
+        itertools.product(
+            sweep["end_attention_penalty"],
+            sweep["attention_penalty_schedule"],
+            sweep["seed"],
+            sweep["value_l1_penalty_coef"],
+            sweep["batch_size"],
+            sweep["lr"],
+            sweep["n_neighbors"],
+            sweep["penalty_flavor_params"],
+            sweep["n_heads"],
+        )
+    ):
+        run_configs.append(
+            {
+                "end_val": end_val,
+                "flavor": flavor,
+                "value_l1": value_l1,
+                "train_seed": train_seed,
+                "epoch_start": schedule[0],
+                "epoch_end": schedule[1],
+                "batch_size": batch_size,
+                "n_heads": n_heads,
+                "lr": lr,
+                "n_neighbors": n_neighbors,
+                "run_idx": run_idx,
+            }
+        )
+    return run_configs
+
+
+def train_or_load_run(dataset_name, adata, dataset_config, run):
+    """Train or load one AMICI candidate model."""
+    run_idx = int(run["run_idx"])
+    run_dir = os.path.join(saved_models_dir, dataset_name, "candidate_runs", f"run_{run_idx}_seed_{run['train_seed']}")
+    model_path = os.path.join(run_dir, "model")
+    result_path = os.path.join(run_dir, "result.json")
 
     if os.path.exists(os.path.join(model_path, "model.pt")) and os.path.exists(result_path):
-        AMICI.setup_anndata(
-            adata,
-            labels_key=dataset_config["labels_key"],
-            coord_obsm_key="spatial",
-            n_neighbors=int(run["n_neighbors"]),
-        )
-        return AMICI.load(model_path, adata=adata)
+        return json.load(open(result_path))
 
-    if os.path.exists(model_path):
-        shutil.rmtree(model_path)
-    os.makedirs(os.path.dirname(model_path), exist_ok=True)
-
+    os.makedirs(run_dir, exist_ok=True)
     pl.seed_everything(run["train_seed"])
     adata_train = adata[adata.obs["train_test_split"] == "train"].copy()
     AMICI.setup_anndata(
@@ -291,18 +315,56 @@ def train_or_load_model(dataset_name, adata, dataset_config):
         .numpy()
         .item()
     )
+    result = {**run, "test_loss": test_loss, "model_path": model_path}
     with open(result_path, "w") as f:
-        json.dump({**run, "test_loss": test_loss, "model_path": model_path}, f, indent=2)
-    return model
+        json.dump(result, f, indent=2)
+    return result
 
 
-def setup_inference_anndata(adata, dataset_config):
-    """Register AMICI nearest-neighbor fields before optional occlusion."""
+def train_or_load_model(dataset_name, adata, dataset_config):
+    """Train/load sweep candidates and return the best model by test loss."""
+    default_run = build_sweep_runs(dataset_config)[0]
+    model_path = os.path.join(saved_models_dir, dataset_name, "model")
+    result_path = os.path.join(saved_models_dir, dataset_name, "result.json")
+
+    if os.path.exists(os.path.join(model_path, "model.pt")) and os.path.exists(result_path):
+        selected_run = json.load(open(result_path))
+        AMICI.setup_anndata(
+            adata,
+            labels_key=dataset_config["labels_key"],
+            coord_obsm_key="spatial",
+            n_neighbors=int(selected_run.get("n_neighbors", default_run["n_neighbors"])),
+        )
+        return AMICI.load(model_path, adata=adata)
+
+    candidate_results = [
+        train_or_load_run(dataset_name, adata, dataset_config, run) for run in build_sweep_runs(dataset_config)
+    ]
+    selected_run = min(candidate_results, key=lambda result: result["test_loss"])
+
+    if os.path.exists(model_path):
+        shutil.rmtree(model_path)
+    shutil.copytree(selected_run["model_path"], model_path)
+    with open(result_path, "w") as f:
+        json.dump({**selected_run, "model_path": model_path, "selection_metric": "test_loss"}, f, indent=2)
+
     AMICI.setup_anndata(
         adata,
         labels_key=dataset_config["labels_key"],
         coord_obsm_key="spatial",
-        n_neighbors=int(dataset_config["run"]["n_neighbors"]),
+        n_neighbors=int(selected_run["n_neighbors"]),
+    )
+    return AMICI.load(model_path, adata=adata)
+
+
+def setup_inference_anndata(adata, dataset_config):
+    """Register AMICI nearest-neighbor fields before optional occlusion."""
+    default_run = build_sweep_runs(dataset_config)[0]
+    AMICI.setup_anndata(
+        adata,
+        labels_key=dataset_config["labels_key"],
+        coord_obsm_key="spatial",
+        n_neighbors=int(default_run["n_neighbors"]),
     )
 
 

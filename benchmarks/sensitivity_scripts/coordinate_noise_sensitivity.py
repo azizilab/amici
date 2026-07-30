@@ -38,6 +38,7 @@ from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 RUN_NAME = "coordinate_noise_gradient_sensitivity_sweep"
 DEFAULT_RANDOM_SEED = 42
 NOISE_SIGMAS = [0.0, 0.01, 0.05, 0.1]
+DATASETS_TO_RUN = ["3ct_dataset_2way", "breast_cancer"]
 
 EXP_DEFAULTS = {
     "epochs": 400,
@@ -94,17 +95,16 @@ DATASET_CONFIGS = {
         "subtype_key": "subtype",
         "gt_interactions": SYNTHETIC_INTERACTIONS,
         "source_h5ad_path": "sensitivity_scripts/data/semisyn_58.h5ad",
-        "run": {
-            "end_val": 3e-3,
-            "value_l1": 3e-6,
-            "train_seed": 88,
-            "epoch_start": 10,
-            "epoch_end": 40,
-            "batch_size": 128,
-            "n_heads": 8,
-            "lr": 1e-3,
-            "n_neighbors": 50,
-            "flavor": "linear",
+        "sweep_params": {
+            "end_attention_penalty": [3e-3, 3e-4, 3e-5],
+            "attention_penalty_schedule": [[10, 40]],
+            "seed": [21, 33, 88, 99],
+            "value_l1_penalty_coef": [3e-6, 3e-5],
+            "batch_size": [128],
+            "lr": [1e-3],
+            "n_neighbors": [50],
+            "penalty_flavor_params": ["linear"],
+            "n_heads": [8],
         },
     },
     "breast_cancer": {
@@ -119,17 +119,16 @@ DATASET_CONFIGS = {
         "xenium_path": "data/xenium_rep1_io.h5ad",
         "scvi_model_dir": "data/scvi_model",
         "n_cv_folds": 3,
-        "run": {
-            "end_val": 1e-5,
-            "value_l1": 1e-5,
-            "train_seed": 99,
-            "epoch_start": 15,
-            "epoch_end": 30,
-            "batch_size": 256,
-            "n_heads": 10,
-            "lr": 1e-3,
-            "n_neighbors": 50,
-            "flavor": "linear",
+        "sweep_params": {
+            "end_attention_penalty": [1e-5],
+            "attention_penalty_schedule": [[15, 30]],
+            "seed": [21, 22, 33, 88, 99],
+            "value_l1_penalty_coef": [1e-5],
+            "batch_size": [256],
+            "lr": [1e-3],
+            "n_neighbors": [50],
+            "penalty_flavor_params": ["linear"],
+            "n_heads": [10],
         },
     },
 }
@@ -168,34 +167,8 @@ def noisy_dataset_path(dataset_name, dataset_config, sigma):
 
 
 def build_sweep_runs(dataset_config):
-    """Create the first six configs from the current AMICI variant sweep."""
-    if dataset_config["kind"] == "synthetic":
-        sweep = {
-            "end_attention_penalty": [3e-3, 3e-4, 3e-5],
-            "attention_penalty_schedule": [[10, 40]],
-            "seed": [21, 33, 88],
-            "value_l1_penalty_coef": [3e-6, 3e-5],
-            "batch_size": [128],
-            "lr": [1e-3],
-            "n_neighbors": [50],
-            "penalty_flavor_params": ["linear"],
-            "n_heads": [8],
-        }
-    else:
-        sweep = {
-            "end_attention_penalty": [
-                1e-5,
-                1e-4,
-            ],
-            "attention_penalty_schedule": [[15, 30]],
-            "seed": [21, 22, 33],
-            "value_l1_penalty_coef": [1e-5, 1e-6],
-            "batch_size": [256],
-            "lr": [1e-3],
-            "n_neighbors": [50],
-            "penalty_flavor_params": ["linear"],
-            "n_heads": [10, 12],
-        }
+    """Build the AMICI sweep used to select the model for each noise level."""
+    sweep = dataset_config["sweep_params"]
 
     run_configs = []
     for run_idx, (end_val, schedule, train_seed, value_l1, batch_size, lr, n_neighbors, flavor, n_heads) in enumerate(
@@ -529,8 +502,10 @@ def evaluate_model(model, adata, dataset_config):
 def plot_summary(summary_df):
     """Plot task AUPRC as coordinate noise increases."""
     task_order = ["Neighbor Interaction Task", "Gene Task", "Receiver Subtype Task"]
-    dataset_order = list(DATASET_CONFIGS)
+    dataset_order = [dataset for dataset in DATASETS_TO_RUN if dataset in set(summary_df["dataset"])]
     fig, axes = plt.subplots(1, len(dataset_order), figsize=(13, 4.2), sharey=True)
+    if len(dataset_order) == 1:
+        axes = [axes]
     for ax, dataset_name in zip(axes, dataset_order, strict=False):
         dataset_df = summary_df[summary_df["dataset"] == dataset_name]
         for task in task_order:
@@ -561,7 +536,8 @@ scvi.settings.seed = DEFAULT_RANDOM_SEED
 
 summary_records = []
 all_run_records = []
-for dataset_name, dataset_config in DATASET_CONFIGS.items():
+for dataset_name in DATASETS_TO_RUN:
+    dataset_config = DATASET_CONFIGS[dataset_name]
     for sigma in NOISE_SIGMAS:
         print(f"Running {dataset_name} with max normalized coordinate sigma={sigma}", flush=True)
         try:
