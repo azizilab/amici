@@ -16,7 +16,7 @@ The full benchmark pipeline is orchestrated by [`benchmarks/Snakefile`](benchmar
 4. Scores each model on all tasks and generates PR curves ([`benchmarks/gene_task/generate_amici_scores.py`](benchmarks/gene_task/generate_amici_scores.py), [`benchmarks/gene_task/generate_amici_pr.py`](benchmarks/gene_task/generate_amici_pr.py), and analogous scripts per model/task)
 5. Produces the final plots ([`benchmarks/gene_task/plot_boxplots.py`](benchmarks/gene_task/plot_boxplots.py), [`benchmarks/gene_task/plot_pr_curves.py`](benchmarks/gene_task/plot_pr_curves.py), [`benchmarks/neighbor_interaction_task/plot_boxplots.py`](benchmarks/neighbor_interaction_task/plot_boxplots.py), [`benchmarks/neighbor_interaction_task/plot_pr_curves.py`](benchmarks/neighbor_interaction_task/plot_pr_curves.py), [`benchmarks/receiver_subtype_task/plot_boxplots.py`](benchmarks/receiver_subtype_task/plot_boxplots.py), [`benchmarks/receiver_subtype_task/plot_pr_curves.py`](benchmarks/receiver_subtype_task/plot_pr_curves.py), [`benchmarks/length_scale_task/plot_kde.py`](benchmarks/length_scale_task/plot_kde.py))
 
-Sensitivity analysis scripts (S21--S26) are standalone and train their own models internally.
+The sensitivity and robustness scripts under [`benchmarks/sensitivity_scripts/`](benchmarks/sensitivity_scripts) (S21--S24, S26, S29--S33, S35, S37) are standalone: they generate their own datasets and train their own models internally, outside the Snakemake pipeline.
 
 ### [`benchmarks/generate_dataset.py`](benchmarks/generate_dataset.py)
 
@@ -72,6 +72,8 @@ Model training scripts that also generate interaction network visualizations and
 - **Fig S2b**: Predicted interaction networks from the semisynthetic dataset (AMICI, NCEM, CGCom, GITIII)
 - **Fig S2c**: Training/validation loss curves (CGCom, NCEM, GITIII)
 
+## Benchmark Sensitivity and Robustness Analyses
+
 ### [`benchmarks/sensitivity_scripts/head_analysis.py`](benchmarks/sensitivity_scripts/head_analysis.py)
 
 Sensitivity analysis varying number of attention heads (h=2, 4, 6, 8) across 10 seeds.
@@ -102,6 +104,64 @@ Length scale sensitivity to attention threshold parameter across sender-receiver
 
 - **Fig S26**: Length scale sensitivity (boxplot of d_scale vs alpha threshold)
 
+### [`benchmarks/sensitivity_scripts/amici_variants/`](benchmarks/sensitivity_scripts/amici_variants)
+
+Comparison of the released AMICI attention against a unimodal-attention variant and an unconstrained positional-encoding variant, across 10 seeds of both semisynthetic datasets. Sweeps: [`current_amici_sweep.py`](benchmarks/sensitivity_scripts/amici_variants/current_amici_sweep.py), [`unimodal_attention_sweep.py`](benchmarks/sensitivity_scripts/amici_variants/unimodal_attention_sweep.py), [`unconstrained_attention_sweep.py`](benchmarks/sensitivity_scripts/amici_variants/unconstrained_attention_sweep.py). Plots: [`plot_amici_variant_comparison.py`](benchmarks/sensitivity_scripts/amici_variants/plot_amici_variant_comparison.py).
+
+- **Fig S29a–b**: Learned unimodal peak parameter and attention-drop distance vs ground truth
+- **Fig S29c**: Length scales from the unconstrained positional-encoding variant
+- **Fig S29d**: AUPRC comparison of the three variants on all three tasks
+
+### Length scale uncertainty (Fig S30)
+
+- **Fig S30a**: [`benchmarks/sensitivity_scripts/length_scale_uncertainty.py`](benchmarks/sensitivity_scripts/length_scale_uncertainty.py) — bootstrap over resampled sender cells within one trained model
+- **Fig S30b**: [`benchmarks/sensitivity_scripts/length_scale_dataset_bootstrap_ci.py`](benchmarks/sensitivity_scripts/length_scale_dataset_bootstrap_ci.py) — 50 bootstrapped replicates of the PBMC semisynthetic dataset
+- **Fig S30c–d**: [`benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py`](benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py) — the same over the realistic semisynthetic dataset (c), plus that dataset's cell-type composition (d)
+- **Fig S30e**: [`benchmarks/sensitivity_scripts/length_scale_coordinate_shuffle_sensitivity.py`](benchmarks/sensitivity_scripts/length_scale_coordinate_shuffle_sensitivity.py) — within-cell-type coordinate shuffling at 30%, 50% and 100%
+- **Fig S30f**: [`xenium/xenium_length_scale_seed_sweep.py`](xenium/xenium_length_scale_seed_sweep.py) trains 20 Xenium models across seeds; [`xenium/xenium_length_scale_seed_sweep_reanalysis.py`](xenium/xenium_length_scale_seed_sweep_reanalysis.py) sweeps every head of those cached models and produces the plotted panel
+- **Fig S30g**: [`human_tonsil/human_tonsil_length_scale_seed_sweep.py`](human_tonsil/human_tonsil_length_scale_seed_sweep.py) and [`human_tonsil/human_tonsil_length_scale_seed_sweep_reanalysis.py`](human_tonsil/human_tonsil_length_scale_seed_sweep_reanalysis.py) — the same for the tonsil dataset
+
+### Multi-scale and unimodal interaction recovery (Fig S31)
+
+- **Fig S31a–c**: [`benchmarks/sensitivity_scripts/2_phase/`](benchmarks/sensitivity_scripts/2_phase) — [`two_phase_amici_sweep.py`](benchmarks/sensitivity_scripts/2_phase/two_phase_amici_sweep.py) (dataset, training, AUPRCs), [`two_phase_head_attention_summary.py`](benchmarks/sensitivity_scripts/2_phase/two_phase_head_attention_summary.py) and [`two_phase_selected_head_length_scales.py`](benchmarks/sensitivity_scripts/2_phase/two_phase_selected_head_length_scales.py) (per-head length scales)
+- **Fig S31d–f**: [`benchmarks/sensitivity_scripts/unimodal_two_phase/`](benchmarks/sensitivity_scripts/unimodal_two_phase) — [`unimodal_two_phase_amici_sweep.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_amici_sweep.py), [`unimodal_two_phase_baseline_sweep.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_baseline_sweep.py) (GITIII/CGCom via [`snakemake_shim.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/snakemake_shim.py)), [`unimodal_two_phase_task_error_analysis.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_task_error_analysis.py) (e), [`unimodal_two_phase_head_attention_summary.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_head_attention_summary.py) and [`unimodal_two_phase_selected_head_length_scales.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_selected_head_length_scales.py) (f)
+- **Fig S31g–i**: Model-free distance-binned expression profiles — [`cortex/cortex_empirical_distance_expression.py`](cortex/cortex_empirical_distance_expression.py) (g), [`atera_breast/atera_breast_empirical_distance_expression.py`](atera_breast/atera_breast_empirical_distance_expression.py) (h), [`xenium/xenium_empirical_distance_expression.py`](xenium/xenium_empirical_distance_expression.py) (i)
+
+### [`benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py`](benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py), [`benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py`](benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py)
+
+Neighborhood occlusion and density-matched negative controls.
+
+- **Fig S32a**: AUPRC and PR curves under increasing neighbor occlusion (both semisynthetic datasets)
+- **Fig S32b–d**: AUPRC curves for the grid-based (b), realistic three-cell-type (c) and realistic breast cancer (d) density-matched negative controls
+
+### [`benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py`](benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py)
+
+Occlusion of high-attention neighbors against distance- and cell-type-matched low-attention neighbors.
+
+- **Fig S33**: Matched occlusion (reconstruction error by arm, paired differences, occluded-neighbor distances)
+
+### [`benchmarks/sensitivity_scripts/test_region_composition_diagnostic.py`](benchmarks/sensitivity_scripts/test_region_composition_diagnostic.py)
+
+Cell-type composition of the held-out spatial test region against the full tissue, for the Xenium, Atera breast and cortex datasets.
+
+- **Fig S35b**: Jensen-Shannon divergence per dataset
+- **Fig S35c**: Largest per-cell-type composition shifts
+
+Fig S35a comes from the Snakemake pipeline run with [`benchmarks/benchmark_config_cv.yaml`](benchmarks/benchmark_config_cv.yaml) (spatial cross-validation on the realistic breast cancer dataset).
+
+### [`benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py`](benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py)
+
+AMICI performance under an x-axis gradient of 2D Gaussian coordinate noise, for both semisynthetic datasets.
+
+- **Fig S37**: AUPRC for all three tasks vs coordinate noise level
+
+### [`benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py`](benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py), [`benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py`](benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py)
+
+Robustness of downstream-gene significance to the multiple-testing family and to spatial dependence, for the Xenium, Atera breast and CosMx tonsil datasets.
+
+- **Fig S39a, c, e**: Per-pair vs family-wide Benjamini-Hochberg interaction matrices (`family_wide_bh_interaction_networks.py`)
+- **Fig S39b, d, f**: Fraction of significant genes retained under the spatial block-jackknife effective sample size (`spatial_block_jackknife_gene_significance.py`)
+
 ## Cortex Analysis
 
 **Base data**: MERFISH mouse cortex data from the [Brain Image Library](https://download.brainimagelibrary.org/cf/1c/cf1c1a431ef8d021/processed_data/).
@@ -129,7 +189,7 @@ Prerequisites (run in order):
 
 1. [`xenium/xenium_preprocess.py`](xenium/xenium_preprocess.py) — Loads the resegmented/reannotated Xenium data, filters highly variable genes, normalizes counts, corrects DCIS labels via nearest-neighbor voting, and performs train/test split by spatial region.
 2. [`xenium/xenium_sweep_main.py`](xenium/xenium_sweep_main.py) — Runs a Weights & Biases hyperparameter sweep to train the AMICI model on the preprocessed Xenium data. Sweep config: [`xenium/xenium_sweep.yaml`](xenium/xenium_sweep.yaml). Alternatively, [`xenium/xenium_train.py`](xenium/xenium_train.py) trains a single model with fixed hyperparameters.
-3. Analysis and plotting scripts (each loads the trained model independently): [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py), [`xenium/xenium_spatial_analysis.py`](xenium/xenium_spatial_analysis.py), [`xenium/xenium_niche_analysis.py`](xenium/xenium_niche_analysis.py), [`xenium/xenium_niche_prediction_analysis.py`](xenium/xenium_niche_prediction_analysis.py), [`xenium/xenium_niche_validation_gsea.py`](xenium/xenium_niche_validation_gsea.py), [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py), [`xenium/segmentation_analysis.py`](xenium/segmentation_analysis.py), [`xenium/segmentation_analysis_gitiii.py`](xenium/segmentation_analysis_gitiii.py), [`xenium/xenium_lr_analysis.py`](xenium/xenium_lr_analysis.py), [`xenium/xenium_null_z_distribution.py`](xenium/xenium_null_z_distribution.py), [`xenium/runtime_benchmark/plot_benchmark.py`](xenium/runtime_benchmark/plot_benchmark.py).
+3. Analysis and plotting scripts (each loads the trained model independently): [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py), [`xenium/xenium_spatial_analysis.py`](xenium/xenium_spatial_analysis.py), [`xenium/xenium_niche_analysis.py`](xenium/xenium_niche_analysis.py), [`xenium/xenium_niche_prediction_analysis.py`](xenium/xenium_niche_prediction_analysis.py), [`xenium/xenium_niche_validation_gsea.py`](xenium/xenium_niche_validation_gsea.py), [`xenium/xenium_hub_analysis.py`](xenium/xenium_hub_analysis.py), [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py), [`xenium/segmentation_analysis.py`](xenium/segmentation_analysis.py), [`xenium/segmentation_analysis_gitiii.py`](xenium/segmentation_analysis_gitiii.py), [`xenium/xenium_stromal_bleeding_analysis.py`](xenium/xenium_stromal_bleeding_analysis.py), [`xenium/xenium_lr_analysis.py`](xenium/xenium_lr_analysis.py), [`xenium/xenium_null_z_distribution.py`](xenium/xenium_null_z_distribution.py), [`benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py`](benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py), [`xenium/runtime_benchmark/plot_benchmark.py`](xenium/runtime_benchmark/plot_benchmark.py).
 
 ### [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py)
 
@@ -149,27 +209,39 @@ Spatial attention pattern analysis for the Xenium dataset. Generates proximity s
 - **Figure 4e**: Four-panel spatial analysis — proximity scores, attention heatmaps, ESR1 gene expression
 - **Fig S9**: AGR3 subpopulation spatial analysis (attention + gene expression)
 
+### [`benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py`](benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py)
+
+Covariate-adjusted ESR1 and AGR3 expression in invasive tumor cells of replicate 1, removing fitted effects of local tumor purity, proliferation and spatial region while retaining the CD8 attention term.
+
+- **Fig S10**: Raw, adjusted and difference spatial maps for ESR1 (top) and AGR3 (bottom)
+
 ### [`xenium/xenium_niche_analysis.py`](xenium/xenium_niche_analysis.py)
 
-Communication hub analysis. Clusters cells by AMICI interaction patterns, compares with composition-based niches, and performs grid search over hub parameters.
+Communication hub analysis. Clusters cells by AMICI interaction patterns and performs grid search over hub parameters.
 
 - **Figure 4f** (top): Spatial scatter plots colored by communication hub assignment
 - **Figure 4f** (bottom): Alluvial/Sankey diagrams of hub sender-receiver composition
-- **Fig S12a**: Silhouette score vs number of clusters
-- **Fig S12b**: Alluvial/Sankey diagrams for all 10 communication hubs
-- **Fig S13a**: Hub vs composition cluster spatial comparison
-- **Fig S13b**: ARI/AMI comparison between hubs, composition clusters, and cell-type labels
+- **Fig S13a**: Silhouette score vs number of clusters
+- **Fig S13b**: Alluvial/Sankey diagrams for all 10 communication hubs
 - **Fig S27**: Hub grid search heatmaps — fixed k, varying quantile threshold
 - **Fig S28**: Hub grid search heatmaps — fixed quantile, varying k
 
-### [`xenium/xenium_niche_validation_gsea.py`](xenium/xenium_niche_validation_gsea.py)
+### [`xenium/xenium_niche_prediction_analysis.py`](xenium/xenium_niche_prediction_analysis.py)
 
-Gene set enrichment analysis comparing communication hubs to composition clusters. Supports GSEA (MSigDB Hallmark), KEGG Signaling, and Reactome pathway databases. Generates per-cell-type butterfly charts and combined figures split by tumor, immune, and stromal groups.
+Comparison of communication hubs against composition-based niches.
 
-- **Fig S14**: GSEA barplots comparing hub-unique vs shared vs composition-unique significant pathways
-- **Fig S15**: GSEA butterfly charts — tumor cell types (MSigDB Hallmark)
-- **Fig S16**: GSEA butterfly charts — immune cell types (Reactome)
-- **Fig S17**: GSEA butterfly charts — stromal cell types (Reactome)
+- **Fig S14a**: Hub vs composition cluster spatial comparison
+- **Fig S14b**: ARI/AMI comparison between hubs, composition clusters, and cell-type labels
+
+### [`xenium/xenium_niche_validation_gsea.py`](xenium/xenium_niche_validation_gsea.py), [`xenium/xenium_hub_analysis.py`](xenium/xenium_hub_analysis.py)
+
+Gene set enrichment analysis comparing communication hubs to composition clusters and to graph-based baselines. `xenium_niche_validation_gsea.py` supports GSEA (MSigDB Hallmark), KEGG Signaling and Reactome pathway databases and generates the per-cell-type butterfly charts; `xenium_hub_analysis.py` (with [`xenium/hub_graph_baseline_utils.py`](xenium/hub_graph_baseline_utils.py)) adds the fixed-radius and kNN graph baselines.
+
+- **Fig S15a**: GSEA barplots comparing hub-unique vs shared vs composition-unique significant pathways
+- **Fig S15b–c**: ARI/AMI against graph baselines, and pathway overlap across methods
+- **Fig S16**: GSEA butterfly charts — tumor cell types (MSigDB Hallmark)
+- **Fig S17**: GSEA butterfly charts — immune cell types (Reactome)
+- **Fig S18**: GSEA butterfly charts — stromal cell types (Reactome)
 
 ### [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py)
 
@@ -184,13 +256,21 @@ Cell segmentation artifact analysis. Validates that identified genes are not art
 
 - **Fig S6a**: Interaction network including stromal cells (showing segmentation artifact dominance)
 - **Fig S6b**: Segmentation validation dot plot (Mann-Whitney U test for interaction-mediated genes)
-- **Fig S10**: ESR1 segmentation overlap between invasive tumor and DCIS 2
+- **Fig S11**: ESR1 segmentation overlap between invasive tumor and DCIS 2
 
 ### [`xenium/segmentation_analysis_gitiii.py`](xenium/segmentation_analysis_gitiii.py)
 
 Segmentation artifact test applied to genes identified by GITIII for comparison.
 
-- **Fig S11**: GITIII segmentation validation dot plot (Mann-Whitney U test)
+- **Fig S12**: GITIII segmentation validation dot plot (Mann-Whitney U test)
+
+### [`xenium/xenium_stromal_bleeding_analysis.py`](xenium/xenium_stromal_bleeding_analysis.py)
+
+Quantifies how stromal interactions influence the inferred network, comparing models trained with and without stromal cells and testing stromal attention against a distance-matched null.
+
+- **Fig S34a**: Interaction score heatmaps with and without stromal cells
+- **Fig S34b**: Score differences and pairwise correlation before vs after stromal exclusion
+- **Fig S34c**: Distance-matched null comparison of stromal attention
 
 ### [`xenium/xenium_lr_analysis.py`](xenium/xenium_lr_analysis.py)
 
@@ -217,13 +297,78 @@ Prerequisites:
 1. [`xenium/xenium_preprocess_lowres.py`](xenium/xenium_preprocess_lowres.py) — Preprocesses the Xenium data with low-resolution (merged) cell-type labels.
 2. [`xenium/xenium_sweep_main_lowres.py`](xenium/xenium_sweep_main_lowres.py) — Trains the AMICI model on low-resolution labels.
 3. [`xenium/xenium_analysis_lowres.py`](xenium/xenium_analysis_lowres.py) — Compares interaction matrices between high-res and low-res models.
+4. [`xenium/xenium_within_type_autocorrelation.py`](xenium/xenium_within_type_autocorrelation.py) — Computes the within-label spatial autocorrelation diagnostic.
+5. [`xenium/make_supp_lowres_figure.py`](xenium/make_supp_lowres_figure.py) — Assembles the full supplementary figure from the cached results of steps 3 and 4.
+
+The low-resolution model is a refit at the hyperparameters of wandb sweep `xsjrwnof` run `5tfi78lp` (see [`reproducibility/xenium_lowres_config.yaml`](reproducibility/xenium_lowres_config.yaml)); the original run's weights were lost, so the model was retrained on 2026-09-19 with the same config.
 
 ### [`xenium/xenium_analysis_lowres.py`](xenium/xenium_analysis_lowres.py)
 
 Compares interaction strength matrices between the high-resolution model (aggregated to low-res labels) and a model trained directly on low-resolution labels. Tests significance via a permutation null.
 
-- **Fig S18**: Low-resolution comparison matrices (high-res, aggregated, and low-res-trained)
-- **Fig S19**: Interaction matrix similarity vs shuffled null (cosine similarity and Pearson r histograms)
+- **Fig S19a–c**: High-resolution, aggregated, and low-resolution-trained interaction matrices
+- **Fig S19d**: Interaction matrix similarity vs shuffled null (cosine similarity and Pearson r histograms)
+
+### [`xenium/xenium_within_type_autocorrelation.py`](xenium/xenium_within_type_autocorrelation.py)
+
+Within-label spatial autocorrelation (Moran's I of expression PCs within each coarse label) against a high-resolution subtype oracle.
+
+- **Fig S19e**: Deployable vs oracle autocorrelation score per coarse cell type
+
+## Atera Breast Cancer Analysis
+
+**Base data**: Atera whole-transcriptome spatial profiling of breast cancer. The preprocessed dataset and trained model are available on Figshare (see [Data and Model Artifacts](#data-and-model-artifacts)).
+
+Prerequisites (run in order):
+
+1. [`atera_breast/atera_breast_preprocess.py`](atera_breast/atera_breast_preprocess.py) — Loads and filters the Atera data, normalizes counts, and performs a spatial train/test split.
+2. [`atera_breast/atera_breast_train.py`](atera_breast/atera_breast_train.py) — Trains the AMICI model. Sweep config: [`atera_breast/atera_breast_sweep.yaml`](atera_breast/atera_breast_sweep.yaml), launched via [`atera_breast/run_atera_breast_sweep.sh`](atera_breast/run_atera_breast_sweep.sh).
+3. [`atera_breast/atera_breast_analysis.py`](atera_breast/atera_breast_analysis.py) — Loads the trained model and generates the Atera figures.
+
+### [`atera_breast/atera_breast_analysis.py`](atera_breast/atera_breast_analysis.py)
+
+Primary Atera breast cancer analysis. Generates the spatial overview, interaction heatmap, downstream gene dot plots, and the CAF subpopulation analysis.
+
+- **Figure 5a**: Spatial scatter plot colored by cell type with the held-out test region boxed (`visualize_spatial_distribution()`)
+- **Figure 5b**: Interaction strength heatmap for all cell-type pairs
+- **Figure 5c**: Downstream gene dot plots for stromal, immune and tumor interactions
+- **Fig S38a–b**: CAF subclustering (UMAP, EMILIN1/C3 expression, spatial distribution)
+- **Fig S38c**: Log fold change for the top DEGs between high-attention senders of each CAF population
+
+### [`atera_breast/atera_breast_segmentation_analysis.py`](atera_breast/atera_breast_segmentation_analysis.py)
+
+Segmentation artifact test (one-sided Mann-Whitney U) for the Atera dataset. Determines which genes are bolded in Figure 5c.
+
+### [`atera_breast/atera_breast_attention_consistency.py`](atera_breast/atera_breast_attention_consistency.py)
+
+Stability of attention scores across models trained over varying hyperparameters and seeds.
+
+- **Fig S36a**: Test reconstruction loss vs mean Spearman correlation across runs, and the pairwise correlation matrix
+
+## Human Tonsil (CosMx) Analysis
+
+**Base data**: CosMx 1000-gene panel human tonsil. The preprocessed dataset and trained model are available on Figshare (see [Data and Model Artifacts](#data-and-model-artifacts)).
+
+Prerequisites (run in order):
+
+1. [`human_tonsil/human_tonsil_preprocess.py`](human_tonsil/human_tonsil_preprocess.py) — Filters unlabeled annotations, normalizes counts, and performs a spatial train/test split.
+2. [`human_tonsil/human_tonsil_train.py`](human_tonsil/human_tonsil_train.py) — Trains the AMICI model. Sweep config: [`human_tonsil/human_tonsil_sweep.yaml`](human_tonsil/human_tonsil_sweep.yaml), launched via [`human_tonsil/run_human_tonsil_sweep.sh`](human_tonsil/run_human_tonsil_sweep.sh).
+3. [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) — Loads the trained model and generates the tonsil figures.
+
+### [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py)
+
+Primary human tonsil analysis. Generates the spatial overview, interaction network and heatmaps, downstream gene dot plots, and length scale distributions (converted from CosMx pixels to micrometers).
+
+- **Figure 6a**: Spatial scatter plot colored by cell type with the held-out test region boxed (`visualize_spatial_distribution()`)
+- **Figure 6b**: Interaction network for cell types of interest, and the germinal center interaction heatmap
+- **Figure 6c**: Downstream gene dot plots for stromal and immune interactions
+- **Figure 6d**: Length scale distributions for GC B cell receivers per attention head
+
+### [`human_tonsil/human_tonsil_attention_consistency.py`](human_tonsil/human_tonsil_attention_consistency.py)
+
+Stability of attention scores across models trained over varying hyperparameters and seeds.
+
+- **Fig S36b**: Test reconstruction loss vs mean Spearman correlation across runs, and the pairwise correlation matrix
 
 ## Data and Model Artifacts
 
