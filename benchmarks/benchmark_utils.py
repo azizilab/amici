@@ -107,14 +107,23 @@ def get_interaction_gt_neighbor_classes(
         sender_type = interaction_config["sender"]
         receiver_type = interaction_config["receiver"]
         length_scale = interaction_config["length_scale"]
+        # Monotonic-decay interactions are positive for any distance in [0, interaction_end] (default
+        # interaction_end=length_scale, since length_scale doubles as the effect radius for those datasets).
+        # Unimodal/banded interactions are only positive within [interaction_start, interaction_end]; see
+        # generate_unimodal_spatial_data, where the true effect never occurs below INTERACTION_START and can
+        # still occur out to INTERACTION_END, which is not the same as the peak distance stored in length_scale.
+        interaction_start = interaction_config.get("interaction_start", 0)
+        interaction_end = interaction_config.get("interaction_end", length_scale)
 
         obs_labels = adata.obs[labels_key].values  # batch x 1
         obs_labels = repeat(np.array(obs_labels), "b -> b n", n=nn_dists.shape[1])  # batch x n_neighbors
         nn_labels = adata.obs[labels_key].values[nn_idxs]  # batch x n_neighbors
 
-        # If the sender matches the label and the distance is less than the length scale, the neighbor is a ground truth positive
+        # If the sender matches the label and the distance falls within the interaction's effective band,
+        # the neighbor is a ground truth positive
         gt_positive_mask = (
-            (nn_dists <= length_scale)
+            (nn_dists >= interaction_start)
+            & (nn_dists <= interaction_end)
             & (nn_labels == sender_type).astype(int)
             & (obs_labels == receiver_type).astype(int)
         )

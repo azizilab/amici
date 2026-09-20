@@ -42,3 +42,4 @@ __pycache__/
 # IDEs
 /.idea/
 /.vscode/
+logs/
