@@ -8,7 +8,7 @@ Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 
 **Base data**: The semisynthetic datasets are generated from the [Fresh 68k PBMCs (Donor A)](https://www.10xgenomics.com/datasets/fresh-68-k-pbm-cs-donor-a-1-standard-1-1-0) dataset, downloaded programmatically via `scvi.data.dataset_10x(dataset_name="fresh_68k_pbmc_donor_a")`.
 
-The full benchmark pipeline is orchestrated by [`benchmarks/Snakefile`](benchmarks/Snakefile) with configuration in [`benchmarks/benchmark_config.yaml`](benchmarks/benchmark_config.yaml). The pipeline:
+The full benchmark pipeline is orchestrated by [`benchmarks/Snakefile`](benchmarks/Snakefile) with configuration in [`benchmarks/benchmark_config.yaml`](benchmarks/benchmark_config.yaml) (main benchmark, Figure 2; loaded by default). The spatial cross-validation benchmark (Fig S35a) uses [`benchmarks/benchmark_config_cv.yaml`](benchmarks/benchmark_config_cv.yaml), run with `snakemake --configfile benchmark_config_cv.yaml` from `benchmarks/`. The pipeline:
 
 1. Generates semisynthetic datasets ([`benchmarks/generate_dataset.py`](benchmarks/generate_dataset.py))
 2. Computes ground truth scores ([`benchmarks/gene_task/generate_gt_gene_scores.py`](benchmarks/gene_task/generate_gt_gene_scores.py), [`benchmarks/neighbor_interaction_task/generate_gt_neighbor_interaction_scores.py`](benchmarks/neighbor_interaction_task/generate_gt_neighbor_interaction_scores.py), [`benchmarks/receiver_subtype_task/generate_gt_receiver_subtype_scores.py`](benchmarks/receiver_subtype_task/generate_gt_receiver_subtype_scores.py))
@@ -242,4 +242,16 @@ Some of the analyses above depend on pretrained AMICI models and preprocessed da
 | Xenium Full        | `xenium/data/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02` | [`reproducibility/xenium_full_config.yaml`](reproducibility/xenium_full_config.yaml) |
 | Xenium Replicate 1 | `xenium/data/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13` | [`reproducibility/xenium_rep1_config.yaml`](reproducibility/xenium_rep1_config.yaml) |
 | Xenium Replicate 2 | `xenium/data/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14` | [`reproducibility/xenium_rep2_config.yaml`](reproducibility/xenium_rep2_config.yaml) |
-| Xenium Low-Res     | `xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad` | `xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-03-29/xenium_42_sweep_xsjrwnof_t4t8pzvi_params_2026-03-29` | TBA |
+| Xenium Low-Res     | `xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad` | `xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-09-19/xenium_42_retrain_5tfi78lp_params_2026-09-19` | [`reproducibility/xenium_lowres_config.yaml`](reproducibility/xenium_lowres_config.yaml) |
+
+### Human Tonsil (CosMx)
+
+| Dataset      | Local Dataset Path                                              | Local Model Path                                                                    | Model YAML Config |
+| ------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------- |
+| Human Tonsil | `human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad` (train/test splits: `human_tonsil_filtered_train_2026-07-25.h5ad` / `human_tonsil_filtered_test_2026-07-25.h5ad`) | `human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26` | [`reproducibility/human_tonsil_config.yaml`](reproducibility/human_tonsil_config.yaml) |
+
+### Atera Breast Cancer
+
+| Dataset      | Local Dataset Path                                               | Local Model Path                                                                    | Model YAML Config |
+| ------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ----------------- |
+| Atera Breast | `atera_breast/data/atera_breast_filtered_2026-07-22.h5ad` (train/test splits: `atera_breast_filtered_train_2026-07-22.h5ad` / `atera_breast_filtered_test_2026-07-22.h5ad`) | `atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28` | [`reproducibility/atera_breast_config.yaml`](reproducibility/atera_breast_config.yaml) |

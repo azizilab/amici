@@ -40,12 +40,9 @@ old_labels_key = "celltype_train_grouped"
 old_data_date = "2025-05-01"
 old_model_date = "2025-05-02"
 
-adata_old = sc.read_h5ad(f"data/xenium_sample1_filtered_{old_data_date}.h5ad")
-adata_old_train = sc.read_h5ad(
-    f"data/xenium_sample1_filtered_train_{old_data_date}.h5ad"
-)
+adata_old = sc.read_h5ad(f"data/xenium_sample1/xenium_sample1_filtered_{old_data_date}.h5ad")
 
-old_saved_models_dir = f"saved_models/"
+old_saved_models_dir = f"saved_models/xenium_sample1_proseg_sweep_{old_data_date}_model_{old_model_date}"
 old_wandb_run_id = "te7pkv3z"
 old_wandb_sweep_id = "g3mucw4s"
 old_model_path = os.path.join(
@@ -65,19 +62,17 @@ model_old = AMICI.load(old_model_path, adata=adata_old)
 lowres_seed = 42
 lowres_labels_key = "celltype_lowres"
 lowres_data_date = "2026-03-27"  # update to match when xenium_preprocess_lowres.py was run
-lowres_model_date = "2026-03-29"
-lowres_wandb_sweep_id = "xsjrwnof"
-lowres_wandb_run_id = "5tfi78lp"
+lowres_model_date = "2026-09-19"
+# Retrained at the hyperparameters of wandb sweep xsjrwnof run 5tfi78lp (see reproducibility/xenium_lowres_config.yaml);
+# the original run's weights were lost, so the model was refit with the same config.
+lowres_run_id = "5tfi78lp"
 
 adata_new = sc.read_h5ad(f"data/xenium_sample1_filtered_lowres_{lowres_data_date}.h5ad")
-adata_new_train = sc.read_h5ad(
-    f"data/xenium_sample1_filtered_lowres_train_{lowres_data_date}.h5ad"
-)
 
 new_saved_models_dir = f"saved_models/xenium_sample1_lowres_sweep_{lowres_data_date}_model_{lowres_model_date}"
 new_model_path = os.path.join(
     new_saved_models_dir,
-    f"xenium_{lowres_seed}_sweep_{lowres_wandb_sweep_id}_{lowres_wandb_run_id}_params_{lowres_model_date}",
+    f"xenium_{lowres_seed}_retrain_{lowres_run_id}_params_{lowres_model_date}",
 )
 
 AMICI.setup_anndata(
@@ -102,7 +97,7 @@ else:
     ablation_old.save_object(old_ablation_cache_path)
 interaction_matrix_old = ablation_old._get_interaction_weight_matrix()
 
-new_ablation_cache_path = os.path.join(ablation_cache_dir, "lowres_model_ablation_scores.pkl")
+new_ablation_cache_path = os.path.join(ablation_cache_dir, f"lowres_model_{lowres_run_id}_{lowres_model_date}_ablation_scores.pkl")
 if os.path.exists(new_ablation_cache_path):
     ablation_new = AMICIAblationModule.load_object(new_ablation_cache_path)
 else:
