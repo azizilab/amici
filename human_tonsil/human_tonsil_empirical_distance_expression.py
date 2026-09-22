@@ -1,8 +1,11 @@
-"""Empirical distance-binned expression profiles for the Atera breast cancer dataset.
+"""Empirical distance-binned expression profiles for the CosMx human tonsil dataset.
 
 Model-free check of AMICI's monotonic distance assumption: receiver cells are binned by
 distance to their nearest sender and mean expression of the AMICI-implicated genes is
 plotted per bin. Uses only cell positions, cell-type labels, and measured expression.
+
+The interactions and downstream genes are the ones shown in the tonsil downstream-impact
+dot plot produced by human_tonsil_analysis.py.
 """
 
 import os
@@ -29,14 +32,19 @@ from distance_profile_utils import (  # noqa: E402
     plot_profiles,
 )
 
-DATA_PATH = os.path.join(SCRIPT_DIR, "data/atera_breast_filtered_2026-07-22.h5ad")
+DATA_PATH = os.path.join(SCRIPT_DIR, "data/human_tonsil_filtered_2026-07-25.h5ad")
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "figures/empirical_distance_expression")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-LABELS_KEY = "celltype_train_grouped"
-# Both cell radii are subtracted from the centroid distance, so distances here are
-# surface-to-surface.
+LABELS_KEY = "celltype_manual_fine"
+# obsm["spatial"] holds CosMx global pixel coordinates; obs["cell_radius"] is already in
+# micrometres (sqrt(Area.um2 / pi), set in human_tonsil_preprocess.py). Coordinates are
+# converted here so that distances, radii and the x axis are all micrometres, giving the
+# surface-to-surface distances the Xenium, Atera and cortex versions of this figure use.
 CELL_RADIUS_KEY = "cell_radius"
+COSMX_PIXEL_SIZE_UM = 0.12028
+# Single slide and single core, so all cells share one coordinate frame and no
+# per-section splitting is needed.
 
 BIN_WIDTH = 1.0
 MAX_DISTANCE = 50.0
@@ -44,25 +52,32 @@ MIN_CELLS_PER_BIN = 10
 # Gaussian kernel SD for the local-linear smoother drawn over the bin means, in um.
 SMOOTHING_BANDWIDTH = 5.0
 
-CAF_GENES = ["C3", "COL6A2", "MMP2", "CXCL12", "ABI3BP", "EMILIN1", "COL15A1"]
-LUMINAL_DCIS_GENES = ["MUC1", "BMPR1B", "ITGB5", "TFF3", "GASK1B"]
+GC_B_GENES = [
+    "CLU",
+    "MARCKSL1",
+    "CD22",
+    "MS4A1",
+    "RGS13",
+    "BASP1",
+    "SRGN",
+    "MALAT1",
+    "CXCL13",
+    "RPL32",
+    "VCAM1",
+    "PTGDS",
+]
+CD4_T_GENES = ["CCL21", "CCL19", "VIM", "TPT1", "RPL32", "RPL34", "DCN", "PTGDS", "CXCL14", "CXCL12"]
 
 INTERACTIONS = [
-    {"sender": "Pericytes", "receiver": "Endothelial", "genes": ["PECAM1", "ADAM15", "SELP", "PRCP"]},
-    {"sender": "Macrophages", "receiver": "CAFs", "genes": CAF_GENES},
-    {"sender": "T_Cells", "receiver": "CAFs", "genes": CAF_GENES},
-    {"sender": "CAFs", "receiver": "Luminal_DCIS", "genes": LUMINAL_DCIS_GENES},
-    {"sender": "Myoepithelial", "receiver": "Luminal_DCIS", "genes": LUMINAL_DCIS_GENES},
+    {"sender": "Follicular dendritic cell", "receiver": "GC B cell (resting)", "genes": GC_B_GENES},
+    {"sender": "Tfh cell", "receiver": "GC B cell (resting)", "genes": GC_B_GENES},
+    {"sender": "Fibroblast", "receiver": "CD4 T cell", "genes": CD4_T_GENES},
 ]
 
 
 def get_coords(adata):
-    """Spatial coordinates in µm.
-
-    Verified as micrometres rather than pixels: median nearest-neighbour distance is
-    8.2 µm and median cell_area is 65 µm², matching the Xenium sample.
-    """
-    return np.asarray(adata.obsm["spatial"])[:, :2].astype(float)
+    """Spatial coordinates converted from CosMx global pixels to µm."""
+    return np.asarray(adata.obsm["spatial"])[:, :2].astype(float) * COSMX_PIXEL_SIZE_UM
 
 
 def build_profile(adata, sender, receiver, genes):
@@ -73,7 +88,8 @@ def build_profile(adata, sender, receiver, genes):
     sender_mask = labels == sender
     receiver_mask = labels == receiver
     if sender_mask.sum() == 0 or receiver_mask.sum() == 0:
-        return pd.DataFrame(columns=[*genes, "distance"])
+        raise ValueError(f"No cells for {sender} -> {receiver} under {LABELS_KEY}")
+
     distance, nn_index = cKDTree(coords[sender_mask]).query(coords[receiver_mask], k=1)
     distance = np.clip(distance - radii[receiver_mask] - radii[sender_mask][nn_index], 0, None)
     expression = adata[receiver_mask, genes].X
@@ -88,11 +104,12 @@ def summarize_profile(profile, genes):
     """Per-bin mean expression with SEM, plus per-gene monotone-decay statistics.
 
     Two kinds of statistic are returned per gene. The cell-level Spearman correlation is
-    kept for continuity with earlier versions of this figure, but it is driven by sample
-    size: with tens of thousands of receiver cells a rho of -0.01 is "significant" while
-    describing a flat profile. The monotone-decay statistics are computed on the binned
-    profile instead, and calibrate the isotonic fit against a null in which the bin means
-    are pure sampling noise, so they separate a real decay from bin-to-bin jitter.
+    kept for continuity with the other datasets' versions of this figure, but it is
+    driven by sample size: with tens of thousands of receiver cells a rho of -0.01 is
+    "significant" while describing a flat profile. The monotone-decay statistics are
+    computed on the binned profile instead, and calibrate the isotonic fit against a null
+    in which the bin means are pure sampling noise, so they separate a real decay from
+    bin-to-bin jitter.
     """
     profile = profile[profile["distance"] <= MAX_DISTANCE].copy()
     bins = np.arange(0, MAX_DISTANCE + BIN_WIDTH, BIN_WIDTH)
@@ -162,16 +179,16 @@ def main():
         print(f"{label}: {len(profile)} receiver cells, {len(genes)} genes", flush=True)
 
     pd.concat(all_bins, ignore_index=True).to_csv(
-        os.path.join(OUTPUT_DIR, "atera_breast_distance_binned_expression.csv"), index=False
+        os.path.join(OUTPUT_DIR, "human_tonsil_distance_binned_expression.csv"), index=False
     )
     # Multiple testing is controlled across every gene x interaction in this dataset.
     monotonicity = add_monotone_calls(pd.concat(all_stats, ignore_index=True))
-    monotonicity.to_csv(os.path.join(OUTPUT_DIR, "atera_breast_distance_monotonicity.csv"), index=False)
+    monotonicity.to_csv(os.path.join(OUTPUT_DIR, "human_tonsil_distance_monotonicity.csv"), index=False)
 
     plot_kwargs = dict(
         output_dir=OUTPUT_DIR,
-        output_prefix="atera_breast_empirical_distance_expression",
-        suptitle="Atera breast cancer: receiver expression vs surface-to-surface distance to nearest sender",
+        output_prefix="human_tonsil_empirical_distance_expression",
+        suptitle="CosMx human tonsil: receiver expression vs surface-to-surface distance to nearest sender",
         bandwidth=SMOOTHING_BANDWIDTH,
         max_distance=MAX_DISTANCE,
         stats=monotonicity,
@@ -189,8 +206,8 @@ def main():
     plot_monotonicity_summary(
         monotonicity,
         output_dir=OUTPUT_DIR,
-        output_prefix="atera_breast_distance_monotonicity_summary",
-        suptitle="Atera breast cancer: monotone decay with distance to nearest sender",
+        output_prefix="human_tonsil_distance_monotonicity_summary",
+        suptitle="CosMx human tonsil: monotone decay with distance to nearest sender",
     )
 
     columns = [

@@ -6,12 +6,12 @@ plotted per bin. Uses only cell positions, cell-type labels, and measured expres
 """
 
 import os
+import sys
 
 import matplotlib
 
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
@@ -20,6 +20,15 @@ from scipy.spatial import cKDTree
 from scipy.stats import spearmanr
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(SCRIPT_DIR, "../benchmarks"))
+
+from distance_profile_utils import (  # noqa: E402
+    add_monotone_calls,
+    monotone_decay_stats,
+    plot_monotonicity_summary,
+    plot_profiles,
+)
+
 DATA_PATH = os.path.join(SCRIPT_DIR, "data/cortex_processed_2025-04-28.h5ad")
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "figures/empirical_distance_expression")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -35,6 +44,8 @@ BOUNDARY_Z_PLANE = "z3"
 BIN_WIDTH = 2.0
 MAX_DISTANCE = 50.0
 MIN_CELLS_PER_BIN = 10
+# Gaussian kernel SD for the local-linear smoother drawn over the bin means, in um.
+SMOOTHING_BANDWIDTH = 6.0
 
 INTERACTIONS = [
     {"sender": "L2/3 IT", "receiver": "Astro", "genes": ["Cux2", "Lama3", "Lamp5"]},
@@ -61,7 +72,7 @@ def get_cell_radii(adata):
     """Effective radius per cell from its segmentation polygon, as sqrt(area / pi).
 
     Matches the cell_radius definition used in the Xenium and Atera preprocessing so
-    that the radius-corrected distances are comparable across datasets.
+    that the surface-to-surface distances are comparable across datasets.
     """
     xs = adata.obs[f"boundaryX_{BOUNDARY_Z_PLANE}"].to_numpy()
     ys = adata.obs[f"boundaryY_{BOUNDARY_Z_PLANE}"].to_numpy()
@@ -110,7 +121,15 @@ def build_profile(adata, sender, receiver, genes):
 
 
 def summarize_profile(profile, genes):
-    """Per-bin mean expression with SEM, plus a Spearman monotonicity test per gene."""
+    """Per-bin mean expression with SEM, plus per-gene monotone-decay statistics.
+
+    Two kinds of statistic are returned per gene. The cell-level Spearman correlation is
+    kept for continuity with earlier versions of this figure, but it is driven by sample
+    size: with tens of thousands of receiver cells a rho of -0.01 is "significant" while
+    describing a flat profile. The monotone-decay statistics are computed on the binned
+    profile instead, and calibrate the isotonic fit against a null in which the bin means
+    are pure sampling noise, so they separate a real decay from bin-to-bin jitter.
+    """
     profile = profile[profile["distance"] <= MAX_DISTANCE].copy()
     bins = np.arange(0, MAX_DISTANCE + BIN_WIDTH, BIN_WIDTH)
     profile["bin"] = pd.cut(profile["distance"], bins=bins, right=False)
@@ -122,13 +141,13 @@ def summarize_profile(profile, genes):
         sd = values.std()
         z_values = (values - values.mean()) / sd if sd > 0 else np.zeros_like(values)
         rho, pvalue = spearmanr(profile["distance"].to_numpy(dtype=float), values)
-        stats.append({"gene": gene, "spearman_rho": rho, "spearman_pvalue": pvalue, "n_cells": len(values)})
 
+        gene_records = []
         binned = pd.DataFrame({"bin": profile["bin"].to_numpy(), "raw": values, "z": z_values})
         for interval, group in binned.groupby("bin", observed=True):
             if len(group) < MIN_CELLS_PER_BIN:
                 continue
-            records.append(
+            gene_records.append(
                 {
                     "gene": gene,
                     "bin_center": (interval.left + interval.right) / 2,
@@ -139,60 +158,23 @@ def summarize_profile(profile, genes):
                     "sem_z": group["z"].std(ddof=1) / np.sqrt(len(group)),
                 }
             )
-    return pd.DataFrame(records), pd.DataFrame(stats)
+        records.extend(gene_records)
 
-
-def plot_profiles(
-    summaries,
-    value_col="mean_expression",
-    sem_col="sem_expression",
-    ylabel="Mean log1p-normalized expression",
-    suffix="",
-    zero_line=False,
-):
-    """One panel per interaction, one line per gene, shaded 95% CI."""
-    n_panels = len(summaries)
-    n_cols = 2
-    n_rows = int(np.ceil(n_panels / n_cols))
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(7.0 * n_cols, 4.6 * n_rows), squeeze=False)
-
-    for panel_idx, (label, summary) in enumerate(summaries):
-        ax = axes[panel_idx // n_cols][panel_idx % n_cols]
-        genes = list(summary["gene"].drop_duplicates())
-        colors = plt.get_cmap("tab10" if len(genes) <= 10 else "tab20")(np.linspace(0, 1, len(genes), endpoint=False))
-        for gene, color in zip(genes, colors, strict=False):
-            gene_df = summary[summary["gene"] == gene].sort_values("bin_center")
-            ax.plot(gene_df["bin_center"], gene_df[value_col], marker="o", ms=3.5, lw=1.6, color=color, label=gene)
-            ax.fill_between(
-                gene_df["bin_center"],
-                gene_df[value_col] - 1.96 * gene_df[sem_col],
-                gene_df[value_col] + 1.96 * gene_df[sem_col],
-                color=color,
-                alpha=0.18,
-                linewidth=0,
+        gene_bins = pd.DataFrame(gene_records)
+        gene_stats = {"gene": gene, "spearman_rho": rho, "spearman_pvalue": pvalue, "n_cells": len(values)}
+        if len(gene_bins):
+            gene_stats.update(
+                monotone_decay_stats(
+                    gene_bins["bin_center"].to_numpy(),
+                    gene_bins["mean_z"].to_numpy(),
+                    gene_bins["sem_z"].to_numpy(),
+                    gene_bins["n_cells"].to_numpy(),
+                    max_distance=MAX_DISTANCE,
+                    bandwidth=SMOOTHING_BANDWIDTH,
+                )
             )
-        if zero_line:
-            ax.axhline(0, color="black", lw=0.8, ls="--", alpha=0.5)
-        ax.set_title(label, fontsize=11)
-        ax.set_xlabel("Surface-to-surface distance to nearest sender (µm)")
-        ax.set_ylabel(ylabel)
-        ax.legend(fontsize=7, frameon=False, ncol=2)
-        ax.grid(alpha=0.25)
-
-    for empty_idx in range(n_panels, n_rows * n_cols):
-        axes[empty_idx // n_cols][empty_idx % n_cols].axis("off")
-
-    fig.suptitle(
-        "MERFISH cortex: receiver expression vs surface-to-surface distance to nearest sender", y=1.0, fontsize=13
-    )
-    fig.tight_layout()
-    for ext in ("png", "svg"):
-        fig.savefig(
-            os.path.join(OUTPUT_DIR, f"cortex_empirical_distance_expression{suffix}.{ext}"),
-            dpi=300,
-            bbox_inches="tight",
-        )
-    plt.close(fig)
+        stats.append(gene_stats)
+    return pd.DataFrame(records), pd.DataFrame(stats)
 
 
 def main():
@@ -208,10 +190,9 @@ def main():
         label = f"{sender} → {receiver}"
         profile = build_profile(adata, sender, receiver, genes)
         summary, stats = summarize_profile(profile, genes)
-        summaries.append((label, summary))
-
         summary.insert(0, "interaction", label)
         stats.insert(0, "interaction", label)
+        summaries.append((label, summary))
         all_bins.append(summary)
         all_stats.append(stats)
         print(f"{label}: {len(profile)} receiver cells, {len(genes)} genes", flush=True)
@@ -219,10 +200,19 @@ def main():
     pd.concat(all_bins, ignore_index=True).to_csv(
         os.path.join(OUTPUT_DIR, "cortex_distance_binned_expression.csv"), index=False
     )
-    monotonicity = pd.concat(all_stats, ignore_index=True)
+    # Multiple testing is controlled across every gene x interaction in this dataset.
+    monotonicity = add_monotone_calls(pd.concat(all_stats, ignore_index=True))
     monotonicity.to_csv(os.path.join(OUTPUT_DIR, "cortex_distance_monotonicity.csv"), index=False)
 
-    plot_profiles(summaries)
+    plot_kwargs = dict(
+        output_dir=OUTPUT_DIR,
+        output_prefix="cortex_empirical_distance_expression",
+        suptitle="MERFISH cortex: receiver expression vs surface-to-surface distance to nearest sender",
+        bandwidth=SMOOTHING_BANDWIDTH,
+        max_distance=MAX_DISTANCE,
+        stats=monotonicity,
+    )
+    plot_profiles(summaries, **plot_kwargs)
     plot_profiles(
         summaries,
         value_col="mean_z",
@@ -230,9 +220,43 @@ def main():
         ylabel="Mean expression (z-scored log1p)",
         suffix="_zscore",
         zero_line=True,
+        **plot_kwargs,
     )
-    print("\n=== Spearman correlation of expression with distance ===")
-    print(monotonicity.to_string(index=False))
+    plot_monotonicity_summary(
+        monotonicity,
+        output_dir=OUTPUT_DIR,
+        output_prefix="cortex_distance_monotonicity_summary",
+        suptitle="MERFISH cortex: monotone decay with distance to nearest sender",
+    )
+
+    columns = [
+        "interaction",
+        "gene",
+        "spearman_rho",
+        "spearman_qvalue",
+        "spearman_bins_rho",
+        "amplitude_z",
+        "mono_score",
+        "mono_qvalue",
+        "snr",
+        "decay_length_um",
+        "monotone_decay",
+        "testable",
+    ]
+    testable = monotonicity[monotonicity["testable"]]
+    n_called = int(testable["monotone_decay"].sum())
+    print("\n=== Monotone decay of the binned profile (BH-adjusted across all genes) ===")
+    print(monotonicity[columns].to_string(index=False))
+    print(
+        f"\n{n_called}/{len(testable)} testable gene-interaction pairs pass the monotonic decay test "
+        f"(per-cell Spearman q < 0.05, rho < 0); "
+        f"{int(testable['shallow'].sum())} of those have a total drop below 0.05 z-units."
+    )
+    if len(testable) < len(monotonicity):
+        print(
+            f"{len(monotonicity) - len(testable)} pairs could not be tested: too few cells "
+            f"to fill the minimum number of distance bins."
+        )
     print(f"\nWrote figures and tables to {OUTPUT_DIR}", flush=True)
 
 
