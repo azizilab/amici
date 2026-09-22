@@ -16,7 +16,7 @@ The full benchmark pipeline is orchestrated by [`benchmarks/Snakefile`](benchmar
 4. Scores each model on all tasks and generates PR curves ([`benchmarks/gene_task/generate_amici_scores.py`](benchmarks/gene_task/generate_amici_scores.py), [`benchmarks/gene_task/generate_amici_pr.py`](benchmarks/gene_task/generate_amici_pr.py), and analogous scripts per model/task)
 5. Produces the final plots ([`benchmarks/gene_task/plot_boxplots.py`](benchmarks/gene_task/plot_boxplots.py), [`benchmarks/gene_task/plot_pr_curves.py`](benchmarks/gene_task/plot_pr_curves.py), [`benchmarks/neighbor_interaction_task/plot_boxplots.py`](benchmarks/neighbor_interaction_task/plot_boxplots.py), [`benchmarks/neighbor_interaction_task/plot_pr_curves.py`](benchmarks/neighbor_interaction_task/plot_pr_curves.py), [`benchmarks/receiver_subtype_task/plot_boxplots.py`](benchmarks/receiver_subtype_task/plot_boxplots.py), [`benchmarks/receiver_subtype_task/plot_pr_curves.py`](benchmarks/receiver_subtype_task/plot_pr_curves.py), [`benchmarks/length_scale_task/plot_kde.py`](benchmarks/length_scale_task/plot_kde.py))
 
-The sensitivity and robustness scripts under [`benchmarks/sensitivity_scripts/`](benchmarks/sensitivity_scripts) (S21--S24, S26, S29--S33, S35, S37) are standalone: they generate their own datasets and train their own models internally, outside the Snakemake pipeline.
+The sensitivity and robustness scripts under [`benchmarks/sensitivity_scripts/`](benchmarks/sensitivity_scripts) (S10, S21--S24, S29--S33, S35b--c, S37, S39) are standalone: they generate their own datasets and train their own models internally, outside the Snakemake pipeline. Two exceptions sit outside that directory: S30f--g are produced by the seed-sweep scripts in [`xenium/`](xenium) and [`human_tonsil/`](human_tonsil) (they refit real-data models, not semisynthetic ones), and S26 comes from [`benchmarks/length_scale_task/sensitivity_test.py`](benchmarks/length_scale_task/sensitivity_test.py).
 
 ### [`benchmarks/generate_dataset.py`](benchmarks/generate_dataset.py)
 
@@ -125,14 +125,15 @@ Comparison of the released AMICI attention against a unimodal-attention variant 
 
 - **Fig S31a–c**: [`benchmarks/sensitivity_scripts/2_phase/`](benchmarks/sensitivity_scripts/2_phase) — [`two_phase_amici_sweep.py`](benchmarks/sensitivity_scripts/2_phase/two_phase_amici_sweep.py) (dataset, training, AUPRCs), [`two_phase_head_attention_summary.py`](benchmarks/sensitivity_scripts/2_phase/two_phase_head_attention_summary.py) and [`two_phase_selected_head_length_scales.py`](benchmarks/sensitivity_scripts/2_phase/two_phase_selected_head_length_scales.py) (per-head length scales)
 - **Fig S31d–f**: [`benchmarks/sensitivity_scripts/unimodal_two_phase/`](benchmarks/sensitivity_scripts/unimodal_two_phase) — [`unimodal_two_phase_amici_sweep.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_amici_sweep.py), [`unimodal_two_phase_baseline_sweep.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_baseline_sweep.py) (GITIII/CGCom via [`snakemake_shim.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/snakemake_shim.py)), [`unimodal_two_phase_task_error_analysis.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_task_error_analysis.py) (e), [`unimodal_two_phase_head_attention_summary.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_head_attention_summary.py) and [`unimodal_two_phase_selected_head_length_scales.py`](benchmarks/sensitivity_scripts/unimodal_two_phase/unimodal_two_phase_selected_head_length_scales.py) (f)
-- **Fig S31g–i**: Model-free distance-binned expression profiles — [`cortex/cortex_empirical_distance_expression.py`](cortex/cortex_empirical_distance_expression.py) (g), [`atera_breast/atera_breast_empirical_distance_expression.py`](atera_breast/atera_breast_empirical_distance_expression.py) (h), [`xenium/xenium_empirical_distance_expression.py`](xenium/xenium_empirical_distance_expression.py) (i)
 
 ### [`benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py`](benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py), [`benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py`](benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py)
 
 Neighborhood occlusion and density-matched negative controls.
 
-- **Fig S32a**: AUPRC and PR curves under increasing neighbor occlusion (both semisynthetic datasets)
-- **Fig S32b–d**: AUPRC curves for the grid-based (b), realistic three-cell-type (c) and realistic breast cancer (d) density-matched negative controls
+- **Fig S32a**: AUPRC vs occlusion fraction for all three tasks, grid-based (left) and realistic breast cancer (right) semisynthetic datasets (`neighbor_occlusion_analysis.py`)
+- **Fig S32b**: The corresponding PR curves per task and occlusion level, grid-based (top row) and realistic breast cancer (bottom row) (`neighbor_occlusion_analysis.py`)
+- **Fig S32c**: PR curves for the three tasks on the grid-based (`3ct_dataset_2way`) density-matched negative control (`neutral_sampling_negative_control.py`)
+- **Fig S32d**: PR curves for the three tasks on the realistic breast cancer density-matched negative control (`neutral_sampling_negative_control.py`)
 
 ### [`benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py`](benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py)
 
@@ -147,13 +148,14 @@ Cell-type composition of the held-out spatial test region against the full tissu
 - **Fig S35b**: Jensen-Shannon divergence per dataset
 - **Fig S35c**: Largest per-cell-type composition shifts
 
-Fig S35a comes from the Snakemake pipeline run with [`benchmarks/benchmark_config_cv.yaml`](benchmarks/benchmark_config_cv.yaml) (spatial cross-validation on the realistic breast cancer dataset).
+Fig S35a comes from the Snakemake pipeline run with [`benchmarks/benchmark_config_cv.yaml`](benchmarks/benchmark_config_cv.yaml) (spatial cross-validation on the realistic breast cancer dataset). [`xenium/xenium_sweep_crossval.py`](xenium/xenium_sweep_crossval.py) applies the same contiguous-strip spatial cross-validation to the real Xenium data; it is not used for any manuscript panel, since the reported Xenium model is selected on held-out test MSE.
 
 ### [`benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py`](benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py)
 
-AMICI performance under an x-axis gradient of 2D Gaussian coordinate noise, for both semisynthetic datasets.
+AMICI performance under an x-axis gradient of perturbation, run on the grid-based PBMC semisynthetic dataset only (`DATASETS_TO_RUN = ["3ct_dataset_2way"]`). Two perturbations are swept independently at `NOISE_SIGMAS = [0.0, 0.01, 0.05, 0.1]`: 2D Gaussian noise on cell coordinates, and gene-wise Gaussian noise on expression with coordinates left unchanged.
 
-- **Fig S37**: AUPRC for all three tasks vs coordinate noise level
+- **Fig S37** (left): AUPRC for all three tasks vs maximum coordinate-noise sigma
+- **Fig S37** (right): AUPRC for all three tasks vs maximum expression-noise sigma
 
 ### [`benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py`](benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py), [`benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py`](benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py)
 
@@ -161,6 +163,50 @@ Robustness of downstream-gene significance to the multiple-testing family and to
 
 - **Fig S39a, c, e**: Per-pair vs family-wide Benjamini-Hochberg interaction matrices (`family_wide_bh_interaction_networks.py`)
 - **Fig S39b, d, f**: Fraction of significant genes retained under the spatial block-jackknife effective sample size (`spatial_block_jackknife_gene_significance.py`)
+
+### Model-free test of the monotone distance assumption (Fig S40)
+
+Four standalone scripts bin receiver cells by surface-to-surface distance to their nearest sender and plot measured expression of the AMICI-implicated genes per bin, covering the sender-receiver pairs and downstream genes reported in Figures 3--6. They use only cell positions, cell-type labels and measured expression, so each needs only its dataset's preprocessing step and no trained model:
+
+- [`cortex/cortex_empirical_distance_expression.py`](cortex/cortex_empirical_distance_expression.py) — MERFISH cortex (2 µm bins, 6 µm smoothing bandwidth)
+- [`xenium/xenium_empirical_distance_expression.py`](xenium/xenium_empirical_distance_expression.py) — Xenium breast cancer, both replicates pooled (1 µm bins, 5 µm bandwidth)
+- [`atera_breast/atera_breast_empirical_distance_expression.py`](atera_breast/atera_breast_empirical_distance_expression.py) — Atera breast cancer (1 µm bins, 5 µm bandwidth)
+- [`human_tonsil/human_tonsil_empirical_distance_expression.py`](human_tonsil/human_tonsil_empirical_distance_expression.py) — CosMx human tonsil (1 µm bins, 5 µm bandwidth), taking its interactions and genes from the Figure 6c dot plots. Note that `obsm["spatial"]` holds CosMx pixels while `obs["cell_radius"]` is in micrometres, so the script converts the coordinates with the 0.12028 µm/px pixel size before subtracting radii.
+
+All four bin out to 50 µm, drop bins holding fewer than 10 cells, and share the smoothing and statistics code in [`benchmarks/distance_profile_utils.py`](benchmarks/distance_profile_utils.py) (see below). Each writes, into its own `figures/empirical_distance_expression/` directory, a profile figure, a z-scored profile figure, a per-dataset monotonicity summary figure and two CSVs (`*_distance_binned_expression.csv`, `*_distance_monotonicity.csv`). **None of those per-dataset figures is a manuscript panel**; they are intermediates for inspecting one dataset at a time.
+
+### [`benchmarks/make_monotonicity_figure.py`](benchmarks/make_monotonicity_figure.py)
+
+Assembles the supplementary figure from the eight CSVs written by the four scripts above, which must be run first. This script trains nothing and reads no `.h5ad`. Outputs `figures/monotonicity/monotonicity_summary.{png,svg,pdf}` and `figures/monotonicity/monotonicity_by_pair.csv`, and prints the per-pair table and headline fraction to stdout.
+
+- **Fig S40a**: Distance profile for one example pair — raw per-bin means faint in the background, the weighted local-linear smoother and its 95% band bold on top, and genes that fail the monotonic decay test dashed. The pair is set by `EXAMPLE_DATASET` / `EXAMPLE_INTERACTION` in the script, currently CosMx human tonsil, Fibroblast → CD4 T cell.
+- **Fig S40b**: Every sender-receiver pair in all four datasets, one row per pair and one dot per downstream gene placed at that gene's cell-level Spearman ρ, filled when the gene passes the monotonic decay test and hollow when it does not. Row labels give passing over testable, dot colour gives the dataset, and rows are ordered by median ρ within each dataset. Pairs with no testable gene are dropped rather than drawn as an empty row.
+
+At the current settings the figure reports **76/97** testable gene-pair combinations passing the test, and every gene × interaction is testable (see `testable` below).
+
+#### Smoothing and monotonicity quantification ([`benchmarks/distance_profile_utils.py`](benchmarks/distance_profile_utils.py))
+
+The per-bin means are dominated by sampling noise at 1–2 µm bin widths, so each profile figure draws the raw bin means faintly in the background and overlays a **weighted local-linear (degree-1 Gaussian-kernel) smoother** with an analytic 95% confidence band propagated from the per-bin SEMs. Local linear rather than local constant, because the near-contact enrichment sits at the left boundary of the domain where a Nadaraya–Watson smoother is biased inwards. The bandwidth is the `SMOOTHING_BANDWIDTH` constant in each script (5 µm for the 1 µm-bin datasets, 6 µm for the 2 µm-bin cortex).
+
+**The monotonic decay test itself is computed per cell, not per bin.** A gene passes when the Spearman correlation between a receiver's distance to its nearest sender and its expression of that gene is significantly negative after BH correction across every gene × interaction in the dataset (`add_monotone_calls`, α = 0.05). Because the correlation needs no binning, every gene × interaction is testable however few receivers fall inside the 50 µm window. The binned profile drives the figures, and the bin-level statistics below are recorded alongside for reference but **do not gate the call**.
+
+Per-gene statistics in `*_distance_monotonicity.csv`:
+
+| Column | Meaning |
+| --- | --- |
+| `spearman_rho`, `spearman_pvalue`, `spearman_qvalue` | Cell-level Spearman correlation of expression with distance to the nearest sender, its p-value, and the BH-adjusted value across every gene × interaction in the dataset. **These define the call** and position the dots in Fig S40b. |
+| `monotone_decay` | The call: `spearman_qvalue < 0.05` **and** `spearman_rho < 0`. Only monotone *decrease* counts as a positive. |
+| `shallow` | True for genes that pass the call but whose smoothed total drop is under `min_amplitude_z` (default 0.05 z units). Effect size no longer gates the call, so this flags passes that are statistically clear but small. |
+| `testable` | False when the cell-level Spearman p-value is not finite. Since the correlation is computed per cell this is now rare, and in the current four datasets every gene × interaction is testable; data-starved panels are still drawn without a smoothed curve. |
+| `mono_score` | Weighted R² of an isotonic (non-increasing) fit to the bin means, rescaled so that 0 is the value expected from pure sampling noise and 1 is a perfectly clean monotone decay. Reference only. |
+| `mono_pvalue`, `mono_qvalue` | Parametric-bootstrap p-value of that isotonic R² against a null in which the profile is flat and the bin means scatter only by their own SEMs, and its BH-adjusted value. Reference only. |
+| `slope_z_per_10um`, `slope_se`, `slope_pvalue`, `slope_qvalue` | Inverse-variance weighted linear slope in z-score units per 10 µm, with the SE inflated by sqrt(χ²/df) so a wiggly-but-real profile is not credited with a spuriously precise slope. |
+| `amplitude_z`, `amplitude_se` | Total drop of the smoothed curve from the first to the last distance bin, in z units. Read off the same smoother the figure draws, so the quoted effect size and the picture agree; `isotonic_amplitude_z` is the noisier endpoint-bin equivalent. Feeds `shallow`. |
+| `snr` | Distance-dependent signal SD divided by sampling-noise SD, after subtracting the noise variance from the observed variance of the bin means. |
+| `decay_length_um`, `decay_length_se_um` | Length scale λ of `c + a·exp(−d/λ)` fitted to the profile, for comparison with the length scales AMICI learns. NaN when λ is not identifiable inside the fitted window. |
+| `spearman_bins_rho`, `spearman_bins_pvalue`, `spearman_bins_qvalue` | The bin-level counterpart of the cell-level correlation, kept for comparison. |
+
+Bin-level statistics (`mono_score` and the isotonic bootstrap, the weighted slope, the smoother) require at least `MIN_BINS_FOR_STATS` = 8 occupied bins; below that they are NaN while the cell-level call still stands. Genes rising with distance are reported with a positive `spearman_rho` and fail the call, acting as an internal negative control.
 
 ## Cortex Analysis
 
@@ -198,7 +244,8 @@ Primary Xenium breast cancer analysis. Generates spatial distributions, interact
 - **Figure 4a**: Spatial scatter plots of both Xenium replicates (`visualize_spatial_distribution()`)
 - **Figure 4b**: Directed interaction networks — full and immune-tumor subset (`plot_interaction_directed_graph()`)
 - **Figure 4c**: Downstream gene dot plots for M1 macrophages, CD8 T cells, invasive tumor (`plot_featurewise_contributions_dotplot()`)
-- **Figure 4d**: Length scale distributions and length-scale-dependent gene analysis (`plot_length_scale_distribution()`)
+- **Figure 4d** (top): Violin plot of inferred length scales per sender → receiver → head, restricted to heads with median radius in `(0, 50]` µm (`plot_length_scale_distribution()` with `attention_threshold=0.1`). Rows are ordered by **ascending median length scale**, so for CD4 T cells → CD8 T cells head 5 is the shorter-range head and head 4 the longer-range one
+- **Figure 4d** (bottom): Head-resolved neighbor contributions for the CD4 T cell → CD8 T cell pair on heads 4 and 5 (`get_neighbor_ablation_scores(..., head_idx=...)`)
 - **Fig S5c**: Explained variance by attention head (`plot_explained_variance_barplot()`)
 - **Fig S7**: Volcano plots of neighbor contribution vs Wald statistic per receiver cell type
 
@@ -206,8 +253,14 @@ Primary Xenium breast cancer analysis. Generates spatial distributions, interact
 
 Spatial attention pattern analysis for the Xenium dataset. Generates proximity scores, attention heatmaps, and gene expression spatial plots using `AMICIAblationModule` and `AMICIAttentionModule`.
 
-- **Figure 4e**: Four-panel spatial analysis — proximity scores, attention heatmaps, ESR1 gene expression
+- **Figure 4e**: Four-panel spatial analysis — proximity to the nearest CD8 T cell and to the nearest *attending* CD8 T cell (`proximity_spatial_plot_*_any_sender_type` / `*_high_senders`), total attention from CD8 T cells to invasive tumor on the max-variance head (`empirical_attention_spatial_plot_*_max_var_head`), and ESR1 expression in invasive tumor (`gene_expression_ESR1_Invasive_Tumor`)
 - **Fig S9**: AGR3 subpopulation spatial analysis (attention + gene expression)
+
+### [`xenium/xenium_subtyping_analysis.py`](xenium/xenium_subtyping_analysis.py)
+
+Receiver-subpopulation analysis for the CD8+ T cell → invasive tumor pair, implementing the "Identification of Interacting Receiver Subpopulations" Methods section: PCA + KMeans over counterfactual attention profiles, spatial sender/receiver plots, sender DE between the recovered clusters, and head-specific featurewise contribution dot plots (`plot_featurewise_contributions_dotplot()` with a `head_idx`). Outputs land in `figures/{receiver_ct}_from_{sender_ct}/`.
+
+No numbered manuscript panel is generated directly by this script; it is the supporting subpopulation analysis behind Figure 4e and Fig S9, and its head-specific dot-plot routine is the same one used for the head-resolved gene panels.
 
 ### [`benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py`](benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py)
 
@@ -220,9 +273,9 @@ Covariate-adjusted ESR1 and AGR3 expression in invasive tumor cells of replicate
 Communication hub analysis. Clusters cells by AMICI interaction patterns and performs grid search over hub parameters.
 
 - **Figure 4f** (top): Spatial scatter plots colored by communication hub assignment
-- **Figure 4f** (bottom): Alluvial/Sankey diagrams of hub sender-receiver composition
-- **Fig S13a**: Silhouette score vs number of clusters
-- **Fig S13b**: Alluvial/Sankey diagrams for all 10 communication hubs
+- **Figure 4f** (bottom): Alluvial/Sankey diagrams of hub sender-receiver composition, for communication hubs **6** (diverse immune-immune) and **9** (M1-macrophage-dominated senders into invasive tumor)
+- **Fig S13a**: Silhouette score vs number of clusters (optimal k = 10)
+- **Fig S13b**: Alluvial/Sankey diagrams for all 10 communication hubs, each titled by hub number
 - **Fig S27**: Hub grid search heatmaps — fixed k, varying quantile threshold
 - **Fig S28**: Hub grid search heatmaps — fixed quantile, varying k
 
@@ -286,9 +339,9 @@ Monte Carlo validation of the Wald test normality assumption using 50 randomly i
 
 ### [`xenium/runtime_benchmark/plot_benchmark.py`](xenium/runtime_benchmark/plot_benchmark.py)
 
-Runtime scaling visualization. Data generated by [`xenium/runtime_benchmark/run_benchmark.py`](xenium/runtime_benchmark/run_benchmark.py).
+Runtime scaling visualization. Data generated by [`xenium/runtime_benchmark/run_benchmark.py`](xenium/runtime_benchmark/run_benchmark.py). The epoch count in the panel titles is read from the saved run metadata, so it reflects the `--max-epochs` used for the cached run rather than the script default of 50; the published panel was produced from a 10-epoch run.
 
-- **Fig S20**: Runtime benchmark (CPU wall-clock time + GPU seconds/epoch vs number of cells)
+- **Fig S20**: CPU (left) and GPU (right) panels, each plotting total wall-clock time (left axis) and seconds per epoch (right axis) against the number of training cells, with one line per gene-panel size (250 / 500 / 1,000 / 2,000 / 5,000 genes). Peak GPU memory is recorded in the results JSON but is not plotted in this figure.
 
 ## Xenium Low-Resolution Analysis
 
@@ -354,6 +407,8 @@ Prerequisites (run in order):
 1. [`human_tonsil/human_tonsil_preprocess.py`](human_tonsil/human_tonsil_preprocess.py) — Filters unlabeled annotations, normalizes counts, and performs a spatial train/test split.
 2. [`human_tonsil/human_tonsil_train.py`](human_tonsil/human_tonsil_train.py) — Trains the AMICI model. Sweep config: [`human_tonsil/human_tonsil_sweep.yaml`](human_tonsil/human_tonsil_sweep.yaml), launched via [`human_tonsil/run_human_tonsil_sweep.sh`](human_tonsil/run_human_tonsil_sweep.sh).
 3. [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) — Loads the trained model and generates the tonsil figures.
+
+[`human_tonsil/human_tonsil_empirical_distance_expression.py`](human_tonsil/human_tonsil_empirical_distance_expression.py) is model-free and needs only step 1. It contributes the tonsil profiles to [Fig S40](#model-free-test-of-the-monotone-distance-assumption-fig-s40), including the Fibroblast → CD4 T cell pair shown in full in panel a.
 
 ### [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py)
 
