@@ -202,7 +202,14 @@ def plot_all_pairs(ax, per_dataset):
     handles += [
         plt.Line2D([], [], color="0.35", marker="o", ls="", ms=5.5, label="passes monotonic decay test"),
         plt.Line2D(
-            [], [], color="0.35", marker="o", ls="", ms=5.5, markerfacecolor="white", label="fails; not distinguishable"
+            [],
+            [],
+            color="0.35",
+            marker="o",
+            ls="",
+            ms=5.5,
+            markerfacecolor="white",
+            label="fails; no significant decreasing trend",
         ),
     ]
     # Anchored to the figure rather than the axis so it clears the x-axis label whatever
