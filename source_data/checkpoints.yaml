@@ -1,0 +1,130 @@
+# Datasets and AMICI checkpoints behind each main figure of the AMICI manuscript.
+# Paths are relative to the repository root. md5 sums were verified on 2026-10-16 against the files that
+# reproduce the published panels (gene selections, heatmap orders, violin order and hub labels; see README.md).
+# Remote copies: Figshare doi:10.6084/m9.figshare.31927956 (version 1, files listed by id) and gs://justin-amici.
+
+figure_1:
+  status: schematic only; no data or checkpoint
+
+figure_2:
+  status: >-
+    2a-e from the original PBMC run (2a from the run's GITIII input and ground-truth subtype files, 2b from its
+    length_scale_distribution.svg). 2f from the realistic dataset below. 2h-j kept as published: Source Data are
+    the published bar heights (read off a vector copy of the figure) with the realistic re-run alongside. 2g
+    redrawn from the re-run's selected AMICI model, 14 heads and seed 42 (source_data/plot_fig2g.py).
+  realistic_rerun:
+    config: reproducibility/benchmarks/fig2_realistic_benchmark_config.yaml
+    amici_sweep: benchmarks/results_realistic_rerun_april_family/  # 30 runs; test losses and AUPRCs in reproducibility/benchmarks/fig2_realistic_april_sweep_scores.csv
+    amici_model: benchmarks/results_realistic_rerun_april_family/breast_cancer_42/saved_models/amici_breast_cancer_42_best_model/model.pt  # 14 heads, seed 42
+    amici_model_md5: 9bc5b8181fff5bb8ad676fdf88028378
+    gcs: gs://justin-amici/semisyn/fig2_realistic_april_sweep/  # selected model, its scores (scores/run_329/), sweep logs, MANIFEST.md5
+    gitiii: ../amici-3a3cc16/benchmarks/results/breast_cancer_42/  # re-run at commit 3a3cc16
+    dataset: benchmarks/results_realistic_rerun/data/breast_cancer_42.h5ad  # copy of data/breast_cancer_42.h5ad
+    dataset_md5: 1e185c0bddb7795d30e8729d289ad8d3
+  original_run: khushi-gpu-migrated:/home/khushidesai/amici_results (28 GB)
+  staged_copy: gs://justin-amici/semisyn/fig2_amici_results/  # 288 files + 2 seed-72 files; md5s in fig2_manifest.txt and fig2_manifest_addendum.txt
+  local_copy: benchmarks/results_fig2_original/
+  amici_models: >-
+    3ct_dataset_2way_{seed}/saved_models/amici_3ct_dataset_2way_{seed}_best_model/model.pt for all ten seeds
+    (40, 123, 6, 23, 25, 88, 72, 58, 22, 31); md5s in fig2_manifest.txt. The models under benchmarks/results/
+    on the AMICI VM are from a later re-run and are not the published ones.
+  example_seed: 72
+  datasets: >-
+    The original 3ct_dataset_2way_{seed}.h5ad files were not kept. benchmarks/data/ holds later regenerations
+    that do not match the original models (495/500 shared genes, different cell counts).
+  pipeline: benchmarks/Snakefile with benchmarks/benchmark_config.yaml
+
+figure_3:
+  dataset: cortex
+  data: cortex/data/cortex_processed_2025-04-28.h5ad
+  data_md5: 5f9081deef1132c89c09ae7f6819264a
+  model: cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+  model_md5: 76eadfaa20920ae7b9a4044d9094512e
+  wandb: {sweep: plm73bmg, run: xrtcnlt0}
+  config: reproducibility/cortex_config.yaml
+  remote:
+    figshare_model_file_id: 63409695
+    figshare_data_file_id: 63409731
+    gcs_model: gs://justin-amici/cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+    gcs_data: gs://justin-amici/cortex/data/cortex_processed_2025-04-28.h5ad
+  notes: >-
+    The checkpoint was missing from the VM and was restored from the bucket on 2026-10-16. cortex_analysis.py
+    loads ./saved_models/cortex_18_sweep_... (no sweep subfolder), while REPRODUCIBILITY.md and this manifest
+    use the subfolder layout.
+
+figure_4:
+  dataset: xenium (both replicates)
+  data: xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad
+  data_md5: 670168c3a8a8816a075d0d619372dd5b
+  train_test_splits:
+    - xenium/data/xenium_sample1/xenium_sample1_filtered_train_2025-05-01.h5ad  # restored from gs://justin-amici/xenium/data/
+    - xenium/data/xenium_sample1/xenium_sample1_filtered_test_2025-05-01.h5ad
+  model: xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+  model_md5: c118e838b4ff896245d21000a4a04f7e
+  wandb: {sweep: g3mucw4s, run: te7pkv3z}
+  config: reproducibility/xenium_full_config.yaml
+  remote:
+    figshare_model_file_id: 63409710
+    figshare_data_file_id: 63409728
+    gcs_model: gs://justin-amici/xenium/saved_models/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+    gcs_data: gs://justin-amici/xenium/data/xenium_sample1_filtered_2025-05-01.h5ad
+  derived_caches:
+    all_cell_type_ablation: xenium/figures/cached_ablation_scores/all_cell_types_ablation_scores.pkl
+    hub_assignments: xenium/data/xenium_sample1/hub_analysis_cache/hub_cluster_assignments.csv
+
+figure_5:
+  dataset: atera_breast
+  data: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+  data_md5: aba4c26e3119d816f55b32a7e9e00fd1
+  model: atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+  model_md5: f53e6ab53c322735193998ecc2db959a
+  wandb: {sweep: 25xpxkuk, run: zhtraubt}
+  config: reproducibility/atera_breast_config.yaml
+  remote:
+    figshare: not deposited (Figshare v1 predates this model)
+    gcs_model: not deposited
+    gcs_data: gs://justin-amici/atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+  derived_caches:
+    all_cell_type_ablation: atera_breast/figures/atera_breast_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
+
+figure_6:
+  dataset: human_tonsil (CosMx 1k)
+  data: human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
+  data_md5: 8a7e318a95e517942fda74a584eeb597
+  model: human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt
+  model_md5: e12cc39256feed3781ef711cc463b07a
+  wandb: {sweep: 0f9rk0na, run: 4303v0zu}
+  config: reproducibility/human_tonsil_config.yaml
+  coordinate_units: CosMx pixels; 0.12028 um per pixel
+  remote:
+    figshare: not deposited (Figshare v1 predates this model)
+    gcs: not deposited
+  derived_caches:
+    all_cell_type_ablation: human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
+
+# Checkpoints used only by supplementary figures, identified while auditing Figshare v1.
+supplementary:
+  xenium_replicate_1:
+    figures: [Fig. S5a-b]
+    model: xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13/model.pt
+    model_md5: b0fcd7a0e5a17b2e115ced59a1919bc4
+    figshare_model_file_id: 63409704
+    figshare_data_file_id: 63409719
+    gcs_model: gs://justin-amici/xenium/saved_models/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13/model.pt
+    notes: restored to the VM from the bucket on 2026-10-16; replicate dataset not downloaded
+  xenium_replicate_2:
+    figures: [Fig. S5a-b]
+    model: xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
+    model_md5: 1707ef52dfa1eeb2a4329ada81a9e464
+    figshare_model_file_id: 63409707
+    figshare_data_file_id: 63409716
+    gcs_model: gs://justin-amici/xenium/saved_models/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
+    notes: restored to the VM from the bucket on 2026-10-16; replicate dataset not downloaded
+  xenium_lowres_retrain:
+    figures: [Fig. S19]
+    model: xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-09-19/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
+    model_md5: 3af4d45569f746bf42297f59edaebd10
+    gcs_model: gs://justin-amici/xenium/saved_models/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
+    notes: >-
+      Figshare v1 file 63409713 is a different low-resolution run (xsjrwnof/t4t8pzvi, md5
+      1bb7e22247843768bf454bba634b8ad1), not the 2026-09-19 retrain that REPRODUCIBILITY.md now cites.

@@ -1,0 +1,42 @@
+# Benchmark config for the PBMC grid semisynthetic benchmark: Fig. 2a-e, Fig. S2 and Fig. S3.
+#
+# Code: the published run predates the repository (its Snakemake cache is from mid-2025); the PBMC settings below
+#   are unchanged from the first commit (e768bc5) to the present, so any commit runs them. AMICI uses the default
+#   sweep of benchmarks/train_amici_model.py (3 end penalties x 3 value L1 penalties x 7 seeds = 63 runs), which the
+#   published run also shows.
+# Published run: khushi-gpu-migrated:/home/khushidesai/amici_results; the files behind Fig. 2 (per-seed AUPRCs,
+#   AMICI models, length-scale plots) are copied to gs://justin-amici/semisyn/fig2_amici_results/ with md5s in
+#   fig2_manifest.txt. Recomputing the Mann-Whitney tests from them reproduces every p-value in the Fig. 2 caption.
+# Caveats: the run's input .h5ad files were not kept, and regenerating them gives different datasets
+#   (benchmarks/data/ shares 495 of 500 genes with the published seed-72 model); seeds 58 and 123 produce the same
+#   dataset, so Fig. 2c-e rest on 9 distinct datasets.
+#
+# Run from benchmarks/:
+#   snakemake --use-conda --cores <N> --resources gpu=1 --configfile ../reproducibility/benchmarks/fig2_pbmc_benchmark_config.yaml
+# with the environments pinned to envs/*_lock.txt (see README.md).
+dir_path: "data/"
+results_path: "results/"
+
+datasets_to_run:
+  - 3ct_dataset_2way
+
+datasets:
+  3ct_dataset_2way:
+    seeds: [40, 123, 6, 23, 25, 88, 72, 58, 22, 31]
+    labels_key: "leiden"
+    subtype_labels_key: "subtype"
+    ncem_niche_sizes: [10, 15, 20]
+    nichede_niche_sizes: [20, 200, 500]
+    gt_interactions:
+      interaction_1:
+        sender: "0"
+        receiver: "2"
+        interaction_subtype: "2_sub1"
+        neutral_subtype: "2_sub0"
+        length_scale: 10
+      interaction_2:
+        sender: "3"
+        receiver: "0"
+        interaction_subtype: "0_sub1"
+        neutral_subtype: "0_sub0"
+        length_scale: 20
