@@ -393,6 +393,50 @@ def plot_dataset_bootstrap_ci(model_estimates_df, figures_dir):
     plt.close(fig)
 
 
+def plot_cell_type_composition(adata, labels_key, figures_dir):
+    """Plot cell counts per cell type for the realistic semi-synthetic dataset.
+
+    Cell positions and labels come from the Xenium tissue, so the composition is identical across dataset seeds.
+    """
+    counts = adata.obs[labels_key].astype(str).value_counts().sort_values()
+    fractions = counts / counts.sum()
+    counts.rename("n_cells").to_frame().assign(fraction=fractions).to_csv(
+        os.path.join(figures_dir, "realistic_cell_type_composition.csv"), index_label="cell_type"
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 4.5))
+    colors = plt.get_cmap("Set2").colors
+    bars = ax.barh(
+        counts.index,
+        counts.to_numpy(),
+        color=[colors[i % len(colors)] for i in range(len(counts))],
+        edgecolor="black",
+        linewidth=0.5,
+    )
+    for bar, n_cells, fraction in zip(bars, counts.to_numpy(), fractions.to_numpy(), strict=True):
+        ax.text(
+            bar.get_width() + 0.01 * counts.max(),
+            bar.get_y() + bar.get_height() / 2,
+            f"{n_cells:,} ({100 * fraction:.1f}%)",
+            va="center",
+            fontsize=8,
+        )
+    ax.set_xlim(0, 1.15 * counts.max())
+    ax.set_xlabel("Number of cells")
+    ax.set_ylabel("Cell type")
+    ax.set_title("Realistic Semi-Synthetic Dataset Cell Type Composition")
+    ax.spines[["top", "right"]].set_visible(False)
+    plt.tight_layout()
+
+    for ext in ("png", "svg"):
+        fig.savefig(
+            os.path.join(figures_dir, f"realistic_cell_type_composition.{ext}"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+    plt.close(fig)
+
+
 # %% Setup paths
 select_gpu()
 base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -412,6 +456,9 @@ output_paths = [
     os.path.join(figures_dir, f"{RUN_NAME}.csv"),
     os.path.join(figures_dir, f"{RUN_NAME}_violin.png"),
     os.path.join(figures_dir, f"{RUN_NAME}_violin.svg"),
+    os.path.join(figures_dir, "realistic_cell_type_composition.csv"),
+    os.path.join(figures_dir, "realistic_cell_type_composition.png"),
+    os.path.join(figures_dir, "realistic_cell_type_composition.svg"),
 ]
 missing_outputs = [path for path in output_paths if not os.path.exists(path)]
 if missing_outputs:
@@ -524,3 +571,12 @@ ci_df.to_csv(os.path.join(figures_dir, f"{RUN_NAME}.csv"), index=False)
 
 # %% Plot length scale distributions
 plot_dataset_bootstrap_ci(model_estimates_df, figures_dir)
+
+# %% Plot cell type composition of the realistic dataset
+composition_adata = generate_or_load_realistic_dataset(
+    benchmark_dir,
+    dataset_config,
+    os.path.join(data_dir, f"{DATASET}_{DATASET_SEEDS[0]}.h5ad"),
+    DATASET_SEEDS[0],
+)
+plot_cell_type_composition(composition_adata, dataset_config["labels_key"], figures_dir)

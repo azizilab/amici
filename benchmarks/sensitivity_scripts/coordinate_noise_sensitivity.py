@@ -38,7 +38,9 @@ from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 RUN_NAME = "coordinate_noise_gradient_sensitivity_sweep"
 DEFAULT_RANDOM_SEED = 42
 NOISE_SIGMAS = [0.0, 0.01, 0.05, 0.1]
-DATASETS_TO_RUN = ["3ct_dataset_2way", "breast_cancer"]
+DATASETS_TO_RUN = ["3ct_dataset_2way"]
+PERTURBATIONS_TO_RUN = os.environ.get("AMICI_NOISE_PERTURBATIONS", "coordinate,expression").split(",")
+PERTURBATIONS_TO_RUN = [perturbation.strip() for perturbation in PERTURBATIONS_TO_RUN if perturbation.strip()]
 
 EXP_DEFAULTS = {
     "epochs": 400,
@@ -166,6 +168,16 @@ def noisy_dataset_path(dataset_name, dataset_config, sigma):
     return os.path.join(data_dir, f"{dataset_name}_{dataset_config['dataset_seed']}_{sigma_tag(sigma)}.h5ad")
 
 
+def perturbed_dataset_path(dataset_name, dataset_config, sigma, perturbation):
+    """Return the cached perturbed dataset path."""
+    if perturbation == "coordinate":
+        return noisy_dataset_path(dataset_name, dataset_config, sigma)
+    return os.path.join(
+        data_dir,
+        f"{dataset_name}_{dataset_config['dataset_seed']}_{perturbation}_{sigma_tag(sigma)}.h5ad",
+    )
+
+
 def build_sweep_runs(dataset_config):
     """Build the AMICI sweep used to select the model for each noise level."""
     sweep = dataset_config["sweep_params"]
@@ -202,6 +214,13 @@ def build_sweep_runs(dataset_config):
         if len(run_configs) == 6:
             break
     return run_configs
+
+
+def condition_run_dir(dataset_name, sigma, run_idx, perturbation):
+    """Return the run directory, preserving legacy coordinate-noise paths."""
+    if perturbation == "coordinate":
+        return os.path.join(saved_models_dir, dataset_name, sigma_tag(sigma), f"run_{run_idx}")
+    return os.path.join(saved_models_dir, dataset_name, perturbation, sigma_tag(sigma), f"run_{run_idx}")
 
 
 def ensure_base_dataset(dataset_name, dataset_config):
@@ -258,20 +277,40 @@ def add_coordinate_noise(adata, sigma, seed):
     return adata
 
 
-def ensure_noisy_dataset(dataset_name, dataset_config, sigma):
-    """Create or load a coordinate-perturbed dataset."""
-    adata_path = noisy_dataset_path(dataset_name, dataset_config, sigma)
+def add_expression_noise(adata, sigma, seed):
+    """Add x-gradient Gaussian noise to expression values."""
+    adata = adata.copy()
+    coords = np.asarray(adata.obsm["spatial"], dtype=float)
+    x_pos = coords[:, 0]
+    x_span = x_pos.max() - x_pos.min()
+    if x_span == 0:
+        x_span = 1.0
+
+    if sigma > 0:
+        rng = np.random.default_rng(seed)
+        cell_sigmas = sigma * ((x_pos - x_pos.min()) / x_span)
+        x = adata.X.toarray() if hasattr(adata.X, "toarray") else np.asarray(adata.X).copy()
+        x = x + rng.normal(0, cell_sigmas[:, None], size=x.shape)
+        adata.X = np.clip(x, a_min=0, a_max=None)
+    return adata
+
+
+def ensure_perturbed_dataset(dataset_name, dataset_config, sigma, perturbation):
+    """Create or load a coordinate- or expression-perturbed dataset."""
+    adata_path = perturbed_dataset_path(dataset_name, dataset_config, sigma, perturbation)
     if os.path.exists(adata_path):
         return sc.read_h5ad(adata_path)
 
     base_path = ensure_base_dataset(dataset_name, dataset_config)
     adata = sc.read_h5ad(base_path)
     adata.obs_names_make_unique()
-    adata = add_coordinate_noise(
-        adata,
-        sigma=sigma,
-        seed=DEFAULT_RANDOM_SEED + int(dataset_config["dataset_seed"]) * 1000 + int(sigma * 1_000_000),
-    )
+    seed = DEFAULT_RANDOM_SEED + int(dataset_config["dataset_seed"]) * 1000 + int(sigma * 1_000_000)
+    if perturbation == "coordinate":
+        adata = add_coordinate_noise(adata, sigma=sigma, seed=seed)
+    elif perturbation == "expression":
+        adata = add_expression_noise(adata, sigma=sigma, seed=seed)
+    else:
+        raise ValueError(f"Unknown perturbation: {perturbation}")
     adata.write_h5ad(adata_path)
     return adata
 
@@ -300,10 +339,10 @@ def get_gt_receiver_classes(adata, dataset_config):
     return pd.DataFrame({"cell_idx": adata.obs_names, "class": receiver_mask.astype(float)})
 
 
-def train_or_load_run(dataset_name, adata, dataset_config, sigma, run):
+def train_or_load_run(dataset_name, adata, dataset_config, sigma, run, perturbation):
     """Train or load one AMICI run for a coordinate-noise condition."""
     run_idx = int(run["run_idx"])
-    run_dir = os.path.join(saved_models_dir, dataset_name, sigma_tag(sigma), f"run_{run_idx}")
+    run_dir = condition_run_dir(dataset_name, sigma, run_idx, perturbation)
     model_path = os.path.join(run_dir, "model")
     result_path = os.path.join(run_dir, "result.json")
     if os.path.exists(os.path.join(model_path, "model.pt")) and os.path.exists(result_path):
@@ -362,26 +401,33 @@ def train_or_load_run(dataset_name, adata, dataset_config, sigma, run):
         .numpy()
         .item()
     )
-    result = {**run, "test_loss": test_loss, "model_path": model_path, "noise_sigma": sigma}
+    result = {
+        **run,
+        "test_loss": test_loss,
+        "model_path": model_path,
+        "noise_sigma": sigma,
+        "perturbation": perturbation,
+    }
     with open(result_path, "w") as f:
         json.dump(result, f, indent=2)
     return model, result
 
 
-def evaluate_sweep_condition(dataset_name, adata, dataset_config, sigma):
+def evaluate_sweep_condition(dataset_name, adata, dataset_config, sigma, perturbation):
     """Run a compact sweep and return all scores plus the best run summary."""
     records = []
     for run in build_sweep_runs(dataset_config):
         run_idx = int(run["run_idx"])
-        run_dir = os.path.join(saved_models_dir, dataset_name, sigma_tag(sigma), f"run_{run_idx}")
+        run_dir = condition_run_dir(dataset_name, sigma, run_idx, perturbation)
         scores_path = os.path.join(run_dir, "task_auprc_scores.csv")
         print(f"  run_{run_idx}: {run}", flush=True)
         try:
             if os.path.exists(scores_path):
                 run_df = pd.read_csv(scores_path)
                 result = json.load(open(os.path.join(run_dir, "result.json")))
+                result["perturbation"] = perturbation
             else:
-                model, result = train_or_load_run(dataset_name, adata, dataset_config, sigma, run)
+                model, result = train_or_load_run(dataset_name, adata, dataset_config, sigma, run, perturbation)
                 scores = evaluate_model(model, adata, dataset_config)
                 run_df = pd.DataFrame(
                     [
@@ -400,6 +446,7 @@ def evaluate_sweep_condition(dataset_name, adata, dataset_config, sigma):
                 records.append(
                     {
                         "dataset": dataset_name,
+                        "perturbation": perturbation,
                         "dataset_seed": dataset_config["dataset_seed"],
                         "noise_sigma": sigma,
                         "noise_variance": sigma**2,
@@ -418,6 +465,7 @@ def evaluate_sweep_condition(dataset_name, adata, dataset_config, sigma):
                 records.append(
                     {
                         "dataset": dataset_name,
+                        "perturbation": perturbation,
                         "dataset_seed": dataset_config["dataset_seed"],
                         "noise_sigma": sigma,
                         "noise_variance": sigma**2,
@@ -500,30 +548,70 @@ def evaluate_model(model, adata, dataset_config):
 
 
 def plot_summary(summary_df):
-    """Plot task AUPRC as coordinate noise increases."""
+    """Plot task AUPRC as perturbation noise increases."""
     task_order = ["Neighbor Interaction Task", "Gene Task", "Receiver Subtype Task"]
-    dataset_order = [dataset for dataset in DATASETS_TO_RUN if dataset in set(summary_df["dataset"])]
-    fig, axes = plt.subplots(1, len(dataset_order), figsize=(13, 4.2), sharey=True)
-    if len(dataset_order) == 1:
+    perturbation_order = ["coordinate", "expression"]
+    perturbation_order = [p for p in perturbation_order if p in set(summary_df["perturbation"])]
+    fig, axes = plt.subplots(1, len(perturbation_order), figsize=(13, 4.2), sharey=True)
+    if len(perturbation_order) == 1:
         axes = [axes]
-    for ax, dataset_name in zip(axes, dataset_order, strict=False):
-        dataset_df = summary_df[summary_df["dataset"] == dataset_name]
+    title_map = {
+        "coordinate": "Coordinate noise",
+        "expression": "Expression noise",
+    }
+    xlabel_map = {
+        "coordinate": "Maximum Gaussian noise sigma\n(normalized coordinate units)",
+        "expression": "Maximum Gaussian noise sigma\n(expression units)",
+    }
+    for ax, perturbation in zip(axes, perturbation_order, strict=False):
+        dataset_df = summary_df[summary_df["perturbation"] == perturbation]
         for task in task_order:
             task_df = dataset_df[dataset_df["task"] == task].sort_values("noise_sigma")
             ax.plot(task_df["noise_sigma"], task_df["auprc"], marker="o", linewidth=2, label=task)
-        ax.set_title(dataset_name)
-        ax.set_xlabel("Maximum Gaussian noise sigma\n(normalized coordinate units)")
+        ax.set_title(title_map.get(perturbation, perturbation))
+        ax.set_xlabel(xlabel_map.get(perturbation, "Maximum Gaussian noise sigma"))
         ax.set_ylim(0, 1.02)
         ax.grid(axis="y", alpha=0.25)
     axes[0].set_ylabel("AUPRC")
     axes[-1].legend(frameon=False, bbox_to_anchor=(1.02, 1), loc="upper left")
-    fig.suptitle("AMICI robustness to mild coordinate perturbation", fontsize=13)
+    fig.suptitle("AMICI robustness to mild spatial and expression perturbation", fontsize=13)
     fig.tight_layout()
     for ext in ("png", "svg"):
         fig.savefig(
             os.path.join(figure_dir, f"coordinate_noise_sensitivity_summary.{ext}"), dpi=300, bbox_inches="tight"
         )
     plt.close(fig)
+
+
+def add_existing_coordinate_results(summary_df, all_runs_df):
+    """Reuse existing synthetic coordinate-noise rows when only expression noise is rerun."""
+    if "coordinate" in set(summary_df.get("perturbation", [])):
+        return summary_df, all_runs_df
+
+    summary_path = os.path.join(figure_dir, "coordinate_noise_sensitivity_summary.csv")
+    all_runs_path = os.path.join(figure_dir, "coordinate_noise_sensitivity_all_runs.csv")
+    if not os.path.exists(summary_path):
+        return summary_df, all_runs_df
+
+    existing_summary_df = pd.read_csv(summary_path)
+    existing_all_runs_df = pd.read_csv(all_runs_path) if os.path.exists(all_runs_path) else pd.DataFrame()
+    for df in [existing_summary_df, existing_all_runs_df]:
+        if not df.empty and "perturbation" not in df.columns:
+            df["perturbation"] = "coordinate"
+
+    existing_summary_df = existing_summary_df[
+        (existing_summary_df["dataset"].isin(DATASETS_TO_RUN)) & (existing_summary_df["perturbation"] == "coordinate")
+    ]
+    if not existing_all_runs_df.empty:
+        existing_all_runs_df = existing_all_runs_df[
+            (existing_all_runs_df["dataset"].isin(DATASETS_TO_RUN))
+            & (existing_all_runs_df["perturbation"] == "coordinate")
+        ]
+
+    summary_df = pd.concat([existing_summary_df, summary_df], ignore_index=True)
+    if not existing_all_runs_df.empty:
+        all_runs_df = pd.concat([existing_all_runs_df, all_runs_df], ignore_index=True)
+    return summary_df, all_runs_df
 
 
 # %% Run
@@ -538,40 +626,45 @@ summary_records = []
 all_run_records = []
 for dataset_name in DATASETS_TO_RUN:
     dataset_config = DATASET_CONFIGS[dataset_name]
-    for sigma in NOISE_SIGMAS:
-        print(f"Running {dataset_name} with max normalized coordinate sigma={sigma}", flush=True)
-        try:
-            adata = ensure_noisy_dataset(dataset_name, dataset_config, sigma)
-            adata.obs_names_make_unique()
-            condition_df, best_df = evaluate_sweep_condition(dataset_name, adata, dataset_config, sigma)
-            all_run_records.append(condition_df)
-            summary_records.append(best_df)
-        except Exception as exc:  # noqa: BLE001
-            error_df = pd.DataFrame(
-                [
-                    {
-                        "dataset": dataset_name,
-                        "dataset_seed": dataset_config["dataset_seed"],
-                        "noise_sigma": sigma,
-                        "noise_variance": sigma**2,
-                        "run_idx": np.nan,
-                        "task": task,
-                        "auprc": np.nan,
-                        "mean_auprc": np.nan,
-                        "test_loss": np.nan,
-                        "model_path": None,
-                        "status": "failed",
-                        "error": repr(exc),
-                        "traceback": traceback.format_exc(),
-                    }
-                    for task in ["Gene Task", "Neighbor Interaction Task", "Receiver Subtype Task"]
-                ]
-            )
-            all_run_records.append(error_df)
-            summary_records.append(error_df)
+    for perturbation in PERTURBATIONS_TO_RUN:
+        for sigma in NOISE_SIGMAS:
+            print(f"Running {dataset_name} with {perturbation} max sigma={sigma}", flush=True)
+            try:
+                adata = ensure_perturbed_dataset(dataset_name, dataset_config, sigma, perturbation)
+                adata.obs_names_make_unique()
+                condition_df, best_df = evaluate_sweep_condition(
+                    dataset_name, adata, dataset_config, sigma, perturbation
+                )
+                all_run_records.append(condition_df)
+                summary_records.append(best_df)
+            except Exception as exc:  # noqa: BLE001
+                error_df = pd.DataFrame(
+                    [
+                        {
+                            "dataset": dataset_name,
+                            "perturbation": perturbation,
+                            "dataset_seed": dataset_config["dataset_seed"],
+                            "noise_sigma": sigma,
+                            "noise_variance": sigma**2,
+                            "run_idx": np.nan,
+                            "task": task,
+                            "auprc": np.nan,
+                            "mean_auprc": np.nan,
+                            "test_loss": np.nan,
+                            "model_path": None,
+                            "status": "failed",
+                            "error": repr(exc),
+                            "traceback": traceback.format_exc(),
+                        }
+                        for task in ["Gene Task", "Neighbor Interaction Task", "Receiver Subtype Task"]
+                    ]
+                )
+                all_run_records.append(error_df)
+                summary_records.append(error_df)
 
 summary_df = pd.concat(summary_records, ignore_index=True)
 all_runs_df = pd.concat(all_run_records, ignore_index=True)
+summary_df, all_runs_df = add_existing_coordinate_results(summary_df, all_runs_df)
 all_runs_df.to_csv(os.path.join(figure_dir, "coordinate_noise_sensitivity_all_runs.csv"), index=False)
 summary_df.to_csv(os.path.join(figure_dir, "coordinate_noise_sensitivity_summary.csv"), index=False)
 plot_summary(summary_df)

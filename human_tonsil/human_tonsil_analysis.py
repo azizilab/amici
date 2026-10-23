@@ -80,27 +80,38 @@ def plot_length_scale_distribution_um(
         index=False,
     )
 
-    median_length_scale = length_scale_df.groupby(["sender_type", "head_idx"])["length_scale_um"].median()
-    max_per_sender = median_length_scale.groupby("sender_type").max()
-    sender_types_order = list(max_per_sender.sort_values(ascending=False).index)
+    length_scale_df["sender_head"] = (
+        length_scale_df["sender_type"].astype(str)
+        + " | head "
+        + length_scale_df["head_idx"].astype(str)
+    )
+    median_length_scale = length_scale_df.groupby("sender_head")["length_scale_um"].median()
+    sender_head_order = list(median_length_scale.sort_values(ascending=False).index)
+    sender_palette = {
+        f"{sender_type} | head {head_idx}": palette.get(sender_type, None)
+        if isinstance(palette, dict)
+        else None
+        for sender_type in length_scale_df["sender_type"].unique()
+        for head_idx in length_scale_df["head_idx"].unique()
+    }
+    sender_palette = {key: value for key, value in sender_palette.items() if value is not None}
 
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(12, max(5, 0.45 * len(sender_head_order))))
     sns.boxplot(
         data=length_scale_df,
-        x="head_idx",
-        y="length_scale_um",
-        hue="sender_type",
-        hue_order=sender_types_order,
-        palette=palette,
-        dodge=True,
-        fliersize=0.05,
+        x="length_scale_um",
+        y="sender_head",
+        order=sender_head_order,
+        palette=sender_palette if sender_palette else None,
+        linewidth=0.9,
+        fliersize=0.8,
+        width=0.65,
     )
-    plt.ylim(0, max_length_scale_px * cosmx_pixel_size_um)
-    plt.xlabel("Head Index")
-    plt.ylabel("Length scale (um)")
+    plt.xlim(0, max_length_scale_px * cosmx_pixel_size_um)
+    plt.xlabel("Length scale (um)")
+    plt.ylabel("Sender cell type and head")
     query_label = counterfactual_attention_patterns._counterfactual_attention_df["query_label"].unique()[0]
     plt.title(f"Length Scale Distribution for {query_label}")
-    plt.legend(title="Sender Cell Type", bbox_to_anchor=(1.05, 1), loc="upper left")
     plt.tight_layout()
     plt.savefig(
         os.path.join(save_dir, f"{output_prefix}_length_scale_distribution_um.png"),
@@ -171,25 +182,10 @@ def visualize_spatial_distribution(adata, labels_key="celltype_manual_fine"):
 
 
 cell_type_sub = [
-    "Naive B cell (mantle zone)",
     "GC B cell (resting)",
     "GC B cell (cycling)",
-    "CD4 T cell",
-    "CD8 T cell",
-    "Tfh cell",
-    "Plasma cell (mature)",
-    "Plasmablast (proliferating)",
-    "Macrophage (C1Q+)",
-    "Macrophage (GPNMB+)",
-    "cDC2",
-    "pDC",
     "Follicular dendritic cell",
-    "Fibroblast",
-    "Vascular (endothelial + pericyte)",
-    "Lymphatic endothelial cell",
-    "Mast cell",
-    "Squamous epithelium",
-    "Crypt epithelium",
+    "Macrophage (GPNMB+)"
 ]
 cell_type_sub = [ct for ct in cell_type_sub if ct in adata.obs[labels_key].astype(str).unique()]
 visualize_spatial_distribution(adata[adata.obs[labels_key].isin(cell_type_sub)].copy())
@@ -326,11 +322,7 @@ attention_patterns.plot_attention_summary(
 # %% Define a target cell type for focused interpretation
 receiver_ct = "CD4 T cell"
 sender_cts = [
-    "CD8 T cell",
-    "Fibroblast",
-    "Macrophage (C1Q+)",
-    "Naive B cell (mantle zone)",
-    "pDC",
+    "Fibroblast"
 ]
 sender_cts = [ct for ct in sender_cts if ct in adata.obs[labels_key].astype(str).unique()]
 head_idx = min(4, model.module.n_heads - 1)
@@ -375,6 +367,8 @@ ablation_ct_residuals.plot_featurewise_contributions_heatmap(
     show=True,
     save_dir=figures_dir,
 )
+
+# %%
 ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     cell_type=receiver_ct,
     flag_segmentation_artifacts=True,
@@ -383,7 +377,7 @@ ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     size_by="z_value",
     n_top_genes=10,
     min_size_by=-10,
-    step=5,
+    step=20,
     save_svg=True,
     save_png=True,
     save_dir=figures_dir,
@@ -422,13 +416,14 @@ for idx in range(model.module.n_heads):
         save_dir=figures_dir,
     )
 
+# %%
 plot_length_scale_distribution_um(
     counterfactual_attention_patterns=counterfactual_attention_patterns,
-    head_idxs=range(model.module.n_heads),
+    head_idxs=[3, 6],
     sender_types=sender_cts,
     attention_threshold=0.1,
     sample_threshold=0.01,
-    max_length_scale_px=300,
+    max_length_scale_px=800,
     palette=CELL_TYPE_PALETTE,
     save_dir=figures_dir,
     output_prefix="human_tonsil_all_heads",

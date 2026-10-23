@@ -92,6 +92,9 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
     near_receiver_mask = min_distances_to_senders <= near_threshold
     near_receiver_ids = receiver_ids[near_receiver_mask]
     near_distances = min_distances_to_senders[near_receiver_mask]
+    far_receiver_mask = min_distances_to_senders >= far_threshold
+    far_receiver_ids = receiver_ids[far_receiver_mask]
+    far_receiver_distances = min_distances_to_senders[far_receiver_mask]
 
     # Find senders that are far from all receivers
     distances_senders_to_receivers = cdist(sender_coords, receiver_coords)  # senders x receivers
@@ -101,6 +104,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
     far_sender_distances = min_distances_to_receivers[far_sender_mask]
 
     print(f"Near receivers (≤{near_threshold} units from any sender): {len(near_receiver_ids)}")
+    print(f"Far receivers (≥{far_threshold} units from all senders): {len(far_receiver_ids)}")
     print(f"Far senders (≥{far_threshold} units from all receivers): {len(far_sender_ids)}")
 
     if len(far_sender_ids) > 0:
@@ -109,7 +113,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         print(f"  Mean distance to nearest receiver: {far_sender_distances.mean():.1f}")
         print(f"  Maximum distance to nearest receiver: {far_sender_distances.max():.1f}")
     
-    if len(near_receiver_ids) == 0 or len(far_sender_ids) == 0:
+    if len(near_receiver_ids) == 0 or len(far_sender_ids) == 0 or len(far_receiver_ids) == 0:
         print(f"WARNING: Insufficient cells for analysis in pair: {pair_label}")
         continue
 
@@ -117,11 +121,12 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
     np.random.seed(42 + pair_idx)
 
     # Find the minimum sample size among the three groups
-    sample_sizes = [len(near_receiver_ids), len(far_sender_ids)]
+    sample_sizes = [len(near_receiver_ids), len(far_sender_ids), len(far_receiver_ids)]
     min_sample_size = min([s for s in sample_sizes if s > 0])
 
     print(f"\nOriginal sample sizes:")
     print(f"  Near receivers: {len(near_receiver_ids)}")
+    print(f"  Far receivers: {len(far_receiver_ids)}")
     print(f"  Far senders: {len(far_sender_ids)}")
     print(f"  Minimum sample size: {min_sample_size}")
 
@@ -142,21 +147,33 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         far_sender_ids_sampled = far_sender_ids
         far_sender_distances_sampled = far_sender_distances
 
+    if len(far_receiver_ids) > min_sample_size and min_sample_size > 0:
+        far_receiver_sample_idx = np.random.choice(len(far_receiver_ids), min_sample_size, replace=False)
+        far_receiver_ids_sampled = far_receiver_ids[far_receiver_sample_idx]
+        far_receiver_distances_sampled = far_receiver_distances[far_receiver_sample_idx]
+    else:
+        far_receiver_ids_sampled = far_receiver_ids
+        far_receiver_distances_sampled = far_receiver_distances
+
     print(f"\nSubsampled sizes for statistical comparison:")
     print(f"  Near receivers: {len(near_receiver_ids_sampled)}")
+    print(f"  Far receivers: {len(far_receiver_ids_sampled)}")
     print(f"  Far senders: {len(far_sender_ids_sampled)}")
 
     distance_data = {
         'near_receivers': near_receiver_ids_sampled,  # Use subsampled data
+        'far_receivers': far_receiver_ids_sampled,    # Use subsampled data
         'far_senders': far_sender_ids_sampled,       # Use subsampled data
         'all_sender_cells': sender_ids,               # Keep original for spatial plots
         'all_receiver_cells': receiver_ids,           # Keep original for spatial plots
         'near_distances': near_distances_sampled,
+        'far_receiver_distances': far_receiver_distances_sampled,
         'far_sender_distances': far_sender_distances_sampled,
         'min_distances_to_receivers': min_distances_to_receivers,
         'min_distances_to_senders': min_distances_to_senders,
         # Store original unsampled data for reference
         'near_receivers_original': near_receiver_ids,
+        'far_receivers_original': far_receiver_ids,
         'far_senders_original': far_sender_ids,
     }
 
@@ -181,6 +198,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
 
     # Get indices for cells and genes
     near_indices = adata.obs_names.get_indexer(distance_data['near_receivers'])
+    far_receiver_indices = adata.obs_names.get_indexer(distance_data['far_receivers'])
     far_sender_indices = adata.obs_names.get_indexer(distance_data['far_senders'])
 
     gene_indices = [adata.var_names.get_loc(g) for g in genes]
@@ -196,9 +214,15 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         if len(far_sender_indices) > 0
         else np.array([]).reshape(0, len(genes))
     )
+    far_receiver_expr = (
+        X[far_receiver_indices][:, gene_indices]
+        if len(far_receiver_indices) > 0
+        else np.array([]).reshape(0, len(genes))
+    )
 
     expr_data = {
         'near_expression': near_expr,
+        'far_receiver_expression': far_receiver_expr,
         'far_sender_expression': far_sender_expr,
         'genes': genes,
         'gene_indices': gene_indices
@@ -206,6 +230,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
 
     genes_current = expr_data['genes']
     near_expr = expr_data['near_expression']
+    far_receiver_expr = expr_data['far_receiver_expression']
     far_sender_expr = expr_data['far_sender_expression']
 
     # Initialize lists to collect data for this pair
@@ -217,6 +242,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         
         # Prepare data for plotting
         near_values = near_expr[:, i] if len(near_expr) > 0 else []
+        far_receiver_values = far_receiver_expr[:, i] if len(far_receiver_expr) > 0 else []
         far_sender_values = far_sender_expr[:, i] if len(far_sender_expr) > 0 else []
         
         # Create KDE plots
@@ -234,6 +260,18 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
                       label=f'Near (n=1): {near_values[0]:.2f}')
             has_data = True
         
+        if len(far_receiver_values) > 1:
+            sns.kdeplot(far_receiver_values, ax=ax, color='green', fill=True, alpha=0.2,
+                       label=f'Far receivers (≥{far_threshold})', linewidth=2, common_norm=False)
+            far_receiver_mean = np.mean(far_receiver_values)
+            ax.axvline(far_receiver_mean, color='green', linestyle='--', alpha=0.8,
+                      label=f'Far receiver mean: {far_receiver_mean:.2f}')
+            has_data = True
+        elif len(far_receiver_values) == 1:
+            ax.axvline(far_receiver_values[0], color='green', linestyle='-', alpha=0.8,
+                      label=f'Far receiver (n=1): {far_receiver_values[0]:.2f}')
+            has_data = True
+
         if len(far_sender_values) > 1:  # Need at least 2 points for KDE
             sns.kdeplot(far_sender_values, ax=ax, color='orange', fill=True, alpha=0.3, 
                        label=f'Far senders (≥{far_threshold})', linewidth=2, common_norm=False)
@@ -254,24 +292,33 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
             ax.legend()
             
             # Add statistical analysis if we have enough data
-            if len(near_values) > 0 and len(far_sender_values) > 0:
+            if len(near_values) > 0 and len(far_sender_values) > 0 and len(far_receiver_values) > 0:
                 # Basic statistics
                 near_median = np.median(near_values)
                 far_sender_median = np.median(far_sender_values)
+                far_receiver_median = np.median(far_receiver_values)
                 near_mean = np.mean(near_values)
                 far_sender_mean = np.mean(far_sender_values)
+                far_receiver_mean = np.mean(far_receiver_values)
                 
 
                 # Mann-Whitney U test: directional hypothesis test
                 # H₀: near and far distributions are equal vs H₁: near values tend to be greater than far values
-                if len(near_values) > 1 and len(far_sender_values) > 1:
+                if len(near_values) > 1 and len(far_sender_values) > 1 and len(far_receiver_values) > 1:
                     # Calculate Mann-Whitney U statistic and p-value
-                    u_statistic, mannwhitney_pval = stats.mannwhitneyu(
+                    near_vs_sender_statistic, near_vs_sender_pval = stats.mannwhitneyu(
                         near_values, far_sender_values, alternative='greater'
                     )
+                    near_vs_receiver_statistic, near_vs_receiver_pval = stats.mannwhitneyu(
+                        near_values, far_receiver_values, alternative='greater'
+                    )
+                    mannwhitney_pval = max(near_vs_sender_pval, near_vs_receiver_pval)
+                    u_statistic = min(near_vs_sender_statistic, near_vs_receiver_statistic)
                 else:
                     u_statistic = np.nan
                     mannwhitney_pval = np.nan
+                    near_vs_sender_pval = np.nan
+                    near_vs_receiver_pval = np.nan
                 
                 # Collect data for this pair
                 pair_gene_stats_data.append({
@@ -281,7 +328,11 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
                     'receiver_type': receiver_type,
                     'mannwhitney_pval': mannwhitney_pval,
                     'mannwhitney_statistic': u_statistic,
+                    'near_vs_far_sender_pval': near_vs_sender_pval,
+                    'near_vs_far_receiver_pval': near_vs_receiver_pval,
+                    'significant_both': bool(mannwhitney_pval < 0.1),
                     'near_mean': np.mean(near_values) if len(near_values) > 0 else np.nan,
+                    'far_receiver_mean': np.mean(far_receiver_values) if len(far_receiver_values) > 0 else np.nan,
                     'far_sender_mean': np.mean(far_sender_values) if len(far_sender_values) > 0 else np.nan,
                 })
         else:
@@ -376,9 +427,9 @@ def plot_segmentation_test_results(
                label=f'Significance threshold (p = {pval_threshold})')
     
     # Customize the plot
-    ax.set_xlabel('Mann-Whitney U Test P-value', fontsize=12)
+    ax.set_xlabel('Max Mann-Whitney U p-value across both segmentation checks', fontsize=12)
     ax.set_ylabel('Genes by Cell Type Pair', fontsize=12)
-    ax.set_title('Segmentation Test Results\nMann-Whitney U Test: Near Receivers > Far Senders', 
+    ax.set_title('Segmentation Test Results\nSignificant only if near receivers exceed far senders and far receivers',
                  fontsize=14, pad=20)
     
     # Set x-axis limits (0 to 1 for p-values)

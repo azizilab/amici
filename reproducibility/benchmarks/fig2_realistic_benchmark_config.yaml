@@ -1,0 +1,76 @@
+# Benchmark config for the realistic breast cancer semisynthetic benchmark: Fig. 2f-j.
+#
+# Reconstructed: the run behind the published panels was not kept. Its numbers survive in an April-2026 message
+# (AMICI gene 0.99, sender 0.52, receiver 0.93; GITIII 0.93, 0.39, 0.95), which also records that the AMICI sweep
+# used more heads and more seeds than the committed April config (commit 3a3cc16: n_heads [10], seeds
+# [21, 22, 33, 88, 99]). This file is that config with n_heads [10, 12, 14] and the seeds of AMICI's default sweep
+# (train_amici_model.py) added: 10 seeds x 3 head counts = 30 runs.
+# Code: commit 3a3cc16 (2026-04-02); its non-CV model selection (lowest test reconstruction loss over all runs) is
+#   the same at HEAD, so HEAD runs it too. At 3a3cc16 the Snakefile writes to results/ regardless of results_path.
+# Reproduction (see README.md and fig2_realistic_april_sweep_scores.csv): the lowest-test-loss model of the re-run
+#   (14 heads, seed 42) gives AMICI 0.975 / 0.513 / 0.944 against 0.986 / 0.522 / 0.928 published, and GITIII at
+#   3a3cc16 gives 0.933 / 0.410 / 0.949. The 30 models lie within 0.3 of each other in test loss but their AUPRCs
+#   vary widely, and GPU training is not bitwise deterministic, so another re-run may select a different model.
+# Dataset: data/breast_cancer_42.h5ad, md5 1e185c0bddb7795d30e8729d289ad8d3. NicheDE (sigma = 20) and NCEM, which
+#   are deterministic, reproduce the published bars on it; NicheDE sigma = 200 / 500 do not (0.803 / 0.752 vs
+#   0.732 / 0.673).
+#
+# Run from benchmarks/ (each NicheDE job needs about 30 GB of memory):
+#   snakemake --use-conda --cores <N> --resources gpu=1 mem_mb=60000 \
+#     --set-resources run_nichede_gene_task_model:mem_mb=40000 \
+#     --configfile ../reproducibility/benchmarks/fig2_realistic_benchmark_config.yaml
+# with the environments pinned to envs/*_lock.txt (see README.md).
+dir_path: "data/"
+results_path: "results/"
+
+datasets_realistic:
+  - breast_cancer
+
+datasets_to_run:
+  - breast_cancer
+
+datasets:
+  breast_cancer:
+    generation_type: "realistic"
+    seeds: [42]
+    labels_key: "cell_type"
+    subtype_labels_key: "subtype"
+    use_cross_validation: false
+    n_cv_folds: 3
+    sweep_baselines: true
+    ncem_niche_sizes: [10, 15, 20]
+    nichede_niche_sizes: [20, 200, 500]
+    sweep_params:
+      end_attention_penalty: [1.0e-5]
+      attention_penalty_schedule: [[15, 30]]
+      seed: [21, 22, 33, 88, 99, 11, 17, 18, 38, 42]
+      value_l1_penalty_coef: [1.0e-5]
+      batch_size: [256]
+      lr: [1.0e-3]
+      n_neighbors: [50]
+      penalty_flavor_params: [linear]
+      n_heads: [10, 12, 14]
+    # Raw inputs for regenerating the dataset (only used if data/breast_cancer_42.h5ad is missing)
+    flex_h5_path: "data/GSM7782698_count_raw_feature_bc_matrix.h5"
+    annot_path: "data/41467_2023_43458_MOESM4_ESM.xlsx"
+    xenium_path: "data/xenium_rep1_io.h5ad"
+    scvi_model_dir: "data/scvi_model"
+    gt_interactions:
+      interaction_1:
+        sender: "Macrophages"
+        receiver: "DCIS"
+        interaction_subtype: "DCIS_sub1"
+        neutral_subtype: "DCIS_sub0"
+        length_scale: 40
+      interaction_2:
+        sender: "T_Cells"
+        receiver: "Endothelial"
+        interaction_subtype: "Endothelial_sub1"
+        neutral_subtype: "Endothelial_sub0"
+        length_scale: 25
+      interaction_3:
+        sender: "Invasive_Tumor"
+        receiver: "Myoepi"
+        interaction_subtype: "Myoepi_sub1"
+        neutral_subtype: "Myoepi_sub0"
+        length_scale: 15

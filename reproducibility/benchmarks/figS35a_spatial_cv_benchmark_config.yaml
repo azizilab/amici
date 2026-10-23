@@ -1,0 +1,69 @@
+# Benchmark config for the spatial cross-validation comparison on the realistic breast cancer dataset: Fig. S35a.
+#
+# Code: the cross-validation support was run on 2026-06-04..13 and committed in 26a28ec (2026-06-24); run it at
+#   26a28ec or later. AMICI sweeps 144 settings (2 end penalties x 3 schedules x 4 seeds x 2 value L1 penalties x
+#   3 head counts) and selects by 5-fold spatial cross-validation.
+# Published run: benchmarks/results_cv/breast_cancer_42/ on the AMICI VM (AMICI AUPRC 0.890 gene, 0.431 sender,
+#   0.846 receiver), compared with the regular run in benchmarks/results_cv/breast_cancer/regular_vs_cv_barplots/.
+#   This is not the run behind Fig. 2f-j (see fig2_realistic_benchmark_config.yaml).
+# Dataset: data/breast_cancer_42.h5ad, md5 1e185c0bddb7795d30e8729d289ad8d3.
+#
+# Run from benchmarks/:
+#   snakemake --use-conda --cores <N> --resources gpu=1 --configfile ../reproducibility/benchmarks/figS35a_spatial_cv_benchmark_config.yaml
+# with the environments pinned to envs/*_lock.txt (see README.md).
+dir_path: "data/"
+results_path: "results_cv/"
+
+datasets_realistic:
+  - breast_cancer
+
+datasets_to_run:
+  - breast_cancer
+
+datasets:
+  breast_cancer:
+    generation_type: "realistic"
+    seeds: [42]
+    labels_key: "cell_type"
+    subtype_labels_key: "subtype"
+    use_cross_validation: true
+    n_cv_folds: 5
+    sweep_baselines: true
+    cgcom_batch_size: 32
+    cgcom_scoring_batch_size: 4
+    ncem_niche_sizes: [10, 15, 20]
+    nichede_niche_sizes: [20, 200, 500]
+    sweep_params:
+      end_attention_penalty: [1.0e-5, 1.0e-4]
+      attention_penalty_schedule: [[15, 30], [20, 40], [10, 20]]
+      seed: [21, 22, 33, 88]
+      value_l1_penalty_coef: [1.0e-5, 1.0e-6]
+      batch_size: [256]
+      lr: [1.0e-3]
+      n_neighbors: [50]
+      penalty_flavor_params: [linear]
+      n_heads: [10, 12, 14]
+    # Raw inputs for regenerating the dataset (only used if data/breast_cancer_42.h5ad is missing)
+    flex_h5_path: "data/GSM7782698_count_raw_feature_bc_matrix.h5"
+    annot_path: "data/41467_2023_43458_MOESM4_ESM.xlsx"
+    xenium_path: "data/xenium_rep1_io.h5ad"
+    scvi_model_dir: "data/scvi_model"
+    gt_interactions:
+      interaction_1:
+        sender: "Macrophages"
+        receiver: "DCIS"
+        interaction_subtype: "DCIS_sub1"
+        neutral_subtype: "DCIS_sub0"
+        length_scale: 40
+      interaction_2:
+        sender: "T_Cells"
+        receiver: "Endothelial"
+        interaction_subtype: "Endothelial_sub1"
+        neutral_subtype: "Endothelial_sub0"
+        length_scale: 25
+      interaction_3:
+        sender: "Invasive_Tumor"
+        receiver: "Myoepi"
+        interaction_subtype: "Myoepi_sub1"
+        neutral_subtype: "Myoepi_sub0"
+        length_scale: 15

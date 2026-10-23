@@ -121,6 +121,69 @@ def visualize_spatial_distribution(
     plt.show()
 
 
+def _get_gene_expression(adata, gene):
+    """Return a dense expression vector for a gene."""
+    if gene not in adata.var_names:
+        raise KeyError(f"{gene} not found in adata.var_names.")
+    gene_expr = adata[:, gene].X
+    if hasattr(gene_expr, "toarray"):
+        gene_expr = gene_expr.toarray()
+    return np.asarray(gene_expr).reshape(-1)
+
+
+def plot_spatial_feature(
+    adata,
+    values,
+    title,
+    colorbar_label,
+    save_prefix,
+    point_size=2,
+    cmap="viridis",
+):
+    """Plot a continuous feature on spatial coordinates."""
+    plot_df = pd.DataFrame(adata.obsm["spatial"], index=adata.obs_names, columns=["X", "Y"])
+    plot_df["value"] = values
+
+    plt.figure(figsize=(20, 7))
+    plt.scatter(
+        plot_df["X"],
+        plot_df["Y"],
+        c=plot_df["value"],
+        s=point_size,
+        cmap=cmap,
+        linewidths=0,
+        alpha=0.85,
+    )
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title(title)
+    cbar = plt.colorbar()
+    cbar.set_label(colorbar_label)
+    plt.tight_layout()
+    plt.savefig(f"{figures_dir}/{save_prefix}.png", dpi=300, bbox_inches="tight")
+    plt.savefig(f"{figures_dir}/{save_prefix}.svg", dpi=300, bbox_inches="tight")
+    plt.show()
+
+
+def get_total_sender_attention_to_receiver(attention_patterns, receiver_type, sender_type):
+    """Sum attention from one sender cell type into each receiver cell."""
+    attention_df = attention_patterns._attention_patterns_df.copy()
+    nn_df = attention_patterns._nn_idxs_df
+    neighbor_cols = [col for col in attention_df.columns if col.startswith("neighbor_")]
+
+    receiver_cells = adata.obs_names[adata.obs[labels_key].astype(str) == receiver_type]
+    receiver_attention_df = attention_df[attention_df["cell_idx"].isin(receiver_cells)]
+    receiver_nn_df = nn_df.loc[receiver_cells]
+    neighbor_labels_df = receiver_nn_df.apply(lambda col: adata.obs.loc[col, labels_key].astype(str).values)
+
+    attention_by_cell = pd.Series(0.0, index=adata.obs_names)
+    for _, row in receiver_attention_df.iterrows():
+        receiver_idx = row["cell_idx"]
+        sender_mask = neighbor_labels_df.loc[receiver_idx, neighbor_cols].values == sender_type
+        attention_by_cell.loc[receiver_idx] += row[neighbor_cols].astype(float).values[sender_mask].sum()
+    return attention_by_cell
+
+
 cell_type_sub = None
 
 if cell_type_sub is not None:
@@ -252,37 +315,6 @@ ablation_residuals.plot_interaction_directed_graph(
     save_svg=True,
     save_dir=figures_dir,
 )
-
-# %% Compute variance scores for the heads
-if cell_type_sub is not None:
-    expl_variance_scores = model.get_expl_variance_scores(
-        adata,
-        cell_type_sub=cell_type_sub,
-        run_permutation_test=False,
-    )
-else:
-    expl_variance_scores = model.get_expl_variance_scores(
-        adata,
-        run_permutation_test=False,
-    )
-
-# %% Plot barplot of variance scores per head per cell type
-if cell_type_sub is not None:
-    expl_variance_scores.plot_explained_variance_barplot(
-        palette=CELL_TYPE_PALETTE,
-        cell_type_sub=cell_type_sub,
-        wandb_log=False,
-        save_png=True,
-        show=True,
-    )
-else:
-    expl_variance_scores.plot_explained_variance_barplot(
-        palette=CELL_TYPE_PALETTE,
-        wandb_log=False,
-        save_png=True,
-        show=True,
-    )
-
 # %% Get attention patterns
 attention_patterns = model.get_attention_patterns(
     adata,
@@ -306,26 +338,43 @@ else:
         show=True,
     )
 
+# %% Plot spatial maps for T cell attention to CAFs and marker expression
+t_cell_to_caf_attention = get_total_sender_attention_to_receiver(
+    attention_patterns,
+    receiver_type="CAFs",
+    sender_type="T_Cells",
+)
+plot_spatial_feature(
+    adata,
+    t_cell_to_caf_attention,
+    title="Total T cell attention to CAF receiver cells",
+    colorbar_label="Total T cell attention",
+    save_prefix="atera_breast_t_cell_to_caf_total_attention_spatial",
+    point_size=3,
+    cmap="coolwarm",
+)
+
+for gene in ["EMILIN1", "C3"]:
+    plot_spatial_feature(
+        adata,
+        _get_gene_expression(adata, gene),
+        title=f"{gene} spatial expression",
+        colorbar_label=f"{gene} expression",
+        save_prefix=f"atera_breast_{gene}_spatial_expression",
+        point_size=3,
+        cmap="viridis",
+    )
+
 # %% Define the target cell type of interest and max expl variance head
-receiver_ct = "High_Grade_DCIS"
-sender_cts = ["Basal_DCIS", "CAFs", "Endothelial", "Luminal_DCIS", "Myoepithelial", "T_Cells"]
+receiver_ct = "Luminal_DCIS"
+sender_cts = ["Myoepithelial", "CAFs"]
 sender_cts = [ct for ct in sender_cts if ct in adata.obs[labels_key].unique()]
 head_idx = min(4, model.module.n_heads - 1)
-
-# %%
-# Plot important attention patterns for cell types of interest
-attention_patterns.plot_attention_summary(
-    cell_type_sub=[receiver_ct],
-    plot_histogram=False,
-    palette=CELL_TYPE_PALETTE,
-    wandb_log=False,
-    show=True,
-    save_png=True,
-)
 
 # %% Plot neighbor cell type neighbor ablation scores
 ablation_ct_residuals = model.get_neighbor_ablation_scores(
     adata=adata,
+    # head_idx=head_idx,
     cell_type=receiver_ct,
     ablated_neighbor_ct_sub=sender_cts,
     compute_z_value=True,
@@ -359,11 +408,13 @@ ablation_ct_residuals.plot_featurewise_contributions_heatmap(
 # %% Plot the dotplot of p-values by neighbor contribution scores for the target cell type
 ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     cell_type=receiver_ct,
+    # flag_segmentation_artifacts=True,
+    # segmentation_adata=adata,
     color_by="diff",
     size_by="z_value",
-    n_top_genes=10,
+    n_top_genes=8,
     min_size_by=-10,
-    step=5,
+    step=15,
     save_svg=True,
     save_png=True,
     save_dir=figures_dir,
@@ -426,3 +477,313 @@ length_scale_df = counterfactual_attention_patterns.plot_length_scale_distributi
     save_dir=figures_dir,
     show=True,
 )
+
+# %% Subcluster CAFs using CAF-specific HVGs to check EMILIN1/C3 programs
+caf_adata_full = adata[adata.obs[labels_key].astype(str) == "CAFs"].copy()
+caf_adata = caf_adata_full.copy()
+caf_n_hvgs = min(500, caf_adata.n_vars)
+print(f"CAF cells for subclustering: {caf_adata.n_obs}")
+
+if caf_adata.n_obs > 0:
+    sc.pp.highly_variable_genes(caf_adata, n_top_genes=caf_n_hvgs)
+    caf_adata = caf_adata[:, caf_adata.var["highly_variable"]].copy()
+    print(f"Clustering CAFs with top {caf_adata.n_vars} CAF-specific HVGs")
+
+    sc.pp.pca(caf_adata, n_comps=min(30, caf_adata.n_obs - 1, caf_adata.n_vars - 1))
+    sc.pp.neighbors(
+        caf_adata,
+        n_neighbors=min(20, caf_adata.n_obs - 1),
+        n_pcs=min(20, caf_adata.obsm["X_pca"].shape[1]),
+    )
+    sc.tl.umap(caf_adata, random_state=seed)
+    sc.tl.leiden(caf_adata, resolution=0.35, key_added="caf_subcluster")
+
+    caf_adata_full.obs["caf_subcluster"] = caf_adata.obs["caf_subcluster"].astype(str)
+    caf_adata_full.obsm["X_umap"] = caf_adata.obsm["X_umap"]
+
+    caf_palette = dict(
+        zip(
+            sorted(caf_adata_full.obs["caf_subcluster"].astype(str).unique()),
+            sns.color_palette("tab10", caf_adata_full.obs["caf_subcluster"].nunique()).as_hex(),
+        )
+    )
+
+    for color in ["caf_subcluster", "EMILIN1", "C3"]:
+        if color in caf_adata_full.obs or color in caf_adata_full.var_names:
+            sc.pl.umap(
+                caf_adata_full,
+                color=color,
+                palette=caf_palette if color == "caf_subcluster" else None,
+                show=False,
+            )
+            plt.savefig(
+                os.path.join(figures_dir, f"atera_breast_caf_umap_{color}.png"),
+                dpi=300,
+                bbox_inches="tight",
+            )
+            plt.savefig(
+                os.path.join(figures_dir, f"atera_breast_caf_umap_{color}.svg"),
+                dpi=300,
+                bbox_inches="tight",
+            )
+            plt.show()
+
+    caf_spatial_df = pd.DataFrame(
+        caf_adata_full.obsm["spatial"],
+        index=caf_adata_full.obs_names,
+        columns=["X", "Y"],
+    )
+    caf_spatial_df["caf_subcluster"] = caf_adata_full.obs["caf_subcluster"].astype(str).values
+
+    plt.figure(figsize=(10, 8))
+    for cluster, cluster_df in caf_spatial_df.groupby("caf_subcluster"):
+        plt.scatter(
+            cluster_df["X"],
+            cluster_df["Y"],
+            s=4,
+            linewidths=0,
+            alpha=0.85,
+            color=caf_palette[cluster],
+            label=f"CAF {cluster}",
+        )
+    plt.gca().invert_yaxis()
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("CAF expression subclusters")
+    plt.legend(markerscale=3, bbox_to_anchor=(1.02, 1), loc="upper left")
+    plt.savefig(
+        os.path.join(figures_dir, "atera_breast_caf_subclusters_spatial.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        os.path.join(figures_dir, "atera_breast_caf_subclusters_spatial.svg"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
+
+    for gene in ["EMILIN1", "C3"]:
+        if gene in caf_adata_full.var_names:
+            plot_spatial_feature(
+                caf_adata_full,
+                _get_gene_expression(caf_adata_full, gene),
+                title=f"CAF {gene} spatial expression",
+                colorbar_label=f"{gene} expression",
+                save_prefix=f"atera_breast_caf_{gene}_spatial_expression",
+                point_size=4,
+                cmap="viridis",
+            )
+
+    caf_marker_genes = [gene for gene in ["EMILIN1", "C3"] if gene in caf_adata_full.var_names]
+    if caf_marker_genes:
+        sc.pl.violin(
+            caf_adata_full,
+            keys=caf_marker_genes,
+            groupby="caf_subcluster",
+            stripplot=False,
+            rotation=45,
+            show=False,
+        )
+        plt.savefig(
+            os.path.join(figures_dir, "atera_breast_caf_subcluster_emilin1_c3_violin.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.savefig(
+            os.path.join(figures_dir, "atera_breast_caf_subcluster_emilin1_c3_violin.svg"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.show()
+
+    c3_emilin1_clusters = {"0", "5"}
+    caf_adata_full.obs["caf_emilin1_c3_group"] = caf_adata_full.obs[
+        "caf_subcluster"
+    ].astype(str).map(
+        lambda cluster: "C3+EMILIN1+"
+        if cluster in c3_emilin1_clusters
+        else "C3-EMILIN1+"
+    )
+    caf_group_palette = {
+        "C3+EMILIN1+": "#1f77b4",
+        "C3-EMILIN1+": "#d62728",
+    }
+    print("CAF EMILIN1/C3 group counts:")
+    print(caf_adata_full.obs["caf_emilin1_c3_group"].value_counts())
+
+    sc.pl.umap(
+        caf_adata_full,
+        color="caf_emilin1_c3_group",
+        palette=caf_group_palette,
+        show=False,
+    )
+    plt.savefig(
+        os.path.join(figures_dir, "atera_breast_caf_umap_emilin1_c3_group.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        os.path.join(figures_dir, "atera_breast_caf_umap_emilin1_c3_group.svg"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
+
+    caf_spatial_df["caf_emilin1_c3_group"] = caf_adata_full.obs[
+        "caf_emilin1_c3_group"
+    ].values
+    plt.figure(figsize=(10, 8))
+    for caf_group, group_df in caf_spatial_df.groupby("caf_emilin1_c3_group"):
+        plt.scatter(
+            group_df["X"],
+            group_df["Y"],
+            s=4,
+            linewidths=0,
+            alpha=0.85,
+            color=caf_group_palette[caf_group],
+            label=caf_group,
+        )
+    plt.gca().invert_yaxis()
+    plt.xlabel("X")
+    plt.ylabel("Y")
+    plt.title("CAF EMILIN1/C3 groups")
+    plt.legend(markerscale=3, bbox_to_anchor=(1.02, 1), loc="upper left")
+    plt.savefig(
+        os.path.join(figures_dir, "atera_breast_caf_emilin1_c3_group_spatial.png"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.savefig(
+        os.path.join(figures_dir, "atera_breast_caf_emilin1_c3_group_spatial.svg"),
+        dpi=300,
+        bbox_inches="tight",
+    )
+    plt.show()
+
+    # %% Compare T-cell senders highly attended by each CAF EMILIN1/C3 group
+    sender_type = "T_Cells"
+    caf_group_a = "C3+EMILIN1+"
+    caf_group_b = "C3-EMILIN1+"
+
+    attention_df = attention_patterns._attention_patterns_df.copy()
+    nn_df = attention_patterns._nn_idxs_df
+    neighbor_cols = [col for col in attention_df.columns if col.startswith("neighbor_")]
+    t_cell_ids = adata.obs_names[adata.obs[labels_key].astype(str) == sender_type]
+    sender_attention = pd.DataFrame(0.0, index=t_cell_ids, columns=[caf_group_a, caf_group_b])
+
+    caf_receiver_groups = caf_adata_full.obs["caf_emilin1_c3_group"].astype(str)
+    caf_receiver_ids = caf_receiver_groups.index
+    receiver_attention_df = attention_df[attention_df["cell_idx"].isin(caf_receiver_ids)]
+    for _, row in receiver_attention_df.iterrows():
+        receiver_idx = row["cell_idx"]
+        receiver_group = caf_receiver_groups.loc[receiver_idx]
+        if receiver_group not in [caf_group_a, caf_group_b]:
+            continue
+
+        nn_ids = nn_df.loc[receiver_idx, neighbor_cols].values
+        nn_labels = adata.obs.loc[nn_ids, labels_key].astype(str).values
+        attention_values = row[neighbor_cols].astype(float).values
+        t_sender_ids = nn_ids[nn_labels == sender_type]
+        t_sender_attention = attention_values[nn_labels == sender_type]
+
+        for sender_idx, attention_value in zip(t_sender_ids, t_sender_attention):
+            sender_attention.loc[sender_idx, receiver_group] += attention_value
+
+    threshold_a = sender_attention.loc[
+        sender_attention[caf_group_a] > 0,
+        caf_group_a,
+    ].quantile(0.75)
+    threshold_b = sender_attention.loc[
+        sender_attention[caf_group_b] > 0,
+        caf_group_b,
+    ].quantile(0.75)
+
+    sender_attention["caf_sender_group"] = "Other T-cell senders"
+    sender_attention.loc[
+        (sender_attention[caf_group_a] >= threshold_a)
+        & (sender_attention[caf_group_a] > sender_attention[caf_group_b]),
+        "caf_sender_group",
+    ] = f"High attention to {caf_group_a} CAFs"
+    sender_attention.loc[
+        (sender_attention[caf_group_b] >= threshold_b)
+        & (sender_attention[caf_group_b] > sender_attention[caf_group_a]),
+        "caf_sender_group",
+    ] = f"High attention to {caf_group_b} CAFs"
+    sender_attention.to_csv(
+        os.path.join(figures_dir, "atera_breast_t_cell_sender_caf_group_attention_scores.csv")
+    )
+
+    de_group_a = f"High attention to {caf_group_a} CAFs"
+    de_group_b = f"High attention to {caf_group_b} CAFs"
+    selected_t_cells = sender_attention.index[
+        sender_attention["caf_sender_group"].isin([de_group_a, de_group_b])
+    ]
+    group_counts = sender_attention.loc[selected_t_cells, "caf_sender_group"].value_counts()
+    print("T-cell sender attention group counts:")
+    print(group_counts)
+
+    if len(group_counts) == 2 and group_counts.min() >= 3:
+        t_de_adata = adata[selected_t_cells].copy()
+        t_de_adata.obs["caf_sender_group"] = sender_attention.loc[
+            selected_t_cells,
+            "caf_sender_group",
+        ].values
+
+        sc.tl.rank_genes_groups(
+            t_de_adata,
+            groupby="caf_sender_group",
+            groups=[de_group_a],
+            reference=de_group_b,
+            method="wilcoxon",
+        )
+        t_cell_de_df = sc.get.rank_genes_groups_df(t_de_adata, group=de_group_a)
+        t_cell_de_df.to_csv(
+            os.path.join(figures_dir, "atera_breast_t_cell_sender_caf_group_de.csv"),
+            index=False,
+        )
+
+        heatmap_genes = t_cell_de_df.sort_values("pvals_adj").head(20)["names"].tolist()
+        heatmap_logfc = t_cell_de_df.set_index("names").loc[
+            heatmap_genes,
+            "logfoldchanges",
+        ]
+        heatmap_df = pd.DataFrame(
+            [heatmap_logfc.values, -heatmap_logfc.values],
+            index=[de_group_a, de_group_b],
+            columns=heatmap_genes,
+        )
+        max_abs_logfc = float(np.nanmax(np.abs(heatmap_df.values)))
+        max_abs_logfc = max(max_abs_logfc, 1.0)
+
+        plt.figure(figsize=(max(7, 0.35 * len(heatmap_genes)), 3.2))
+        sns.heatmap(
+            heatmap_df,
+            cmap="bwr",
+            center=0,
+            vmin=-max_abs_logfc,
+            vmax=max_abs_logfc,
+            cbar_kws={"label": "log fold change"},
+            linewidths=0.4,
+            linecolor="white",
+        )
+        plt.xlabel("Gene")
+        plt.ylabel("")
+        plt.title("T-cell sender DEGs by attended CAF group")
+        plt.xticks(rotation=90)
+        plt.yticks(rotation=0)
+        plt.savefig(
+            os.path.join(figures_dir, "atera_breast_t_cell_sender_caf_group_de_heatmap.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.savefig(
+            os.path.join(figures_dir, "atera_breast_t_cell_sender_caf_group_de_heatmap.svg"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.show()
+    else:
+        print("Skipping T-cell DEG: one CAF-attended sender group has fewer than 3 cells.")
+
+# %%

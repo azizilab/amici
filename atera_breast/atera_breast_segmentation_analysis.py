@@ -76,6 +76,9 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
     near_receiver_mask = min_distances_to_senders <= near_threshold
     near_receiver_ids = receiver_ids[near_receiver_mask]
     near_distances = min_distances_to_senders[near_receiver_mask]
+    far_receiver_mask = min_distances_to_senders >= far_threshold
+    far_receiver_ids = receiver_ids[far_receiver_mask]
+    far_receiver_distances = min_distances_to_senders[far_receiver_mask]
 
     distances_senders_to_receivers = cdist(sender_coords, receiver_coords)
     min_distances_to_receivers = distances_senders_to_receivers.min(axis=1)
@@ -84,14 +87,15 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
     far_sender_distances = min_distances_to_receivers[far_sender_mask]
 
     print(f"Near receivers (<={near_threshold} units from any sender): {len(near_receiver_ids)}")
+    print(f"Far receivers (>={far_threshold} units from all senders): {len(far_receiver_ids)}")
     print(f"Far senders (>={far_threshold} units from all receivers): {len(far_sender_ids)}")
 
-    if len(near_receiver_ids) == 0 or len(far_sender_ids) == 0:
+    if len(near_receiver_ids) == 0 or len(far_sender_ids) == 0 or len(far_receiver_ids) == 0:
         print(f"WARNING: Insufficient cells for analysis in pair: {pair_label}")
         continue
 
     np.random.seed(42 + pair_idx)
-    min_sample_size = min(len(near_receiver_ids), len(far_sender_ids))
+    min_sample_size = min(len(near_receiver_ids), len(far_sender_ids), len(far_receiver_ids))
 
     if len(near_receiver_ids) > min_sample_size:
         near_receiver_sample_idx = np.random.choice(len(near_receiver_ids), min_sample_size, replace=False)
@@ -109,8 +113,17 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         far_sender_ids_sampled = far_sender_ids
         far_sender_distances_sampled = far_sender_distances
 
+    if len(far_receiver_ids) > min_sample_size:
+        far_receiver_sample_idx = np.random.choice(len(far_receiver_ids), min_sample_size, replace=False)
+        far_receiver_ids_sampled = far_receiver_ids[far_receiver_sample_idx]
+        far_receiver_distances_sampled = far_receiver_distances[far_receiver_sample_idx]
+    else:
+        far_receiver_ids_sampled = far_receiver_ids
+        far_receiver_distances_sampled = far_receiver_distances
+
     print("\nSubsampled sizes for statistical comparison:")
     print(f"  Near receivers: {len(near_receiver_ids_sampled)}")
+    print(f"  Far receivers: {len(far_receiver_ids_sampled)}")
     print(f"  Far senders: {len(far_sender_ids_sampled)}")
 
     if isinstance(genes, str):
@@ -127,10 +140,12 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
 
     X = adata.X.toarray() if sparse.issparse(adata.X) else adata.X
     near_indices = adata.obs_names.get_indexer(near_receiver_ids_sampled)
+    far_receiver_indices = adata.obs_names.get_indexer(far_receiver_ids_sampled)
     far_sender_indices = adata.obs_names.get_indexer(far_sender_ids_sampled)
     gene_indices = [adata.var_names.get_loc(g) for g in genes]
 
     near_expr = X[near_indices][:, gene_indices]
+    far_receiver_expr = X[far_receiver_indices][:, gene_indices]
     far_sender_expr = X[far_sender_indices][:, gene_indices]
 
     pair_gene_stats_data = []
@@ -140,6 +155,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         ax = plt.gca()
 
         near_values = near_expr[:, i] if len(near_expr) > 0 else []
+        far_receiver_values = far_receiver_expr[:, i] if len(far_receiver_expr) > 0 else []
         far_sender_values = far_sender_expr[:, i] if len(far_sender_expr) > 0 else []
 
         has_data = False
@@ -160,6 +176,36 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
             has_data = True
         elif len(near_values) == 1:
             ax.axvline(near_values[0], color="blue", linestyle="-", alpha=0.8, label=f"Near (n=1): {near_values[0]:.2f}")
+            has_data = True
+
+        if len(far_receiver_values) > 1:
+            sns.kdeplot(
+                far_receiver_values,
+                ax=ax,
+                color="green",
+                fill=True,
+                alpha=0.2,
+                label=f"Far receivers (>={far_threshold})",
+                linewidth=2,
+                common_norm=False,
+            )
+            far_receiver_mean = np.mean(far_receiver_values)
+            ax.axvline(
+                far_receiver_mean,
+                color="green",
+                linestyle="--",
+                alpha=0.8,
+                label=f"Far receiver mean: {far_receiver_mean:.2f}",
+            )
+            has_data = True
+        elif len(far_receiver_values) == 1:
+            ax.axvline(
+                far_receiver_values[0],
+                color="green",
+                linestyle="-",
+                alpha=0.8,
+                label=f"Far receiver (n=1): {far_receiver_values[0]:.2f}",
+            )
             has_data = True
 
         if len(far_sender_values) > 1:
@@ -195,15 +241,24 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
             )
             ax.legend()
 
-            if len(near_values) > 1 and len(far_sender_values) > 1:
-                u_statistic, mannwhitney_pval = stats.mannwhitneyu(
+            if len(near_values) > 1 and len(far_sender_values) > 1 and len(far_receiver_values) > 1:
+                near_vs_sender_statistic, near_vs_sender_pval = stats.mannwhitneyu(
                     near_values,
                     far_sender_values,
                     alternative="greater",
                 )
+                near_vs_receiver_statistic, near_vs_receiver_pval = stats.mannwhitneyu(
+                    near_values,
+                    far_receiver_values,
+                    alternative="greater",
+                )
+                mannwhitney_pval = max(near_vs_sender_pval, near_vs_receiver_pval)
+                u_statistic = min(near_vs_sender_statistic, near_vs_receiver_statistic)
             else:
                 u_statistic = np.nan
                 mannwhitney_pval = np.nan
+                near_vs_sender_pval = np.nan
+                near_vs_receiver_pval = np.nan
 
             pair_gene_stats_data.append(
                 {
@@ -213,9 +268,14 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
                     "receiver_type": receiver_type,
                     "mannwhitney_pval": mannwhitney_pval,
                     "mannwhitney_statistic": u_statistic,
+                    "near_vs_far_sender_pval": near_vs_sender_pval,
+                    "near_vs_far_receiver_pval": near_vs_receiver_pval,
+                    "significant_both": bool(mannwhitney_pval < 0.05),
                     "near_mean": np.mean(near_values) if len(near_values) > 0 else np.nan,
+                    "far_receiver_mean": np.mean(far_receiver_values) if len(far_receiver_values) > 0 else np.nan,
                     "far_sender_mean": np.mean(far_sender_values) if len(far_sender_values) > 0 else np.nan,
                     "near_distance_mean": np.mean(near_distances_sampled),
+                    "far_receiver_distance_mean": np.mean(far_receiver_distances_sampled),
                     "far_sender_distance_mean": np.mean(far_sender_distances_sampled),
                 }
             )
@@ -289,10 +349,10 @@ def plot_segmentation_test_results(
         linewidth=2,
         label=f"Significance threshold (p = {pval_threshold})",
     )
-    ax.set_xlabel("Mann-Whitney U Test P-value", fontsize=12)
+    ax.set_xlabel("Max Mann-Whitney U p-value across both segmentation checks", fontsize=12)
     ax.set_ylabel("Genes by Cell Type Pair", fontsize=12)
     ax.set_title(
-        "Atera Segmentation Test Results\nMann-Whitney U Test: Near Receivers > Far Senders",
+        "Atera Segmentation Test Results\nSignificant only if near receivers exceed far senders and far receivers",
         fontsize=14,
         pad=20,
     )
