@@ -53,6 +53,8 @@ dependencies = [
     "pytest",
     # transformer-lens 1.14.0 uses transformers.TRANSFORMERS_CACHE, removed in v5
     "transformers<5",
+    # pyarrow 26 (via transformer-lens -> datasets) requires NumPy 2, but scipy<=1.12.0 holds NumPy below 2
+    "pyarrow<26",
 ]
 
 [project.optional-dependencies]
