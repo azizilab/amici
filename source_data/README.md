@@ -129,5 +129,25 @@ Inventory of Supporting Information (one line per file):
 - Source Data Fig. 4 | Source_Data_Fig4.xlsx, Source_Data_Fig4_large_tables.zip | Numerical data underlying Fig. 4a-f
 - Source Data Fig. 5 | Source_Data_Fig5.xlsx, Source_Data_Fig5_large_tables.zip | Numerical data underlying Fig. 5a-c
 - Source Data Fig. 6 | Source_Data_Fig6.xlsx, Source_Data_Fig6_large_tables.zip | Numerical data underlying Fig. 6a-d
+- Source Data ED Fig. 1 | Source_Data_ED1.xlsx | Numerical data underlying Extended Data Fig. 1c, f-i
+- Source Data ED Fig. 2 | Source_Data_ED2.xlsx | Numerical data underlying Extended Data Fig. 2a, g, h
+- Source Data ED Fig. 3 | Source_Data_ED3.xlsx, Source_Data_ED3_large_tables.zip | Numerical data underlying Extended Data Fig. 3b-j
+- Source Data ED Fig. 4 | Source_Data_ED4.xlsx | Numerical data underlying Extended Data Fig. 4b-h
+- Source Data ED Fig. 5 | Source_Data_ED5.xlsx, Source_Data_ED5_large_tables.zip | Numerical data underlying Extended Data Fig. 5c, d, h-j
+- Source Data ED Fig. 6 | Source_Data_ED6.xlsx | Numerical data underlying Extended Data Fig. 6a-d
+- Source Data ED Fig. 7 | Source_Data_ED7.xlsx | Numerical data underlying Extended Data Fig. 7b, c, e-g, i-k
+- Source Data ED Fig. 8 | Source_Data_ED8.xlsx | Numerical data underlying Extended Data Fig. 8a-e, g
+- Source Data ED Fig. 9 | Source_Data_ED9.xlsx | Numerical data underlying Extended Data Fig. 9a-i
+
+Extended Data panels with no numerical graph, and so no Source Data: 1a, 1b, 2e, 2f, 4a, 5a, 5b, 7d, 7h
+(architecture schematics and spatial maps).
+
+Extended Data panels whose numbers were never written to disk, and which therefore need their analysis
+rerun before they can be exported: 1d, 1e, 2b-d, 3a, 5e-g, 6e-i, 7a, 8f, 8h, 8i. Of these, 6e-h (the
+hyperparameter sweeps) have no saved models on the VM or in gs://justin-amici, so regenerating them means
+retraining, and the retrained models would not be the ones behind the published panels.
+
+Run `python source_data/extended_data.py --survey` for the current coverage and
+`--export` to rewrite the Extended Data panel CSVs.
 
 Data Availability: "Source data are provided with this paper."
