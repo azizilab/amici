@@ -120,12 +120,16 @@ mean_abs_diff = np.mean(np.abs(interaction_weight_matrix_df_rep1 - interaction_w
 print(f"Mean absolute difference in interaction weights: {mean_abs_diff}")
 
 # %% Compute the Spearman correlation on the *flattened* interaction-weight matrices
-# so that corresponding sender–receiver pairs are compared one-to-one.
-flat_rep1 = interaction_weight_matrix_df_rep1.values.flatten()
-flat_rep2 = interaction_weight_matrix_df_rep2.values.flatten()
+# so that corresponding sender–receiver pairs are compared one-to-one. The diagonal is dropped:
+# a cell type is never its own neighbour, so those entries are structurally zero and would otherwise
+# add 15 tied zeros that inflate rho (0.58 with them, 0.55 without).
+off_diagonal_mask = ~np.eye(len(interaction_weight_matrix_df_rep1), dtype=bool)
+flat_rep1 = interaction_weight_matrix_df_rep1.values[off_diagonal_mask]
+flat_rep2 = interaction_weight_matrix_df_rep2.values[off_diagonal_mask]
 
 # Create labels for the sender and receiver for each point
 pair_labels = [f"{sender}->{receiver}" for sender in interaction_weight_matrix_df_rep1.index for receiver in interaction_weight_matrix_df_rep1.columns]
+pair_labels = [label for label, keep in zip(pair_labels, off_diagonal_mask.flatten()) if keep]
 sender_labels = [f"{interaction.split('->')[0]}" for interaction in pair_labels]
 receiver_labels = [f"{interaction.split('->')[1]}" for interaction in pair_labels]
 
@@ -140,7 +144,7 @@ plt.plot(lims, lims, "--", color="grey", linewidth=1)
 
 plt.xlabel("Interaction weight (Replicate 1)")
 plt.ylabel("Interaction weight (Replicate 2)")
-plt.title(f"Spearman ρ = {spearman_rho:.2f} (p = {spearman_p:.1e}) - Colored by sender")
+plt.title(f"Spearman ρ = {spearman_rho:.2f} (p = {spearman_p:.1e}), n = {len(flat_rep1)} pairs - Colored by sender")
 plt.xlim(lims)
 plt.ylim(lims)
 plt.tight_layout()
