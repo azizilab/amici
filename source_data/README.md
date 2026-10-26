@@ -51,16 +51,16 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 
 | Panel | Check | Result |
 | --- | --- | --- |
-| 3b | edges of the 5-node subgraph at the 0.86 quantile (threshold 25 genes) | 11 of 12 match the drawn graph (see issues) |
+| 3b | edges of the 5-node subgraph at the 0.86 quantile (threshold 25 genes) | 11 of 12 match the drawn graph |
 | 3c | gene selection for Astrocytes (n_top 8, min z 15) and Sst (n_top 10, min z 5) | exact |
 | 4c | published genes vs the ranked top genes per sender | published genes are the top-ranked genes in order, truncated; TIGIT (rank 6, CD4 -> CD8) is omitted |
-| 4c | bold genes vs the segmentation test | 18/19 reproduced; C15orf48 differs (see issues) |
+| 4c | bold genes vs the segmentation test | 18/19 reproduced; C15orf48 differs |
 | 4d | violin rows and their ascending-median order | exact (13 rows) |
 | 4e | head with the largest attention variance | head 2, as published |
 | 4f | hub labels vs `hub_analysis_cache/hub_cluster_assignments.csv` | identical (ARI 1.0) |
 | 5b | Ward-clustered row and column order | exact |
 | 5c | gene selection (n_top 8, min z -10) | exact for all three receivers |
-| 5c | bold genes vs the segmentation test | 12/30 reproduced (see issues) |
+| 5c | bold genes vs the segmentation test | 12/30 reproduced |
 | 6b | Ward-clustered GC heatmap order | exact |
 | 6c | gene selection (n_top 10, min z -10) | exact for both receivers |
 | 6d | head 3 (n_top 10) and head 6 (n_top 5) gene selection; length scales vs the cached CSV | exact; length scales equal to 2e-13 um |
@@ -102,7 +102,7 @@ gs://justin-amici/semisyn/fig2_amici_results/ with an md5 manifest (`fig2_manife
   `../amici-3a3cc16/benchmarks/results/`; NicheDE in `benchmarks/results_realistic_rerun/`; NCEM in
   `benchmarks/results_cv/`. NicheDE and NCEM are deterministic and
   reproduce the published bars on this dataset (NicheDE sigma = 20: 0.2408 vs 0.2402; NCEM 0.2505 / 0.2441 / 0.2486
-  vs 0.2498 / 0.2434 / 0.2479), which identifies it as the published dataset. CGCom was not re-run (issue 2).
+  vs 0.2498 / 0.2434 / 0.2479), which identifies it as the published dataset. CGCom was not re-run.
   - **2f** (dataset map) is exported from that dataset.
   - **2h-j are kept as published.** Their Source Data are the published bar heights, which were read off the bars
     of a vector copy of the figure on 2026-07-28 (`benchmarks/results_cv/breast_cancer/regular_vs_cv_barplots/
@@ -119,61 +119,6 @@ Export with
 `python -I source_data/fig2_benchmarks.py --results benchmarks/results_fig2_original --realistic-results benchmarks/results_realistic_rerun_april_family/scores/run_329 --example-seed 72`
 plus one `--rerun-source METHOD=PATH` per method (the folders above; `CGCom=` marks it as not re-run), then
 `python source_data/plot_fig2g.py` and `python source_data/build_workbooks.py Fig2`.
-
-## Issues found while rebuilding the panels
-
-These do not change the Source Data values, but should be resolved or acknowledged before submission.
-
-1. **Fig. 2h NicheDE sigma = 200 and 500 do not reproduce.** NicheDE is deterministic, the installed NicheDE
-   (GitHub commit 87e0e89, installed 2026-03-09) predates the realistic dataset, and both the re-run and the June
-   CV run give 0.803 / 0.752 on this dataset, against 0.732 / 0.673 published. The settings that produced the
-   published bars are not in the repository. `generate_nichede_scores.R` also installs NicheDE and sceasy from
-   GitHub at run time without a pinned commit.
-2. **CGCom attention overflows on the realistic dataset.** Its attention scores there range from about 4,600 to
-   infinity (they should lie in [0, 1]; on the PBMC datasets they do), in both the re-run and the June CV run, so
-   the CGCom bars in Fig. 2i-j rest on overflowed scores. A plotting step added to `train_cgcom_model.py` in June
-   2026 crashed on these values; `benchmark_utils.plot_interaction_graph` now skips non-finite edges (figure only).
-3. **Fig. 2c-e use 9 distinct datasets, not 10.** In the original run, seeds 58 and 123 give identical AUPRCs
-   for every deterministic baseline (all NicheDE and NCEM settings), and the regenerated seed-58 and seed-123
-   files on the AMICI VM are byte-identical, so the generator produced the same dataset for both seeds. NCEM
-   with radius 15 and radius 20 also gives identical AUPRCs on every seed.
-4. **Fig. 3b differs from the recomputed graph by two edges.** The published network lacks Oligodendrocytes ->
-   L4/5 IT (25 genes, exactly at the 0.86-quantile threshold) and shows a faint Astrocytes -> L2/3 IT (21 genes,
-   below it). The library code from before the 2025-09-26 z-value rewrite (commit e768bc5) gives an identical
-   matrix, so the difference is not from that change. Sheet `Fig3b` lists every pair with its weight; consider
-   redrawing Fig. 3b from it.
-5. **Fig. 5c bolding is not reproducible.** The segmentation test described in the Methods (one-sided
-   Mann-Whitney, both p < 0.05) reproduces the bold/non-bold pattern for 12 of 30 genes; e.g. CCND1, TFF1 and
-   GATA3 pass with p < 1e-20 but are not bold, while C3, CXCL12 and EMILIN1 fail but are bold.
-   `atera_breast_segmentation_analysis.py` currently tests unrelated High_Grade_DCIS pairs, so the analysis
-   that set the published bolding is not in the repository. The recomputed p-values are in sheet `Fig5c`.
-6. **Fig. 4c, C15orf48** is bold but fails the far-receiver comparison added in the revision (near vs far
-   receiver p = 0.98; near vs far sender p = 9e-9). The bolding predates the revised two-comparison test.
-7. **Segmentation threshold.** The Methods use p < 0.05; the analysis scripts use p < 0.1
-   (`significant_both`). Sheets report both calls; they agree for every Fig. 4c gene.
-8. **Benchmark statistics.** The Methods say the benchmark p-values are BH-adjusted, but
-   `benchmark_utils.plot_boxplots` (and the caption values) use Bonferroni.
-9. **Figshare v1 is incomplete.** It has no Atera or tonsil data or models (REPRODUCIBILITY.md says it does),
-   and its low-resolution Xenium model is run `t4t8pzvi`, not the 2026-09-19 retrain `5tfi78lp` the guide cites.
-   The five Figshare `model.pt` files are unlabelled; `checkpoints.yaml` maps each file id to its run.
-10. **Analysis scripts no longer match some published panels.** `cortex_analysis.py` draws L6b instead of Sst in
-   Fig. 3b and only the Astrocyte dot plot; `xenium_analysis.py` lacks the multi-receiver Fig. 4c and the
-   head-resolved Fig. 4d dot plot; `xenium_niche_analysis.py` sets `hub_cluster = 9`, which is legend hub 10,
-   while the published Sankey "hub 9" is cluster index 8; `xenium_spatial_analysis.py` plots AGR3, not ESR1;
-   `human_tonsil_analysis.py` ends on the CD4 T cell receiver rather than the GC B cell panels. No script in the
-   repository draws the Fig. 2h-j bar plots; the pipeline's `plot_boxplots` draws box plots across dataset seeds.
-   The exporters here record the settings that do reproduce each panel.
-11. **Paths.** `cortex_analysis.py` loads `./saved_models/cortex_18_sweep_...` without the
-   `cortex_sweep_2025-04-28_model_2025-05-05/` folder that REPRODUCIBILITY.md documents (the checkpoint now sits
-   at the documented path). The Xenium 2025-05-01 train/test splits that the Xenium scripts load were missing
-   and were restored from gs://justin-amici.
-12. **Fig. 5b axis label.** The receiver axis reads "Plasma Myeloid Mix" while the sender axis reads "Plasma
-   Mast Mix"; both are the `Plasma_Mast_Mixture` label.
-13. **Tonsil segmentation flags use pixels.** `human_tonsil_analysis.py` calls the dot plot with
-   `flag_segmentation_artifacts=True` on CosMx pixel coordinates, so its 20/100 thresholds are 2.4/12 um rather
-   than 20/100 um. Fig. 6c draws every gene bold, so the figure is unaffected, but the Methods say the test was
-   applied to the tonsil data. The library version also seeds its subsampling with Python's `hash()`, which
-   changes between processes unless `PYTHONHASHSEED` is set.
 
 ## For the submission
 

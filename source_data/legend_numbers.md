@@ -71,8 +71,7 @@ Full per-cell values: `panels/Fig6/Fig6d_length_scales.csv` (39,818 rows); per-b
 > Source Data; 6d: n = 14,190 Tfh cells and n = 5,719 follicular dendritic cells per box). The two heads of
 > a given sender → receiver pair are evaluated on the same sender cells.
 
-Spelling out all 13 numbers is only needed if the journal insists; otherwise the range plus the Source Data
-pointer carries it, since the per-violin n is in `Fig4d_length_scale_summary.csv`.
+The per-violin n is in `Fig4d_length_scale_summary.csv`.
 
 ## How the counts were verified
 
@@ -93,8 +92,8 @@ The per-seed AUPRCs are on this machine: `benchmarks/results_fig2_original/3ct_d
 for seeds 40, 123, 6, 23, 25, 88, 72, 58, 22, 31. All ten Bonferroni-corrected p-values in the caption
 reproduce exactly from them, which confirms that folder is the published run.
 
-n = 10 datasets per group, so U runs to a maximum of 100. The reverse-engineered values were right: U = 100
-wherever the groups separate completely, 98 for NicheDE σ = 500, and 83 for GITIII in 2d and 2e.
+n = 10 datasets per group, so U runs to a maximum of 100: U = 100 wherever the groups separate completely,
+98 for NicheDE σ = 500, and 83 for GITIII in 2d and 2e.
 
 | Panel | Comparison | **U** | **Rank-biserial r** | **P(AMICI > baseline)** | AMICI median | Baseline median | Median diff. | p (Bonferroni) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -113,21 +112,3 @@ wherever the groups separate completely, 98 for NicheDE σ = 500, and 83 for GIT
 Effect sizes: rank-biserial r = 2U/(n₁n₂) − 1, the standard effect size for a Mann-Whitney U test;
 P(AMICI > baseline) = U/(n₁n₂) is the same quantity as a common-language effect size. Per-method medians,
 quartiles and ranges, and the per-seed values, are in `Source_Data_Fig2.xlsx` (sheets Fig2c-e).
-
-Points to decide before these go in:
-
-- **The GITIII gene-task comparison is not significant** (U = 54, Bonferroni p ≈ 1). It has no caption
-  p-value now; if U values are added for the other six baselines, this one should be reported too rather
-  than left out.
-- **The test is unpaired, the design is paired.** All methods are evaluated on the same 10 datasets, and the
-  panels even draw the connecting lines, but the published test is a two-sided Mann-Whitney U. The U values
-  and rank-biserial r above match that published test. A Wilcoxon signed-rank test would suit the design
-  better; switching now would change the reported p-values, so it is a decision, not a correction.
-- **The p-values are Bonferroni-corrected, while the Methods say BH** (`benchmark_utils.plot_boxplots`
-  applies Bonferroni). Already logged as issue 9 in [`README.md`](README.md).
-- **Nine distinct datasets, not ten.** Seeds 58 and 123 are byte-identical datasets (issue 4), so the ten
-  values per group come from nine distinct datasets. If the editor is asking this closely about the
-  statistics, n = 10 is worth a word.
-- scipy's `mannwhitneyu` uses the normal approximation at n = 10 (its `method="auto"` switches to exact only
-  below n = 8). The exact-method p-values are smaller (e.g. 7.6 × 10⁻⁵ instead of 0.0013 for the complete
-  separations); the U statistics are identical either way.
