@@ -330,7 +330,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
                     'mannwhitney_statistic': u_statistic,
                     'near_vs_far_sender_pval': near_vs_sender_pval,
                     'near_vs_far_receiver_pval': near_vs_receiver_pval,
-                    'significant_both': bool(mannwhitney_pval < 0.1),
+                    'significant_both': bool(mannwhitney_pval < 0.05),
                     'near_mean': np.mean(near_values) if len(near_values) > 0 else np.nan,
                     'far_receiver_mean': np.mean(far_receiver_values) if len(far_receiver_values) > 0 else np.nan,
                     'far_sender_mean': np.mean(far_sender_values) if len(far_sender_values) > 0 else np.nan,

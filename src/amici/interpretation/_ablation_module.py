@@ -696,7 +696,7 @@ class AMICIAblationModule:
         adata,
         near_threshold=20.0,
         far_threshold=100.0,
-        pval_threshold=0.1,
+        pval_threshold=0.05,
         coord_obsm_key="spatial",
     ):
         """Return sender-gene pairs flagged by the segmentation artifact test."""
@@ -818,7 +818,7 @@ class AMICIAblationModule:
         segmentation_adata=None,
         segmentation_near_threshold=20.0,
         segmentation_far_threshold=100.0,
-        segmentation_pval_threshold=0.1,
+        segmentation_pval_threshold=0.05,
         segmentation_coord_obsm_key="spatial",
     ):
         """Plots a dotplot of the top genes by color_by and size_by for a given cell type and head index.

@@ -256,7 +256,9 @@ def segmentation_tests(adata, labels_key, pairs, near_threshold=20.0, far_thresh
     compared with receivers and senders at least ``far_threshold`` away, after subsampling all three groups
     to the smallest size with ``np.random.seed(42 + pair_idx)``. The reported p is the larger of the two
     one-sided p-values. Per the Methods, a gene passes (is not attributed to segmentation artifacts, and is
-    printed bold) when both p-values are below 0.05; the analysis scripts used 0.1 (``significant_both``).
+    printed bold) when both p-values are below 0.05. The analysis scripts used 0.1 (``significant_both``)
+    until 2026-10-26, when every segmentation threshold was set to the 0.05 of the Methods; both calls are
+    still exported, since the published panels were bolded under the older code.
     """
     from scipy import sparse, stats
     from scipy.spatial.distance import cdist
