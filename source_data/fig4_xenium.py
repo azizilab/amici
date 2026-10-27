@@ -70,7 +70,7 @@ DOTPLOTS = [
             "CD8+_T_Cells": ["WARS", "SLAMF7", "C15orf48"],
             "Invasive_Tumor": ["APOC1", "FCGR3A", "SCD", "KRT7", "PPARG", "FOXA1", "FASN"],
         },
-        "bold": ["WARS", "C15orf48", "APOC1", "FCGR3A", "PPARG"],
+        "bold": ["WARS", "APOC1", "FCGR3A", "PPARG"],  # C15orf48 fails the receiver comparison (p = 0.98)
     },
     {
         "receiver": "CD8+_T_Cells",

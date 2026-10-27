@@ -1,4 +1,6 @@
 # %% Import necessary libraries
+import os
+
 import scanpy as sc
 import numpy as np
 import seaborn as sns
@@ -504,7 +506,6 @@ if len(all_gene_stats_data) > 0:
 
 if len(all_gene_stats_data) > 0:
     # Ensure figures directory exists
-    import os
     os.makedirs("./figures/segmentation_analysis", exist_ok=True)
     
     plot_segmentation_test_results(
