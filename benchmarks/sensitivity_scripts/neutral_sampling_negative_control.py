@@ -637,6 +637,44 @@ def compute_pr_curves(model, adata, config):
     }
 
 
+def write_pr_curve_tables(all_pr_curves):
+    """Write the curves behind Extended Data Fig. 8h,i, which were previously only plotted.
+
+    One row per threshold per dataset and task, thinned onto a fixed recall grid so the file stays a
+    sensible size, with the AUPRC and the number of ground-truth positives carried on every row.
+    """
+    import numpy as np
+    import pandas as pd
+
+    points = 501
+    rows = []
+    for dataset_name, pr_curves in all_pr_curves.items():
+        for task_name, (precision, recall, auprc, n_pos) in pr_curves.items():
+            recall = np.asarray(recall, dtype=float)
+            precision = np.asarray(precision, dtype=float)
+            if recall.size > points:
+                order = np.argsort(recall)
+                grid = np.linspace(recall[order][0], recall[order][-1], points)
+                precision = np.interp(grid, recall[order], precision[order])
+                recall = grid
+            rows.append(
+                pd.DataFrame(
+                    {
+                        "dataset": dataset_name,
+                        "task": task_name,
+                        "recall": recall,
+                        "precision": precision,
+                        "auprc": auprc,
+                        "n_ground_truth_positives": n_pos,
+                    }
+                )
+            )
+    table_path = os.path.join(figure_dir, f"{RUN_NAME}_amici_pr_curves.csv")
+    pd.concat(rows, ignore_index=True).to_csv(table_path, index=False)
+    print(f"[source data] wrote {table_path}")
+    return table_path
+
+
 def plot_all_pr_curves(all_pr_curves):
     """Save one figure with both datasets and all three AMICI PR tasks."""
     task_names = ["Gene Task", "Neighbor Interaction Task", "Receiver Subtype Task"]
@@ -654,6 +692,8 @@ def plot_all_pr_curves(all_pr_curves):
             ax.set_title(f"{dataset_name}\n{task_name}", fontsize=10)
             ax.text(0.05, 0.08, f"n={n_pos} positives", transform=ax.transAxes, fontsize=9)
             ax.legend(fontsize=8)
+
+    write_pr_curve_tables(all_pr_curves)
 
     fig.suptitle("AMICI neutral-sampled negative-control PR curves", fontsize=14)
     plt.tight_layout()

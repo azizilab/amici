@@ -500,6 +500,15 @@ Per pair:
     return fig
 
 # Generate the segmentation test results plot
+# %% Write the per-gene test results behind Extended Data Fig. 3a
+if len(all_gene_stats_data) > 0:
+    import pandas as pd
+
+    os.makedirs("./figures/segmentation_analysis", exist_ok=True)
+    _stats_path = "./figures/segmentation_analysis/gitiii_segmentation_test_results.csv"
+    pd.DataFrame(all_gene_stats_data).to_csv(_stats_path, index=False)
+    print(f"[source data] wrote {_stats_path}")
+
 if len(all_gene_stats_data) > 0:
     # Ensure figures directory exists
     import os
