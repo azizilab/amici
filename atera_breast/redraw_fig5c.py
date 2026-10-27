@@ -4,7 +4,7 @@ Why this exists
 ---------------
 The Fig. 5c legend says that "genes not flagged as potential segmentation artifacts are in bold",
 but no code in this repository produces the published bolding. `atera_breast_analysis.py:411-412`
-calls `plot_featurewise_contributions_dotplot` with `flag_segmentation_artifacts` and
+calls `plot_featurewise_contributions_dotplot` with `mark_segmentation_passing_genes` and
 `segmentation_adata` commented out, so the published dot plots carry no segmentation marking at all;
 the bold labels were applied by hand when the figure was assembled.
 
@@ -26,7 +26,7 @@ bold; `fig5c_bolding.csv` records the per-pair result either way.
 
 The p-values are read from `source_data/panels/Fig5/Fig5c.csv` rather than recomputed, so the panel
 and the Source Data cannot drift apart. Note that the library's own
-`_get_segmentation_artifact_gene_pairs` seeds its subsample with `abs(hash((sender, receiver)))`,
+`_get_segmentation_passing_gene_pairs` seeds its subsample with `abs(hash((sender, receiver)))`,
 which is not stable across processes unless PYTHONHASHSEED is set; the exporter's deterministic
 `seed 42 + pair_idx` is used instead.
 

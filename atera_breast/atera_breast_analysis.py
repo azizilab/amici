@@ -408,7 +408,7 @@ ablation_ct_residuals.plot_featurewise_contributions_heatmap(
 # %% Plot the dotplot of p-values by neighbor contribution scores for the target cell type
 ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     cell_type=receiver_ct,
-    # flag_segmentation_artifacts=True,
+    # mark_segmentation_passing_genes=True,
     # segmentation_adata=adata,
     color_by="diff",
     size_by="z_value",
