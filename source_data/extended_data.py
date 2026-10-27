@@ -110,7 +110,7 @@ ED1 = [
 ED2 = [
     Panel("a", "Interaction network including stromal cells", CACHE, ["xenium/figures/stromal_bleeding_analysis/cache/interaction_weight_matrix.csv"], "xenium/xenium_stromal_bleeding_analysis.py"),
     Panel("b", "Maximum explained variance per head and cell type", RECOMPUTE, [], "xenium/xenium_analysis.py"),
-    Panel("c", "Volcano plots per receiver cell type", RECOMPUTE, [], "xenium/xenium_analysis.py", "needs the all-cell-type ablation cache, which is on the VM but not exported"),
+    Panel("c", "Volcano plots per receiver cell type", CACHE, ["xenium/figures/ed2c_volcano_bolding"], "xenium/ed2c_volcano_bolding.py"),
     Panel("d", "Ligand-receptor overlap dot plot", RECOMPUTE, [], "xenium/xenium_lr_analysis.py"),
     Panel("e", "AGR3 subpopulation attention and expression", IMAGE),
     Panel("f", "ESR1 expression and attention maps", IMAGE),
@@ -337,6 +337,8 @@ EXPORTS: dict[str, list[dict]] = {
            {"src": "xenium/figures/replicate_validation/Fig_S5b_redraw_stats.csv", "dest": "ED1i_replicate_correlation_stats.csv"}],
     # ED 2
     "2a": [{"src": "xenium/figures/stromal_bleeding_analysis/cache/interaction_weight_matrix.csv", "dest": "ED2a_interaction_matrix_with_stroma.csv"}],
+    "2c": [{"src": "xenium/figures/ed2c_volcano_bolding/ed2c_labeled_genes.csv", "dest": "ED2c_labeled_genes.csv"},
+           {"src": "xenium/figures/ed2c_volcano_bolding/ed2c_volcano_all_genes.csv", "dest": "ED2c_volcano_all_genes.csv"}],
     "2g": [{"src": "benchmarks/sensitivity_scripts/figures/xenium_adjusted_cd8_tumor_effect/cd8_tumor_adjusted_coefficients.csv", "dest": "ED2g_adjusted_coefficients.csv"},
            {"src": "benchmarks/sensitivity_scripts/figures/xenium_adjusted_cd8_tumor_effect/cd8_tumor_adjusted_spatial_values.csv", "dest": "ED2g_adjusted_spatial_values.csv"},
            {"src": "benchmarks/sensitivity_scripts/figures/xenium_adjusted_cd8_tumor_effect/cd8_tumor_adjustment_summary.csv", "dest": "ED2g_adjustment_summary.csv"}],
