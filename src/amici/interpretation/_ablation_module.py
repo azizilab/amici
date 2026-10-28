@@ -689,19 +689,26 @@ class AMICIAblationModule:
         if show:
             plt.show()
 
-    def _get_segmentation_artifact_gene_pairs(
+    def _get_segmentation_passing_gene_pairs(
         self,
         genes_by_sender,
         receiver_type,
         adata,
         near_threshold=20.0,
         far_threshold=100.0,
-        pval_threshold=0.1,
+        pval_threshold=0.05,
         coord_obsm_key="spatial",
     ):
-        """Return sender-gene pairs flagged by the segmentation artifact test."""
+        """Return sender-gene pairs that pass the segmentation artifact test.
+
+        A pair passes when expression in interacting receivers is significantly higher than in
+        both distant senders and distant receivers (both one-sided Mann-Whitney U p-values below
+        ``pval_threshold``), so its elevated expression is unlikely to be a segmentation artifact.
+        Pairs that pass are therefore the ones that are NOT potential artifacts; the Methods
+        describe this as rejecting the null hypothesis in both comparisons.
+        """
         if adata is None:
-            raise ValueError("segmentation_adata must be provided when flag_segmentation_artifacts=True.")
+            raise ValueError("segmentation_adata must be provided when mark_segmentation_passing_genes=True.")
         if coord_obsm_key not in adata.obsm:
             raise KeyError(f"{coord_obsm_key!r} not found in segmentation_adata.obsm.")
         if self._labels_key not in adata.obs:
@@ -715,7 +722,7 @@ class AMICIAblationModule:
         coords = np.asarray(adata.obsm[coord_obsm_key])
         receiver_coords = coords[receiver_mask.to_numpy()]
         receiver_indices = np.flatnonzero(receiver_mask.to_numpy())
-        flagged_pairs = set()
+        passing_pairs = set()
 
         for sender_type, genes in genes_by_sender.items():
             genes = [gene for gene in genes if gene in adata.var_names]
@@ -739,13 +746,13 @@ class AMICIAblationModule:
             if len(near_receiver_indices) < 2 or len(far_sender_indices) < 2 or len(far_receiver_indices) < 2:
                 continue
 
-            n_sample = min(len(near_receiver_indices), len(far_sender_indices), len(far_receiver_indices))
-            rng_seed = abs(hash((str(sender_type), str(receiver_type)))) % (2**32)
-            rng = np.random.default_rng(rng_seed)
-            near_receiver_indices = rng.choice(near_receiver_indices, size=n_sample, replace=False)
-            far_sender_indices = rng.choice(far_sender_indices, size=n_sample, replace=False)
-            far_receiver_indices = rng.choice(far_receiver_indices, size=n_sample, replace=False)
-
+            # Every cell of each group is used. The three groups used to be subsampled to the
+            # smallest of them, seeded by ``hash((sender, receiver))``, which did three kinds of
+            # damage: it tied each comparison to a group it does not use, where a sender type that
+            # is sparse next to a tissue-wide receiver leaves almost no distant senders and starves
+            # the near-vs-distant-receiver test; it made the result depend on the draw; and because
+            # ``hash`` is salted per process, the draw itself was not reproducible without
+            # PYTHONHASHSEED. Mann-Whitney U does not require equal group sizes.
             near_expr = adata.X[near_receiver_indices][:, gene_indices]
             far_sender_expr = adata.X[far_sender_indices][:, gene_indices]
             far_receiver_expr = adata.X[far_receiver_indices][:, gene_indices]
@@ -771,12 +778,12 @@ class AMICIAblationModule:
                     alternative="greater",
                 )
                 if near_vs_sender_pval < pval_threshold and near_vs_receiver_pval < pval_threshold:
-                    flagged_pairs.add((str(sender_type), str(gene)))
-        return flagged_pairs
+                    passing_pairs.add((str(sender_type), str(gene)))
+        return passing_pairs
 
     @staticmethod
-    def _mark_segmentation_artifact_gene_pairs(dotplot_fig, flagged_pairs):
-        """Mark dotplot sender-gene pairs flagged by the segmentation test."""
+    def _mark_segmentation_passing_gene_pairs(dotplot_fig, passing_pairs):
+        """Mark dotplot sender-gene pairs that pass the segmentation test (not artifacts)."""
         axes = dotplot_fig.get_axes()
         axes = axes.values() if isinstance(axes, dict) else axes
         for ax in axes:
@@ -785,7 +792,7 @@ class AMICIAblationModule:
             if not x_label_to_pos or not y_label_to_pos:
                 continue
 
-            for sender_type, gene in flagged_pairs:
+            for sender_type, gene in passing_pairs:
                 if sender_type not in y_label_to_pos or gene not in x_label_to_pos:
                     continue
                 ax.scatter(
@@ -814,11 +821,11 @@ class AMICIAblationModule:
         save_png=False,
         save_svg=False,
         save_dir="./figures",
-        flag_segmentation_artifacts=False,
+        mark_segmentation_passing_genes=False,
         segmentation_adata=None,
         segmentation_near_threshold=20.0,
         segmentation_far_threshold=100.0,
-        segmentation_pval_threshold=0.1,
+        segmentation_pval_threshold=0.05,
         segmentation_coord_obsm_key="spatial",
     ):
         """Plots a dotplot of the top genes by color_by and size_by for a given cell type and head index.
@@ -838,11 +845,14 @@ class AMICIAblationModule:
             save_png (bool, optional): Whether to save the plot as a png.
             save_svg (bool, optional): Whether to save the plot as a svg.
             save_dir (str, optional): The directory to save the plot to.
-            flag_segmentation_artifacts (bool, optional): Whether to mark top sender-gene pairs passing the segmentation artifact test.
-            segmentation_adata (AnnData, optional): AnnData used for segmentation testing when flag_segmentation_artifacts is True.
+            mark_segmentation_passing_genes (bool, optional): Whether to mark the top sender-gene pairs that PASS the
+                segmentation artifact test, i.e. those unlikely to be segmentation artifacts. The marked pairs are the
+                ones figure legends describe as not flagged as potential segmentation artifacts.
+            segmentation_adata (AnnData, optional): AnnData used for segmentation testing when mark_segmentation_passing_genes is True.
             segmentation_near_threshold (float, optional): Maximum receiver-to-sender distance for near receivers.
             segmentation_far_threshold (float, optional): Minimum sender-to-receiver distance for far senders.
-            segmentation_pval_threshold (float, optional): Mann-Whitney U p-value threshold for flagging genes.
+            segmentation_pval_threshold (float, optional): Mann-Whitney U p-value threshold below which a gene passes
+                each of the two comparisons.
             segmentation_coord_obsm_key (str, optional): obsm key containing spatial coordinates for segmentation testing.
         """
         assert color_by in [
@@ -921,13 +931,13 @@ class AMICIAblationModule:
             dot_color_df.rename(columns={col: col.replace(f"_{color_by}", "")}, inplace=True)
 
         neighbor_cell_types = [ct.replace(f"_{size_by}", "") for ct in size_by_cols]
-        segmentation_flagged_pairs = set()
-        if flag_segmentation_artifacts:
+        segmentation_passing_pairs = set()
+        if mark_segmentation_passing_genes:
             top_gene_names_by_sender = {
                 sender_type: ct_scores_df.loc[top_gene_idx, "gene"].astype(str).tolist()
                 for sender_type, top_gene_idx in top_genes_per_ct.items()
             }
-            segmentation_flagged_pairs = self._get_segmentation_artifact_gene_pairs(
+            segmentation_passing_pairs = self._get_segmentation_passing_gene_pairs(
                 genes_by_sender=top_gene_names_by_sender,
                 receiver_type=cell_type,
                 adata=segmentation_adata,
@@ -962,8 +972,8 @@ class AMICIAblationModule:
             colorbar_title=score_titles[color_by],
             return_fig=True,
         )
-        if segmentation_flagged_pairs:
-            self._mark_segmentation_artifact_gene_pairs(fig, segmentation_flagged_pairs)
+        if segmentation_passing_pairs:
+            self._mark_segmentation_passing_gene_pairs(fig, segmentation_passing_pairs)
 
         def _plot_size_legend(self, size_legend_ax, step, dot_max, dot_min):
             """

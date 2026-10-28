@@ -2,6 +2,14 @@
 
 This document maps scripts and workflows in this repository to the figures they generate in the AMICI manuscript.
 
+**The `S` numbers below are the pre-condensation supplementary numbering (Fig. S1-S40).** The submitted
+manuscript condenses those panels into nine multi-panel Extended Data items, which it labels Fig. S1-S9,
+so an `S` number here and an `S` number in the paper are different figures. The Extended Data items and
+their panels are enumerated in `source_data/extended_data.py`, which is no longer in the branch; see
+[`source_data/README.md`](source_data/README.md) for the panel inventory, for how to restore that script
+and for where the built workbooks are deposited. Renumbering this guide against the submitted figures is
+still to do.
+
 Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 
 ## Benchmarks
@@ -463,3 +471,23 @@ Some of the analyses above depend on pretrained AMICI models and preprocessed da
 | Dataset      | Local Dataset Path                                               | Local Model Path                                                                    | Model YAML Config |
 | ------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ----------------- |
 | Atera Breast | `atera_breast/data/atera_breast_filtered_2026-07-22.h5ad` (train/test splits: `atera_breast_filtered_train_2026-07-22.h5ad` / `atera_breast_filtered_test_2026-07-22.h5ad`) | `atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28` | [`reproducibility/atera_breast_config.yaml`](reproducibility/atera_breast_config.yaml) |
+
+## Software versions for the reporting summary
+
+The reporting summary asks for every data-analysis package with its version number, and the manuscript
+Methods name these packages without versions. The exact versions are the pinned environments in
+[`reproducibility/benchmarks/envs/`](reproducibility/benchmarks/envs); the table below is the subset the
+reporting summary needs. Each lock file's header records when it was built and which figures ran in it.
+
+| Environment | Used for | Versions |
+| --- | --- | --- |
+| [`amici_pip_lock.txt`](reproducibility/benchmarks/envs/amici_pip_lock.txt) | AMICI, every real-data analysis, Fig. 2f-j, spatial CV | Python 3.11.15, amici-st 0.1.0, scvi-tools 1.2.2, scanpy 1.11.5, anndata 0.12.16, torch 2.6.0+cu124, jax/jaxlib 0.4.23, numpy 1.26.4, scipy 1.12.0, pandas 2.3.3, scikit-learn 1.9.0, statsmodels 0.14.6, igraph 1.0.0, leidenalg 0.12.0, matplotlib 3.10.9, seaborn 0.13.2, transformer-lens 1.14.0, wandb 0.27.1 |
+| [`basic_pip_lock.txt`](reproducibility/benchmarks/envs/basic_pip_lock.txt) | dataset generation and scoring | Python 3.11.15, scvi-tools 1.2.2, scanpy 1.11.5, anndata 0.12.10, torch 2.10.0, jax/jaxlib 0.7.1, numpy 1.26.4, scipy 1.12.0, scikit-learn 1.8.0 |
+| [`gitiii_pip_lock.txt`](reproducibility/benchmarks/envs/gitiii_pip_lock.txt) | GITIII baseline | Python 3.10.20, torch 2.3.0, scanpy 1.11.5, anndata 0.11.4, numpy 2.2.6, scipy 1.15.3, scikit-learn 1.7.2 |
+| [`ncem_pip_lock.txt`](reproducibility/benchmarks/envs/ncem_pip_lock.txt) | NCEM baseline | Python 3.8.20, squidpy 1.2.3, scanpy 1.9.6, anndata 0.9.2, numpy 1.22.4, scipy 1.9.1, scikit-learn 1.3.2 |
+| [`cgcom_pip_lock.txt`](reproducibility/benchmarks/envs/cgcom_pip_lock.txt) | CGCom baseline | Python 3.11.15, torch 2.11.0, torch-geometric 2.7.0, scanpy 1.11.5, anndata 0.12.10, numpy 2.4.3, scipy 1.17.1 |
+| [`nichede_R_lock.txt`](reproducibility/benchmarks/envs/nichede_R_lock.txt) | NicheDE baseline (R) | Seurat 5.4.0, nicheDE 0.0.0.9000 at commit `87e0e89`, sceasy at commit `d1e2b87`, anndata 0.7.5.6, igraph 2.2.2 |
+
+Resegmentation and annotation of the Xenium data used ProSeg and resolVI, and the CosMx run used the
+instrument's own pipeline; those versions are not in this repository and have to come from the
+collaborators who produced them (see Methods).

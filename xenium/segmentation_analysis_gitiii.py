@@ -337,7 +337,7 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
                     'mannwhitney_statistic': u_statistic,
                     'near_vs_far_sender_pval': near_vs_sender_pval,
                     'near_vs_far_receiver_pval': near_vs_receiver_pval,
-                    'significant_both': bool(mannwhitney_pval < 0.1),
+                    'significant_both': bool(mannwhitney_pval < 0.05),
                     'near_mean': np.mean(near_values) if len(near_values) > 0 else np.nan,
                     'far_receiver_mean': np.mean(far_receiver_values) if len(far_receiver_values) > 0 else np.nan,
                     'far_sender_mean': np.mean(far_sender_values) if len(far_sender_values) > 0 else np.nan,
@@ -500,6 +500,15 @@ Per pair:
     return fig
 
 # Generate the segmentation test results plot
+# %% Write the per-gene test results behind Extended Data Fig. 3a
+if len(all_gene_stats_data) > 0:
+    import pandas as pd
+
+    os.makedirs("./figures/segmentation_analysis", exist_ok=True)
+    _stats_path = "./figures/segmentation_analysis/gitiii_segmentation_test_results.csv"
+    pd.DataFrame(all_gene_stats_data).to_csv(_stats_path, index=False)
+    print(f"[source data] wrote {_stats_path}")
+
 if len(all_gene_stats_data) > 0:
     # Ensure figures directory exists
     import os

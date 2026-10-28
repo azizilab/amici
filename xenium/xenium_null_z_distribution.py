@@ -127,6 +127,37 @@ else:
     log(f"Done. Collected {len(all_z):,} z-values in {(time.time()-t_start)/60:.1f}m")
     log(f"Cached to {cache_path}")
 
+# %% Write the numbers behind Extended Data Fig. 6i
+# The panel draws a 100-bin density histogram of the null z-values and a Q-Q plot against the normal.
+# There are millions of z-values, so the binned densities and the Q-Q quantiles are exported rather
+# than the raw draws, which stay in the .npz cache beside the figure.
+import pandas as pd  # noqa: E402
+
+_counts, _edges = np.histogram(all_z, bins=100, density=True)
+pd.DataFrame(
+    {
+        "bin_left": _edges[:-1],
+        "bin_right": _edges[1:],
+        "bin_centre": (_edges[:-1] + _edges[1:]) / 2,
+        "density": _counts,
+    }
+).to_csv(f"{fig_dir}/null_z_histogram.csv", index=False)
+
+_probs = np.linspace(0.0005, 0.9995, 2000)
+pd.DataFrame(
+    {
+        "quantile": _probs,
+        "theoretical_z": stats.norm.ppf(_probs),
+        "empirical_z": np.quantile(all_z, _probs),
+    }
+).to_csv(f"{fig_dir}/null_z_qq.csv", index=False)
+
+pd.DataFrame(
+    [{"n_z_values": int(all_z.size), "mean": float(all_z.mean()), "sd": float(all_z.std()),
+      "n_mc_iterations": int(N_MC_ITERATIONS)}]
+).to_csv(f"{fig_dir}/null_z_summary.csv", index=False)
+print(f"[source data] wrote the Extended Data Fig. 6i tables to {fig_dir}")
+
 # %% Histogram with overlaid normal distribution
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 

@@ -371,8 +371,13 @@ ablation_ct_residuals.plot_featurewise_contributions_heatmap(
 # %%
 ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     cell_type=receiver_ct,
-    flag_segmentation_artifacts=True,
+    mark_segmentation_passing_genes=True,
     segmentation_adata=adata,
+    # adata.obsm["spatial"] holds CosMx global pixels, not microns, so the 20/100 um thresholds of
+    # the Methods have to be converted. Left at the library defaults they would select receivers
+    # within 2.4 um and senders beyond 12 um, which leaves single-digit interacting-receiver groups.
+    segmentation_near_threshold=20.0 / cosmx_pixel_size_um,
+    segmentation_far_threshold=100.0 / cosmx_pixel_size_um,
     color_by="diff",
     size_by="z_value",
     n_top_genes=10,

@@ -48,9 +48,8 @@ figure_3:
     gcs_model: gs://justin-amici/cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
     gcs_data: gs://justin-amici/cortex/data/cortex_processed_2025-04-28.h5ad
   notes: >-
-    The checkpoint was missing from the VM and was restored from the bucket on 2026-10-16. cortex_analysis.py
-    loads ./saved_models/cortex_18_sweep_... (no sweep subfolder), while REPRODUCIBILITY.md and this manifest
-    use the subfolder layout.
+    Restored to the VM from the bucket on 2026-10-16. cortex_analysis.py loads the checkpoint from
+    ./saved_models/cortex_18_sweep_... without the sweep subfolder used here and in REPRODUCIBILITY.md.
 
 figure_4:
   dataset: xenium (both replicates)
@@ -80,6 +79,7 @@ figure_5:
   model_md5: f53e6ab53c322735193998ecc2db959a
   wandb: {sweep: 25xpxkuk, run: zhtraubt}
   config: reproducibility/atera_breast_config.yaml
+  raw_data: https://www.10xgenomics.com/datasets/atera-wta-ffpe-human-breast-cancer (public)
   remote:
     figshare: not deposited (Figshare v1 predates this model)
     gcs_model: not deposited
@@ -96,6 +96,7 @@ figure_6:
   wandb: {sweep: 0f9rk0na, run: 4303v0zu}
   config: reproducibility/human_tonsil_config.yaml
   coordinate_units: CosMx pixels; 0.12028 um per pixel
+  raw_data: NCBI GEO GSE351148 (public since 2026-10; the accession cited in Data Availability)
   remote:
     figshare: not deposited (Figshare v1 predates this model)
     gcs: not deposited
@@ -111,7 +112,8 @@ supplementary:
     figshare_model_file_id: 63409704
     figshare_data_file_id: 63409719
     gcs_model: gs://justin-amici/xenium/saved_models/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13/model.pt
-    notes: restored to the VM from the bucket on 2026-10-16; replicate dataset not downloaded
+    notes: model restored to the VM from the bucket on 2026-10-16; replicate dataset restored to
+      xenium/data/xenium_sample1/ on 2026-10-26
   xenium_replicate_2:
     figures: [Fig. S5a-b]
     model: xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
@@ -119,12 +121,13 @@ supplementary:
     figshare_model_file_id: 63409707
     figshare_data_file_id: 63409716
     gcs_model: gs://justin-amici/xenium/saved_models/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
-    notes: restored to the VM from the bucket on 2026-10-16; replicate dataset not downloaded
+    notes: model restored to the VM from the bucket on 2026-10-16; replicate dataset restored to
+      xenium/data/xenium_sample1/ on 2026-10-26
   xenium_lowres_retrain:
     figures: [Fig. S19]
     model: xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-09-19/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
     model_md5: 3af4d45569f746bf42297f59edaebd10
     gcs_model: gs://justin-amici/xenium/saved_models/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
     notes: >-
-      Figshare v1 file 63409713 is a different low-resolution run (xsjrwnof/t4t8pzvi, md5
-      1bb7e22247843768bf454bba634b8ad1), not the 2026-09-19 retrain that REPRODUCIBILITY.md now cites.
+      Figshare v1 file 63409713 holds a different low-resolution run (xsjrwnof/t4t8pzvi, md5
+      1bb7e22247843768bf454bba634b8ad1); fetch this checkpoint from the bucket path above.

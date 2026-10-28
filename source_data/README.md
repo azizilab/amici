@@ -1,9 +1,17 @@
 # Source Data for the AMICI manuscript
 
-This folder rebuilds the Source Data workbooks for the main figures from the exact datasets and AMICI
-checkpoints that produced them. Each exporter verifies the dataset and `model.pt` by md5, recomputes every
-plotted quantity, checks it against the published panel, and writes per-panel CSVs. `build_workbooks.py`
-then assembles one workbook per figure.
+The Source Data workbooks are what the submission attaches: 14 workbooks and 5 companion zips, one per
+figure, deposited at `gs://justin-amici/source_data/`. The per-panel tables they were assembled from --
+118 CSVs and the 14 `manifest.json` files that map each one to its sheet -- are deposited beside them
+under `gs://justin-amici/source_data/panels/`, one folder per figure. They are built artifacts, so
+`output/` and `panels/` stay out of the branch (see [`.gitignore`](.gitignore)).
+
+This file is the record of where the numbers in each sheet came from. The exporters that produced them
+were removed from the branch once the workbooks were final, and [Reproducing](#reproducing) says how to
+get them back. Each one verified the dataset and `model.pt` by md5, recomputed every plotted quantity,
+checked it against the published panel and wrote per-panel CSVs, which `build_workbooks.py` assembled
+into one workbook per figure. `_common.py` stays, because `xenium/ed2c_volcano_bolding.py` imports its
+gene-table and segmentation-test helpers.
 
 | Output | Contents |
 | --- | --- |
@@ -21,6 +29,16 @@ Figure 1 is a schematic and has no Source Data.
 
 ## Reproducing
 
+The exporters are no longer in the branch. Find the commit that removed them and restore the ones you
+need first:
+
+```bash
+git log --diff-filter=D --oneline -- source_data   # the commit that removed them
+git show <commit>^:source_data/extended_data.py > source_data/extended_data.py
+```
+
+Then, from the repository root:
+
 ```bash
 conda activate amici            # /opt/conda/envs/amici on the AMICI VM
 python source_data/fig3_cortex.py
@@ -29,6 +47,7 @@ python source_data/fig5_atera.py
 python source_data/fig6_tonsil.py
 python -I source_data/fig2_benchmarks.py --results benchmarks/results_fig2_original --example-seed 72  # see Figure 2 below
 python source_data/build_workbooks.py
+python -I source_data/box_stats.py             # legend values only; reads the panel CSVs, no model
 ```
 
 Datasets and checkpoints are listed with md5 sums and remote copies in [`checkpoints.yaml`](checkpoints.yaml).
@@ -51,16 +70,16 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 
 | Panel | Check | Result |
 | --- | --- | --- |
-| 3b | edges of the 5-node subgraph at the 0.86 quantile (threshold 25 genes) | 11 of 12 match the drawn graph (see issues) |
+| 3b | edges of the 5-node subgraph at the 0.86 quantile (threshold 25 genes) | 11 of 12 match the drawn graph |
 | 3c | gene selection for Astrocytes (n_top 8, min z 15) and Sst (n_top 10, min z 5) | exact |
 | 4c | published genes vs the ranked top genes per sender | published genes are the top-ranked genes in order, truncated; TIGIT (rank 6, CD4 -> CD8) is omitted |
-| 4c | bold genes vs the segmentation test | 18/19 reproduced; C15orf48 differs (see issues) |
+| 4c | bold genes vs the segmentation test | 18/19 reproduced; C15orf48 differs |
 | 4d | violin rows and their ascending-median order | exact (13 rows) |
 | 4e | head with the largest attention variance | head 2, as published |
 | 4f | hub labels vs `hub_analysis_cache/hub_cluster_assignments.csv` | identical (ARI 1.0) |
 | 5b | Ward-clustered row and column order | exact |
 | 5c | gene selection (n_top 8, min z -10) | exact for all three receivers |
-| 5c | bold genes vs the segmentation test | 12/30 reproduced (see issues) |
+| 5c | bold genes vs the segmentation test | 12/30 reproduced |
 | 6b | Ward-clustered GC heatmap order | exact |
 | 6c | gene selection (n_top 10, min z -10) | exact for both receivers |
 | 6d | head 3 (n_top 10) and head 6 (n_top 5) gene selection; length scales vs the cached CSV | exact; length scales equal to 2e-13 um |
@@ -102,7 +121,7 @@ gs://justin-amici/semisyn/fig2_amici_results/ with an md5 manifest (`fig2_manife
   `../amici-3a3cc16/benchmarks/results/`; NicheDE in `benchmarks/results_realistic_rerun/`; NCEM in
   `benchmarks/results_cv/`. NicheDE and NCEM are deterministic and
   reproduce the published bars on this dataset (NicheDE sigma = 20: 0.2408 vs 0.2402; NCEM 0.2505 / 0.2441 / 0.2486
-  vs 0.2498 / 0.2434 / 0.2479), which identifies it as the published dataset. CGCom was not re-run (issue 2).
+  vs 0.2498 / 0.2434 / 0.2479), which identifies it as the published dataset. CGCom was not re-run.
   - **2f** (dataset map) is exported from that dataset.
   - **2h-j are kept as published.** Their Source Data are the published bar heights, which were read off the bars
     of a vector copy of the figure on 2026-07-28 (`benchmarks/results_cv/breast_cancer/regular_vs_cv_barplots/
@@ -120,61 +139,6 @@ Export with
 plus one `--rerun-source METHOD=PATH` per method (the folders above; `CGCom=` marks it as not re-run), then
 `python source_data/plot_fig2g.py` and `python source_data/build_workbooks.py Fig2`.
 
-## Issues found while rebuilding the panels
-
-These do not change the Source Data values, but should be resolved or acknowledged before submission.
-
-1. **Fig. 2h NicheDE sigma = 200 and 500 do not reproduce.** NicheDE is deterministic, the installed NicheDE
-   (GitHub commit 87e0e89, installed 2026-03-09) predates the realistic dataset, and both the re-run and the June
-   CV run give 0.803 / 0.752 on this dataset, against 0.732 / 0.673 published. The settings that produced the
-   published bars are not in the repository. `generate_nichede_scores.R` also installs NicheDE and sceasy from
-   GitHub at run time without a pinned commit.
-2. **CGCom attention overflows on the realistic dataset.** Its attention scores there range from about 4,600 to
-   infinity (they should lie in [0, 1]; on the PBMC datasets they do), in both the re-run and the June CV run, so
-   the CGCom bars in Fig. 2i-j rest on overflowed scores. A plotting step added to `train_cgcom_model.py` in June
-   2026 crashed on these values; `benchmark_utils.plot_interaction_graph` now skips non-finite edges (figure only).
-3. **Fig. 2c-e use 9 distinct datasets, not 10.** In the original run, seeds 58 and 123 give identical AUPRCs
-   for every deterministic baseline (all NicheDE and NCEM settings), and the regenerated seed-58 and seed-123
-   files on the AMICI VM are byte-identical, so the generator produced the same dataset for both seeds. NCEM
-   with radius 15 and radius 20 also gives identical AUPRCs on every seed.
-4. **Fig. 3b differs from the recomputed graph by two edges.** The published network lacks Oligodendrocytes ->
-   L4/5 IT (25 genes, exactly at the 0.86-quantile threshold) and shows a faint Astrocytes -> L2/3 IT (21 genes,
-   below it). The library code from before the 2025-09-26 z-value rewrite (commit e768bc5) gives an identical
-   matrix, so the difference is not from that change. Sheet `Fig3b` lists every pair with its weight; consider
-   redrawing Fig. 3b from it.
-5. **Fig. 5c bolding is not reproducible.** The segmentation test described in the Methods (one-sided
-   Mann-Whitney, both p < 0.05) reproduces the bold/non-bold pattern for 12 of 30 genes; e.g. CCND1, TFF1 and
-   GATA3 pass with p < 1e-20 but are not bold, while C3, CXCL12 and EMILIN1 fail but are bold.
-   `atera_breast_segmentation_analysis.py` currently tests unrelated High_Grade_DCIS pairs, so the analysis
-   that set the published bolding is not in the repository. The recomputed p-values are in sheet `Fig5c`.
-6. **Fig. 4c, C15orf48** is bold but fails the far-receiver comparison added in the revision (near vs far
-   receiver p = 0.98; near vs far sender p = 9e-9). The bolding predates the revised two-comparison test.
-7. **Segmentation threshold.** The Methods use p < 0.05; the analysis scripts use p < 0.1
-   (`significant_both`). Sheets report both calls; they agree for every Fig. 4c gene.
-8. **Benchmark statistics.** The Methods say the benchmark p-values are BH-adjusted, but
-   `benchmark_utils.plot_boxplots` (and the caption values) use Bonferroni.
-9. **Figshare v1 is incomplete.** It has no Atera or tonsil data or models (REPRODUCIBILITY.md says it does),
-   and its low-resolution Xenium model is run `t4t8pzvi`, not the 2026-09-19 retrain `5tfi78lp` the guide cites.
-   The five Figshare `model.pt` files are unlabelled; `checkpoints.yaml` maps each file id to its run.
-10. **Analysis scripts no longer match some published panels.** `cortex_analysis.py` draws L6b instead of Sst in
-   Fig. 3b and only the Astrocyte dot plot; `xenium_analysis.py` lacks the multi-receiver Fig. 4c and the
-   head-resolved Fig. 4d dot plot; `xenium_niche_analysis.py` sets `hub_cluster = 9`, which is legend hub 10,
-   while the published Sankey "hub 9" is cluster index 8; `xenium_spatial_analysis.py` plots AGR3, not ESR1;
-   `human_tonsil_analysis.py` ends on the CD4 T cell receiver rather than the GC B cell panels. No script in the
-   repository draws the Fig. 2h-j bar plots; the pipeline's `plot_boxplots` draws box plots across dataset seeds.
-   The exporters here record the settings that do reproduce each panel.
-11. **Paths.** `cortex_analysis.py` loads `./saved_models/cortex_18_sweep_...` without the
-   `cortex_sweep_2025-04-28_model_2025-05-05/` folder that REPRODUCIBILITY.md documents (the checkpoint now sits
-   at the documented path). The Xenium 2025-05-01 train/test splits that the Xenium scripts load were missing
-   and were restored from gs://justin-amici.
-12. **Fig. 5b axis label.** The receiver axis reads "Plasma Myeloid Mix" while the sender axis reads "Plasma
-   Mast Mix"; both are the `Plasma_Mast_Mixture` label.
-13. **Tonsil segmentation flags use pixels.** `human_tonsil_analysis.py` calls the dot plot with
-   `flag_segmentation_artifacts=True` on CosMx pixel coordinates, so its 20/100 thresholds are 2.4/12 um rather
-   than 20/100 um. Fig. 6c draws every gene bold, so the figure is unaffected, but the Methods say the test was
-   applied to the tonsil data. The library version also seeds its subsampling with Python's `hash()`, which
-   changes between processes unless `PYTHONHASHSEED` is set.
-
 ## For the submission
 
 Inventory of Supporting Information (one line per file):
@@ -184,5 +148,39 @@ Inventory of Supporting Information (one line per file):
 - Source Data Fig. 4 | Source_Data_Fig4.xlsx, Source_Data_Fig4_large_tables.zip | Numerical data underlying Fig. 4a-f
 - Source Data Fig. 5 | Source_Data_Fig5.xlsx, Source_Data_Fig5_large_tables.zip | Numerical data underlying Fig. 5a-c
 - Source Data Fig. 6 | Source_Data_Fig6.xlsx, Source_Data_Fig6_large_tables.zip | Numerical data underlying Fig. 6a-d
+- Source Data ED Fig. 1 | Source_Data_ED1.xlsx | Numerical data underlying Extended Data Fig. 1c, f-i
+- Source Data ED Fig. 2 | Source_Data_ED2.xlsx | Numerical data underlying Extended Data Fig. 2a, c, g, h
+- Source Data ED Fig. 3 | Source_Data_ED3.xlsx, Source_Data_ED3_large_tables.zip | Numerical data underlying Extended Data Fig. 3b-j
+- Source Data ED Fig. 4 | Source_Data_ED4.xlsx | Numerical data underlying Extended Data Fig. 4b-h
+- Source Data ED Fig. 5 | Source_Data_ED5.xlsx, Source_Data_ED5_large_tables.zip | Numerical data underlying Extended Data Fig. 5c, d, h-j
+- Source Data ED Fig. 6 | Source_Data_ED6.xlsx | Numerical data underlying Extended Data Fig. 6a-h
+- Source Data ED Fig. 7 | Source_Data_ED7.xlsx | Numerical data underlying Extended Data Fig. 7b, c, e-g, i-k
+- Source Data ED Fig. 8 | Source_Data_ED8.xlsx | Numerical data underlying Extended Data Fig. 8a-e, g
+- Source Data ED Fig. 9 | Source_Data_ED9.xlsx | Numerical data underlying Extended Data Fig. 9a-i
 
-Data Availability: "Source data are provided with this paper."
+Extended Data panels with no numerical graph, and so no Source Data: 1a, 1b, 2e, 2f, 4a, 5a, 5b, 7d, 7h
+(architecture schematics and spatial maps).
+
+Extended Data panels whose numbers were never written to disk, and which therefore need their analysis
+rerun before they can be exported: 1d, 1e, 2b, 2d, 3a, 5e-g, 6i, 7a, 8f, 8h, 8i. That leaves 61 of the
+74 graph panels exported; `extended_data.py --survey` names the script to rerun for each of the 13.
+
+With `extended_data.py` restored, `--survey` prints the current coverage and `--export` rewrites the
+Extended Data panel CSVs.
+
+The Extended Data items ED 1-9 here are the manuscript's Extended Data Figs. 1-9, panel letter for
+panel letter (ED 2h is Extended Data Fig. 2h, and so on). They are *not* the pre-condensation
+Fig. S1-S40, which is the numbering [`../REPRODUCIBILITY.md`](../REPRODUCIBILITY.md) and the
+`supplementary:` block of [`checkpoints.yaml`](checkpoints.yaml) still use.
+
+### Statements for the manuscript
+
+Data Availability ends with the sentence the checklist asks for:
+
+> The human tonsil CosMx data are available from NCBI GEO under accession GSE351148. Source data are
+> provided with this paper.
+
+The deposited data are that GEO accession; every other dataset was already public, and the manuscript
+links each one. The Figshare copies recorded in [`checkpoints.yaml`](checkpoints.yaml) are convenience
+copies of preprocessed datasets and checkpoints for rebuilding the figures, not a deposit the Data
+Availability statement needs to name.

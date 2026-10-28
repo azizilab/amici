@@ -252,19 +252,28 @@ def check_gene_list(label, computed, published):
 def segmentation_tests(adata, labels_key, pairs, near_threshold=20.0, far_threshold=100.0):
     """One-sided Mann-Whitney segmentation-artifact test of xenium/segmentation_analysis.py.
 
-    For each (sender, receiver, genes) pair, in order, receivers within ``near_threshold`` of a sender are
-    compared with receivers and senders at least ``far_threshold`` away, after subsampling all three groups
-    to the smallest size with ``np.random.seed(42 + pair_idx)``. The reported p is the larger of the two
+    For each (sender, receiver, genes) pair, receivers within ``near_threshold`` of a sender are compared
+    with senders and with receivers at least ``far_threshold`` away. The reported p is the larger of the two
     one-sided p-values. Per the Methods, a gene passes (is not attributed to segmentation artifacts, and is
-    printed bold) when both p-values are below 0.05; the analysis scripts used 0.1 (``significant_both``).
+    printed bold) when both p-values are below 0.05. The analysis scripts used 0.1 (``significant_both``)
+    until 2026-10-26, when every segmentation threshold was set to the 0.05 of the Methods; both calls are
+    still exported.
+
+    Every cell in each group is used. Until 2026-10-28 all three groups were subsampled to the smallest of
+    them, which did two kinds of damage. It tied each comparison to a group it does not use: the CAF pairs
+    of Fig. 5c have ~4,500 interacting and ~4,300 distant CAFs but only 18 macrophages or T cells more than
+    100um from a CAF, so the near-vs-distant-receiver test ran at n = 18 instead of n = 4,260 and reported
+    p = 0.23 for C3 where the full data give 1.7e-09. It also made the result depend on the draw: resampling
+    the Endothelial pair over 30 seeds moved PECAM1's receiver p across 0.017-0.634 and flipped four of its
+    seven genes. Mann-Whitney U does not require equal group sizes, so balancing them bought nothing.
     """
     from scipy import sparse, stats
-    from scipy.spatial.distance import cdist
+    from scipy.spatial import cKDTree
 
     X = adata.X.toarray() if sparse.issparse(adata.X) else np.asarray(adata.X)
     coords_all = np.asarray(adata.obsm["spatial"])
     rows = []
-    for pair_idx, (sender_type, receiver_type, genes) in enumerate(pairs):
+    for sender_type, receiver_type, genes in pairs:
         sender_mask = (adata.obs[labels_key] == sender_type).to_numpy()
         receiver_mask = (adata.obs[labels_key] == receiver_type).to_numpy()
         sender_ids = adata.obs_names[sender_mask]
@@ -272,29 +281,23 @@ def segmentation_tests(adata, labels_key, pairs, near_threshold=20.0, far_thresh
         sender_coords = coords_all[sender_mask]
         receiver_coords = coords_all[receiver_mask]
 
-        min_to_senders = cdist(receiver_coords, sender_coords).min(axis=1)
+        # A KD-tree keeps this linear in memory; the full pairwise matrix is tens of GB for the
+        # abundant cell types now that no group is subsampled.
+        min_to_senders, _ = cKDTree(sender_coords).query(receiver_coords, k=1)
         near_receiver_ids = receiver_ids[min_to_senders <= near_threshold]
         far_receiver_ids = receiver_ids[min_to_senders >= far_threshold]
-        min_to_receivers = cdist(sender_coords, receiver_coords).min(axis=1)
+        min_to_receivers, _ = cKDTree(receiver_coords).query(sender_coords, k=1)
         far_sender_ids = sender_ids[min_to_receivers >= far_threshold]
         if min(len(near_receiver_ids), len(far_sender_ids), len(far_receiver_ids)) == 0:
             continue
-
-        np.random.seed(42 + pair_idx)
-        n = min(len(near_receiver_ids), len(far_sender_ids), len(far_receiver_ids))
-        if len(near_receiver_ids) > n:
-            near_receiver_ids = near_receiver_ids[np.random.choice(len(near_receiver_ids), n, replace=False)]
-        if len(far_sender_ids) > n:
-            far_sender_ids = far_sender_ids[np.random.choice(len(far_sender_ids), n, replace=False)]
-        if len(far_receiver_ids) > n:
-            far_receiver_ids = far_receiver_ids[np.random.choice(len(far_receiver_ids), n, replace=False)]
 
         gene_idx = [adata.var_names.get_loc(g) for g in genes]
         near = X[adata.obs_names.get_indexer(near_receiver_ids)][:, gene_idx]
         far_s = X[adata.obs_names.get_indexer(far_sender_ids)][:, gene_idx]
         far_r = X[adata.obs_names.get_indexer(far_receiver_ids)][:, gene_idx]
+        enough = min(len(near_receiver_ids), len(far_sender_ids), len(far_receiver_ids)) > 1
         for i, gene in enumerate(genes):
-            if n > 1:
+            if enough:
                 p_s = stats.mannwhitneyu(near[:, i], far_s[:, i], alternative="greater")[1]
                 p_r = stats.mannwhitneyu(near[:, i], far_r[:, i], alternative="greater")[1]
             else:
@@ -305,8 +308,9 @@ def segmentation_tests(adata, labels_key, pairs, near_threshold=20.0, far_thresh
                     "receiver": receiver_type,
                     "sender": sender_type,
                     "gene": gene,
-                    "segmentation_test_order": pair_idx,
-                    "segmentation_n_cells_per_group": n,
+                    "segmentation_n_near_receivers": len(near_receiver_ids),
+                    "segmentation_n_distant_senders": len(far_sender_ids),
+                    "segmentation_n_distant_receivers": len(far_receiver_ids),
                     "segmentation_p_near_vs_far_sender": p_s,
                     "segmentation_p_near_vs_far_receiver": p_r,
                     "segmentation_p_max": p,
@@ -320,11 +324,14 @@ def segmentation_tests(adata, labels_key, pairs, near_threshold=20.0, far_thresh
 def report_bold_agreement(dots, label):
     """Compare the recomputed segmentation test with the genes printed bold in the figure.
 
-    A gene column is bold when it passes for the sender(s) whose top genes contributed it.
+    A gene column is bold when it passes for *any* of the senders whose top genes contributed it. The
+    label spans the whole column rather than one dot, so a single sender clearing the test is enough
+    for the gene not to count as a suspected segmentation artifact; requiring every sender to clear it
+    would let the least powered pair veto the label.
     """
     tested = dots[dots["gene_selected_for_sender"] & dots["segmentation_p_max"].notna()]
     for col in ["passes_segmentation_test_p_lt_0.05", "passes_segmentation_test_p_lt_0.1"]:
-        passes = tested.groupby(["receiver", "gene"])[col].all()
+        passes = tested.groupby(["receiver", "gene"])[col].any()
         bold = tested.groupby(["receiver", "gene"])["bold_in_figure"].first()
         agree = passes == bold
         print(f"  {label}: test at p < {col.split('_lt_')[1]} reproduces bolding for {agree.sum()}/{len(agree)} genes")

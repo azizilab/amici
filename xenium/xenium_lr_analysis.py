@@ -214,13 +214,9 @@ else:
             far_mask = dist_s2r.min(axis=1) >= SEGMENTATION_FAR_THRESHOLD
             far_idx = np.where(sender_mask)[0][far_mask]
 
-            # Subsample to the smaller group for balanced comparison
-            n = min(len(near_idx), len(far_idx))
-            if n > 0:
-                rng = np.random.RandomState(42)
-                near_idx = rng.choice(near_idx, n, replace=False) if len(near_idx) > n else near_idx
-                far_idx = rng.choice(far_idx, n, replace=False) if len(far_idx) > n else far_idx
-
+            # Both groups are used in full. Mann-Whitney U does not require equal group sizes, and
+            # subsampling to the smaller one made the p-value depend on the draw (see
+            # source_data/_common.py).
             tested_pairs_cache[pair_key] = {"near": near_idx, "far": far_idx}
 
         cache = tested_pairs_cache[pair_key]

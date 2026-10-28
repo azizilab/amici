@@ -94,34 +94,19 @@ for pair_idx, pair_config in enumerate(cell_type_pairs):
         print(f"WARNING: Insufficient cells for analysis in pair: {pair_label}")
         continue
 
-    np.random.seed(42 + pair_idx)
-    min_sample_size = min(len(near_receiver_ids), len(far_sender_ids), len(far_receiver_ids))
+    # Every cell of each group is used. The three groups used to be subsampled to the smallest of
+    # them, which tied each comparison to a group it does not use -- the CAF pairs leave only 18
+    # macrophages or T cells more than 100 units from a CAF, so the near-vs-distant-receiver test ran
+    # at n = 18 rather than n = 4,260 -- and made the p-values depend on the draw. Mann-Whitney U does
+    # not require equal group sizes. See source_data/_common.py.
+    near_receiver_ids_sampled = near_receiver_ids
+    near_distances_sampled = near_distances
+    far_sender_ids_sampled = far_sender_ids
+    far_sender_distances_sampled = far_sender_distances
+    far_receiver_ids_sampled = far_receiver_ids
+    far_receiver_distances_sampled = far_receiver_distances
 
-    if len(near_receiver_ids) > min_sample_size:
-        near_receiver_sample_idx = np.random.choice(len(near_receiver_ids), min_sample_size, replace=False)
-        near_receiver_ids_sampled = near_receiver_ids[near_receiver_sample_idx]
-        near_distances_sampled = near_distances[near_receiver_sample_idx]
-    else:
-        near_receiver_ids_sampled = near_receiver_ids
-        near_distances_sampled = near_distances
-
-    if len(far_sender_ids) > min_sample_size:
-        far_sender_sample_idx = np.random.choice(len(far_sender_ids), min_sample_size, replace=False)
-        far_sender_ids_sampled = far_sender_ids[far_sender_sample_idx]
-        far_sender_distances_sampled = far_sender_distances[far_sender_sample_idx]
-    else:
-        far_sender_ids_sampled = far_sender_ids
-        far_sender_distances_sampled = far_sender_distances
-
-    if len(far_receiver_ids) > min_sample_size:
-        far_receiver_sample_idx = np.random.choice(len(far_receiver_ids), min_sample_size, replace=False)
-        far_receiver_ids_sampled = far_receiver_ids[far_receiver_sample_idx]
-        far_receiver_distances_sampled = far_receiver_distances[far_receiver_sample_idx]
-    else:
-        far_receiver_ids_sampled = far_receiver_ids
-        far_receiver_distances_sampled = far_receiver_distances
-
-    print("\nSubsampled sizes for statistical comparison:")
+    print("\nSample sizes for statistical comparison (all cells, no subsampling):")
     print(f"  Near receivers: {len(near_receiver_ids_sampled)}")
     print(f"  Far receivers: {len(far_receiver_ids_sampled)}")
     print(f"  Far senders: {len(far_sender_ids_sampled)}")

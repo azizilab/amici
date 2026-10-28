@@ -242,6 +242,49 @@ print("=" * 56)
 print(f"Cosine similarity:  {cosine_sim:.4f}  |  null: {perm_cosine.mean():.4f} ± {perm_cosine.std():.4f}  |  z = {cosine_z:.2f}  |  p = {fmt_pval(p_cosine_emp, n_permutations)}")
 print(f"Pearson r:          {r_matrix:.4f}  |  null: {perm_pearson.mean():.4f} ± {perm_pearson.std():.4f}  |  z = {pearson_z:.2f}  |  p = {fmt_pval(p_pearson_emp, n_permutations)}")
 
+# %% Write the numbers behind Extended Data Fig. 5e-g
+import pandas as pd  # noqa: E402
+
+source_data_dir = "figures/lowres_source_data"
+os.makedirs(source_data_dir, exist_ok=True)
+
+# 5e, 5f: the two interaction matrices being compared.
+mat_old_shared.to_csv(os.path.join(source_data_dir, "lowres_highres_aggregated_matrix.csv"))
+mat_new_shared.to_csv(os.path.join(source_data_dir, "lowres_trained_matrix.csv"))
+
+# 5g: the permutation null, the observed statistics and the empirical p-values.
+pd.DataFrame(
+    {
+        "permutation": np.arange(1, n_permutations + 1),
+        "cosine_similarity": perm_cosine,
+        "pearson_r": perm_pearson,
+    }
+).to_csv(os.path.join(source_data_dir, "lowres_permutation_null.csv"), index=False)
+
+pd.DataFrame(
+    [
+        {
+            "metric": "Cosine similarity",
+            "observed": cosine_sim,
+            "null_mean": perm_cosine.mean(),
+            "null_sd": perm_cosine.std(),
+            "z": cosine_z,
+            "empirical_p": p_cosine_emp if p_cosine_emp is not None else f"< {1 / n_permutations}",
+            "n_permutations": n_permutations,
+        },
+        {
+            "metric": "Pearson r",
+            "observed": r_matrix,
+            "null_mean": perm_pearson.mean(),
+            "null_sd": perm_pearson.std(),
+            "z": pearson_z,
+            "empirical_p": p_pearson_emp if p_pearson_emp is not None else f"< {1 / n_permutations}",
+            "n_permutations": n_permutations,
+        },
+    ]
+).to_csv(os.path.join(source_data_dir, "lowres_permutation_statistics.csv"), index=False)
+print(f"[source data] wrote the Extended Data Fig. 5e-g tables to {source_data_dir}")
+
 # %% Plot null distributions vs observed similarity scores
 fig, axes = plt.subplots(1, 2, figsize=(12, 5))
 

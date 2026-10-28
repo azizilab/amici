@@ -211,6 +211,18 @@ for dataset_seed_idx, dataset_seed in enumerate(DATASET_SEEDS):
         if dataset_seed_idx == 0:
             receiver_pr_curves[end_penalty] = {"precision": precision, "recall": recall, "auprc": auprc}
 
+# %% Write the numbers behind the panels before plotting them
+from sweep_source_data import write_sweep_tables  # noqa: E402
+
+write_sweep_tables(
+    base_dir=base_dir,
+    prefix="attention_penalty_analysis",
+    setting_name="attention_penalty_end_value",
+    dataset_seeds=DATASET_SEEDS,
+    results={"gene": gene_pr_results, "neighbor": neighbor_pr_results, "receiver": receiver_pr_results},
+    curves={"gene": gene_pr_curves, "neighbor": neighbor_pr_curves, "receiver": receiver_pr_curves},
+)
+
 # %% Plot PR curves (first dataset seed)
 colors = plt.cm.plasma(np.linspace(0.1, 0.9, len(END_PENALTY_VALUES)))
 task_curves = [
