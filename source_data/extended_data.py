@@ -537,6 +537,29 @@ def _export_one(spec: dict, out_dir: str) -> tuple[str, int]:
     return destination, len(table)
 
 
+XLSX_SHEET_LIMIT = 31
+
+
+def _sheet_name(stem: str, taken: set[str]) -> str:
+    """Name a workbook sheet after its CSV, inside Excel's 31-character limit.
+
+    Truncating the stem is not always enough: ``ED6a_atera_attention_consistency_runs`` and
+    ``..._correlations`` cut to the same 31 characters, and two sheets of one name means the second
+    table silently overwrites the first. The last word is what tells such a pair apart, so a stem
+    whose truncation is already taken keeps that word and loses the characters before it instead.
+    """
+    name = stem[:XLSX_SHEET_LIMIT]
+    if name in taken:
+        tail = stem.rsplit("_", 1)[-1]
+        name = f"{stem[: XLSX_SHEET_LIMIT - len(tail) - 1]}_{tail}"
+    base, suffix = name, 2
+    while name in taken:  # two stems that differ only in the characters dropped above
+        name = f"{base[: XLSX_SHEET_LIMIT - len(str(suffix)) - 1]}_{suffix}"
+        suffix += 1
+    taken.add(name)
+    return name
+
+
 def export() -> None:
     """Write every exportable Extended Data panel into source_data/panels/ED<n>/."""
     import json
@@ -588,12 +611,13 @@ def export() -> None:
                 "ED 7c": "ED 7c (quantile threshold grid) shares the hub assignments in sheet ED7b_hub_cluster_assignments",
             }
             sheets = []
+            taken: set[str] = set()
             readme = [["Figure", titles[number]]]
             for entry in manifest:
                 if entry["file"].endswith(".json"):
                     readme.append([entry["panel"], f"{entry['description']} - {entry['file']} (JSON, in the companion zip)"])
                     continue
-                sheet_name = entry["file"].rsplit(".", 1)[0][:31]
+                sheet_name = _sheet_name(entry["file"].rsplit(".", 1)[0], taken)
                 sheets.append(
                     {
                         "sheet": sheet_name,
