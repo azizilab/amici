@@ -322,11 +322,14 @@ def segmentation_tests(adata, labels_key, pairs, near_threshold=20.0, far_thresh
 def report_bold_agreement(dots, label):
     """Compare the recomputed segmentation test with the genes printed bold in the figure.
 
-    A gene column is bold when it passes for the sender(s) whose top genes contributed it.
+    A gene column is bold when it passes for *any* of the senders whose top genes contributed it. The
+    label spans the whole column rather than one dot, so a single sender clearing the test is enough
+    for the gene not to count as a suspected segmentation artifact; requiring every sender to clear it
+    would let the least powered pair veto the label.
     """
     tested = dots[dots["gene_selected_for_sender"] & dots["segmentation_p_max"].notna()]
     for col in ["passes_segmentation_test_p_lt_0.05", "passes_segmentation_test_p_lt_0.1"]:
-        passes = tested.groupby(["receiver", "gene"])[col].all()
+        passes = tested.groupby(["receiver", "gene"])[col].any()
         bold = tested.groupby(["receiver", "gene"])["bold_in_figure"].first()
         agree = passes == bold
         print(f"  {label}: test at p < {col.split('_lt_')[1]} reproduces bolding for {agree.sum()}/{len(agree)} genes")

@@ -13,7 +13,9 @@ receiver by neighbor contribution, across all of its senders -- a gene can there
 in one subplot when it is a top dot for two different senders, which is what the published panel
 shows. The bolding is the test of the Methods: a gene is bold when the interacting receivers express
 it significantly above both the distant senders and the distant receivers (both one-sided
-Mann-Whitney U p-values below 0.05), which is the same rule Fig. 4c and ED 2h use.
+Mann-Whitney U p-values below 0.05), which is the same rule Fig. 4c and ED 2h use. A gene that is
+labeled twice is bold on both labels when it passes for either sender, so that the least powered
+pair cannot veto the gene's label.
 
 A caveat worth keeping in view: the test has very little power for the rarest receivers. LAMP3+ DCs
 leave 2 to 9 cells per group and IRF7+ DCs 16 to 33, so for those subplots a plain label means the
@@ -98,7 +100,9 @@ print(f"running the segmentation test for {len(pairs)} sender-receiver pairs", f
 seg = C.segmentation_tests(adata, LABELS_KEY, pairs)
 
 labeled = labeled.merge(seg, on=["receiver", "sender", "gene"], how="left")
-labeled["bold_in_figure"] = labeled["passes_segmentation_test_p_lt_0.05"].fillna(False)
+labeled["bold_in_figure"] = (
+    labeled.groupby(["receiver", "gene"])["passes_segmentation_test_p_lt_0.05"].transform("any").fillna(False)
+)
 
 # %% Write the tables
 os.makedirs(OUT_DIR, exist_ok=True)

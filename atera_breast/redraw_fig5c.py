@@ -8,8 +8,9 @@ calls `plot_featurewise_contributions_dotplot` with `mark_segmentation_passing_g
 `segmentation_adata` commented out, so the published dot plots carry no segmentation marking at all;
 the bold labels were applied by hand when the figure was assembled.
 
-They do not agree with the test. Over the 53 gene x sender rows of
-`source_data/panels/Fig5/Fig5c.csv`, the published bolding matches the test at p < 0.05 for only 20.
+They do not agree with the test. Over the 30 gene columns of `source_data/panels/Fig5/Fig5c.csv`,
+the published bolding matches the test at p < 0.05 for only 12 (Endothelial 3/7, CAFs 5/11,
+Luminal DCIS 4/12).
 The Luminal DCIS columns are inverted: CCND1, SLC12A2, EVL, TFF1, DUSP4, GATA3 and C6orf141 all pass
 overwhelmingly (p down to 6e-102) and are not bold, while MUC1 fails (p = 0.15 and 0.35) and is bold.
 
@@ -18,11 +19,12 @@ own legend and the Source Data sheet shipped with the paper.
 
 The bold rule
 -------------
-The test is per sender-gene pair, but a bold label applies to a gene across every sender drawn in its
-panel, so a gene is bold when it passes for *all* of its senders (both one-sided Mann-Whitney U
-p-values below 0.05 against distant senders and distant receivers). The three CAF genes that pass for
-one sender but not the other (MMP2 and ABI3BP for Macrophages, EGR1 for T Cells) are therefore not
-bold; `fig5c_bolding.csv` records the per-pair result either way.
+The test is per sender-gene pair, but a bold label spans a gene's whole column, so a gene is bold
+when it passes for *any* of its senders (both one-sided Mann-Whitney U p-values below 0.05 against
+distant senders and distant receivers). Requiring every sender to clear the test would let the least
+powered pair veto the label: the three CAF genes that pass for one sender but not the other (MMP2 and
+ABI3BP for Macrophages, EGR1 for T Cells) would then leave that panel with no bold label at all.
+`fig5c_bolding.csv` records the per-pair result either way, so the stricter reading can be recovered.
 
 The p-values are read from `source_data/panels/Fig5/Fig5c.csv` rather than recomputed, so the panel
 and the Source Data cannot drift apart. Note that the library's own
@@ -85,7 +87,7 @@ for receiver, senders in DOTPLOTS:
                 "n_senders_tested": len(tested),
                 "n_senders_passing": int(tested[pass_col].sum()),
                 "bold_published": bool(gene_rows["bold_in_figure"].iloc[0]),
-                "bold_redrawn": bool(len(tested) > 0 and tested[pass_col].all()),
+                "bold_redrawn": bool(len(tested) > 0 and tested[pass_col].any()),
                 "max_p_over_senders": tested["segmentation_p_max"].max(),
             }
         )

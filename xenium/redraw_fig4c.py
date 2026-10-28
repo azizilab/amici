@@ -20,8 +20,10 @@ so the panel matches both its own legend and the Source Data sheet shipped with 
 
 The bold rule
 -------------
-A bold label applies to a gene across every sender drawn in its panel, so a gene is bold when it
-passes for all of the senders it was selected for (both one-sided Mann-Whitney U p-values below 0.05).
+A bold label spans a gene's whole column, so a gene is bold when it passes for any of the senders it
+was selected for (both one-sided Mann-Whitney U p-values below 0.05). Every gene of this panel was
+selected for exactly one sender, so the rule makes no difference here; it is written the same way as
+in `atera_breast/redraw_fig5c.py`, where genes are selected for two senders and it does matter.
 The p-values are read from `source_data/panels/Fig4/Fig4c.csv` rather than recomputed, so the panel
 and the Source Data cannot drift apart.
 
@@ -82,7 +84,7 @@ for receiver in RECEIVERS:
                 "n_senders_tested": len(tested),
                 "n_senders_passing": int(tested[pass_col].sum()),
                 "bold_published": bool(gene_rows["bold_in_figure"].iloc[0]),
-                "bold_redrawn": bool(len(tested) > 0 and tested[pass_col].all()),
+                "bold_redrawn": bool(len(tested) > 0 and tested[pass_col].any()),
                 "max_p_over_senders": tested["segmentation_p_max"].max(),
             }
         )

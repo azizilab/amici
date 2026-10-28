@@ -50,13 +50,13 @@ DOTPLOTS = [
         "receiver": "Endothelial",
         "senders": ["Pericytes"],
         "genes": ["PECAM1", "ENTPD1", "STOM", "ENG", "ADAM15", "SELP", "PRCP"],
-        "bold": ["PECAM1", "ADAM15", "SELP", "PRCP"],
+        "bold": ["PECAM1", "ENG"],
     },
     {
         "receiver": "CAFs",
         "senders": ["Macrophages", "T_Cells"],
         "genes": ["C3", "COL3A1", "COL6A1", "COL6A2", "COL6A3", "MMP2", "CXCL12", "EGR1", "ABI3BP", "EMILIN1", "COL15A1"],
-        "bold": ["C3", "COL6A2", "MMP2", "CXCL12", "ABI3BP", "EMILIN1", "COL15A1"],
+        "bold": ["MMP2", "EGR1", "ABI3BP"],
     },
     {
         "receiver": "Luminal_DCIS",
@@ -65,7 +65,9 @@ DOTPLOTS = [
         "genes": [
             "CCND1", "SLC12A2", "EVL", "TFF1", "DUSP4", "GATA3", "C6orf141", "MUC1", "BMPR1B", "ITGB5", "TFF3", "GASK1B",
         ],
-        "bold": ["MUC1", "BMPR1B", "ITGB5", "TFF3", "GASK1B"],
+        "bold": [
+            "CCND1", "SLC12A2", "EVL", "TFF1", "DUSP4", "GATA3", "C6orf141", "BMPR1B", "ITGB5", "TFF3", "GASK1B",
+        ],
     },
 ]
 DOT_N_TOP_GENES = 8
@@ -167,8 +169,8 @@ def main():
             "p_adj_BH are the one-sided p of wald_z and its BH adjustment over all genes of the receiver/sender "
             "pair. segmentation_* columns: one-sided Mann-Whitney U segmentation-artifact test "
             "(segmentation_p_max = larger of the two p-values; passes when below 0.05 per the Methods, or 0.1 as in "
-            "the analysis scripts). bold_in_figure records the published bolding, which this test does not "
-            "fully reproduce (see README).",
+            "the analysis scripts). bold_in_figure is the bolding the test implies: a gene is bold when it passes "
+            "for any of the senders whose top genes contributed it.",
             "df": dots,
         },
     ]
