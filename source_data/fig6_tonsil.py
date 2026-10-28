@@ -41,6 +41,10 @@ PUBLISHED_GC_COLS = ["GC B cell (resting)", "GC B cell (cycling)", "Follicular d
 GC_B = "GC B cell (resting)"
 # Sender order of the dot-plot calls; it sets the column order of the union of top genes.
 GC_SENDERS = ["Tfh cell", "Follicular dendritic cell"]
+# adata.obsm["spatial"] is CenterX/Y_global_px, CosMx global pixels rather than microns, so the
+# segmentation test's 20/100um thresholds have to be converted. The scale is the ratio of the pixel
+# and millimetre coordinates uns["fov_positions"] carries for every FOV.
+UM_PER_PX = 0.120281
 DOTPLOTS = [
     {
         "receiver": GC_B,
@@ -107,6 +111,7 @@ def main():
 
     # ---- 6c ----------------------------------------------------------------------------------------
     dot_tables = []
+    seg_pairs = []
     for spec in DOTPLOTS:
         receiver, senders = spec["receiver"], spec["senders"]
         selected = C.select_dotplot_genes(abl_df, receiver, senders, DOT_N_TOP_GENES, DOT_MIN_SIZE_BY)
@@ -132,7 +137,25 @@ def main():
             g in selected.get(s, []) for s, g in zip(table["sender"], table["gene"], strict=True)
         ]
         dot_tables.append(table)
+        seg_pairs += [(sender, receiver, spec["genes"]) for sender in senders]
     dots = pd.concat(dot_tables, ignore_index=True)
+
+    seg = C.segmentation_tests(
+        adata,
+        labels_key,
+        seg_pairs,
+        near_threshold=20.0 / UM_PER_PX,
+        far_threshold=100.0 / UM_PER_PX,
+    )
+    dots = dots.merge(seg, on=["receiver", "sender", "gene"], how="left")
+    # A bold label spans the gene's whole column, so the gene is bold when it passes for any of the
+    # senders drawn above it, as in Fig. 4c and Fig. 5c.
+    dots["bold_in_figure"] = (
+        dots.groupby(["receiver", "gene"])["passes_segmentation_test_p_lt_0.05"].transform("any").fillna(False)
+    )
+    for receiver, group in dots.groupby("receiver", sort=False):
+        bold = sorted(set(group.loc[group["bold_in_figure"], "gene"]))
+        print(f"  6c {receiver}: bold {len(bold)}/{group['gene'].nunique()} -> {bold}")
 
     # ---- 6d: head-resolved dot plots ---------------------------------------------------------------
     head_tables = []
@@ -214,7 +237,11 @@ def main():
             "description": "Dot plots of downstream genes. Colour = neighbor contribution (normalized expression "
             "units, scale clipped to +/-0.5); size = Wald test statistic (wald_z, labelled Z-value). p_value / "
             "p_adj_BH are the one-sided p of wald_z and its BH adjustment over all genes of the receiver/sender "
-            "pair.",
+            "pair. segmentation_* columns: one-sided Mann-Whitney U segmentation-artifact test "
+            "(segmentation_p_max = larger of the two p-values; passes when below 0.05 per the Methods, or 0.1 as "
+            "in the analysis scripts), run at 20/100um converted to the CosMx pixel coordinates this dataset "
+            "stores. bold_in_figure is the bolding the test implies: a gene is bold when it passes for any of "
+            "the senders drawn above it.",
             "df": dots,
         },
         {
