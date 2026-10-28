@@ -63,10 +63,10 @@ ED1 = [
     Panel(
         "d",
         "Predicted interaction networks vs ground truth",
-        CACHE,
-        ["benchmarks/results_fig2_original"],
+        RECOMPUTE,
+        [],
         "benchmarks/benchmark_utils.py",
-        "edge lists are derivable from the per-seed score CSVs",
+        "the published run kept only PR curves, not the per-method interaction scores the networks are drawn from",
     ),
     Panel("e", "Training and validation loss curves for the baselines", RECOMPUTE, [], "benchmarks/train_*_model.py"),
     Panel(
@@ -325,9 +325,6 @@ EXPORTS: dict[str, list[dict]] = {
     # ED 1
     "1c": [{"glob": "benchmarks/results_fig2_original/3ct_dataset_2way_*/*_task_pr.csv", "dest": "ED1c_pr_curves.csv",
             "key": "source", "mode": "pr_concat"}],
-    # ED 1d: the published run kept only PR curves, not the per-method interaction scores the
-    # networks are drawn from, so this panel needs the benchmark rerun rather than a cached table.
-
     "1f": [{"glob": "benchmarks/results/3ct_dataset_2way_*/*_task_pr.csv", "dest": "ED1f_sweep_pr_curves.csv",
             "key": "source", "mode": "pr_concat"}],
     "1g": [{"src": "source_data/panels/Fig3/Fig3b_full_matrix.csv", "dest": "ED1g_cortex_interaction_matrix.csv"}],
