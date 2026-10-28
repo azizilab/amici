@@ -19,7 +19,8 @@ import numpy as np
 import pandas as pd
 
 matplotlib.use("Agg")
-from matplotlib import cbook  # noqa: E402  (after the Agg backend is set)
+# Imported after the Agg backend is set, so nothing here needs a display.
+from matplotlib import cbook
 
 PANELS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "panels")
 
