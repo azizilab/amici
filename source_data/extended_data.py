@@ -632,7 +632,7 @@ def export() -> None:
             with open(os.path.join(out_dir, "manifest.json"), "w") as handle:
                 json.dump({"figure": f"ED{number}", "provenance": {}, "readme": readme, "sheets": sheets}, handle, indent=2)
 
-    print(f"wrote {len(written)} tables across {len({w['panel'][:5] for w in written})} Extended Data figures")
+    print(f"wrote {len(written)} tables across {len({w['panel'].split()[1][:-1] for w in written})} Extended Data figures")
     for entry in written:
         print(f"  {entry['panel']:7s} {entry['file']:52s} {entry['rows']:>8,} rows")
     if failures:
