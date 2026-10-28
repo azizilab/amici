@@ -2,6 +2,13 @@
 
 This document maps scripts and workflows in this repository to the figures they generate in the AMICI manuscript.
 
+**The `S` numbers below are the pre-condensation supplementary numbering (Fig. S1-S40).** The submitted
+manuscript condenses those panels into nine multi-panel Extended Data items, which it labels Fig. S1-S9,
+so an `S` number here and an `S` number in the paper are different figures. The Extended Data items and
+their panels are enumerated in [`source_data/extended_data.py`](source_data/extended_data.py) (run it
+with `--survey`), and the Source Data for them is under `source_data/panels/ED1` ... `ED9`. Renumbering
+this guide against the submitted figures is still to do.
+
 Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 
 ## Benchmarks

@@ -79,6 +79,7 @@ figure_5:
   model_md5: f53e6ab53c322735193998ecc2db959a
   wandb: {sweep: 25xpxkuk, run: zhtraubt}
   config: reproducibility/atera_breast_config.yaml
+  raw_data: https://www.10xgenomics.com/datasets/atera-wta-ffpe-human-breast-cancer (public)
   remote:
     figshare: not deposited (Figshare v1 predates this model)
     gcs_model: not deposited
@@ -95,6 +96,7 @@ figure_6:
   wandb: {sweep: 0f9rk0na, run: 4303v0zu}
   config: reproducibility/human_tonsil_config.yaml
   coordinate_units: CosMx pixels; 0.12028 um per pixel
+  raw_data: NCBI GEO GSE351148 (public since 2026-10; the accession cited in Data Availability)
   remote:
     figshare: not deposited (Figshare v1 predates this model)
     gcs: not deposited
