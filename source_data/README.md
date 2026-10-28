@@ -168,19 +168,19 @@ rerun before they can be exported: 1d, 1e, 2b, 2d, 3a, 5e-g, 6i, 7a, 8f, 8h, 8i.
 With `extended_data.py` restored, `--survey` prints the current coverage and `--export` rewrites the
 Extended Data panel CSVs.
 
-The Extended Data items ED 1-9 here are the figures the manuscript still labels **Fig. S1-S9**; the
-panel letters agree one for one (ED 2h is the manuscript's Fig. S2h, and so on). They are *not* the
-pre-condensation Fig. S1-S40, which is the numbering [`../REPRODUCIBILITY.md`](../REPRODUCIBILITY.md)
-and the `supplementary:` block of [`checkpoints.yaml`](checkpoints.yaml) still use.
+The Extended Data items ED 1-9 here are the manuscript's Extended Data Figs. 1-9, panel letter for
+panel letter (ED 2h is Extended Data Fig. 2h, and so on). They are *not* the pre-condensation
+Fig. S1-S40, which is the numbering [`../REPRODUCIBILITY.md`](../REPRODUCIBILITY.md) and the
+`supplementary:` block of [`checkpoints.yaml`](checkpoints.yaml) still use.
 
 ### Statements for the manuscript
 
-Data Availability should end with the sentence the checklist asks for, and name every deposit:
+Data Availability ends with the sentence the checklist asks for:
 
-> The human tonsil CosMx data are available from NCBI GEO under accession GSE351148. Preprocessed
-> datasets and the trained AMICI checkpoints behind Figs. 3 and 4 are deposited on Figshare
-> (https://doi.org/10.6084/m9.figshare.31927956). Source data are provided with this paper.
+> The human tonsil CosMx data are available from NCBI GEO under accession GSE351148. Source data are
+> provided with this paper.
 
-The Figshare DOI needs a matching reference-list entry, as the GEO accession already has. Note that the
-Fig. 5 (Atera) and Fig. 6 (tonsil) checkpoints are not on Figshare v1 - see `checkpoints.yaml`, which
-records which artifact sits where.
+The deposited data are that GEO accession; every other dataset was already public, and the manuscript
+links each one. The Figshare copies recorded in [`checkpoints.yaml`](checkpoints.yaml) are convenience
+copies of preprocessed datasets and checkpoints for rebuilding the figures, not a deposit the Data
+Availability statement needs to name.
