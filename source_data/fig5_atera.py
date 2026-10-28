@@ -50,13 +50,14 @@ DOTPLOTS = [
         "receiver": "Endothelial",
         "senders": ["Pericytes"],
         "genes": ["PECAM1", "ENTPD1", "STOM", "ENG", "ADAM15", "SELP", "PRCP"],
-        "bold": ["PECAM1", "ENG"],
+        "bold": ["PECAM1", "ENTPD1", "STOM", "ENG"],
     },
     {
         "receiver": "CAFs",
         "senders": ["Macrophages", "T_Cells"],
         "genes": ["C3", "COL3A1", "COL6A1", "COL6A2", "COL6A3", "MMP2", "CXCL12", "EGR1", "ABI3BP", "EMILIN1", "COL15A1"],
-        "bold": ["MMP2", "EGR1", "ABI3BP"],
+        # Every CAF gene but MMP2 (p = 0.061 against distant receivers) clears both comparisons.
+        "bold": ["C3", "COL3A1", "COL6A1", "COL6A2", "COL6A3", "CXCL12", "EGR1", "ABI3BP", "EMILIN1", "COL15A1"],
     },
     {
         "receiver": "Luminal_DCIS",
@@ -65,6 +66,7 @@ DOTPLOTS = [
         "genes": [
             "CCND1", "SLC12A2", "EVL", "TFF1", "DUSP4", "GATA3", "C6orf141", "MUC1", "BMPR1B", "ITGB5", "TFF3", "GASK1B",
         ],
+        # Every Luminal DCIS gene but MUC1 (p = 0.15 and 0.87 against distant receivers) clears both.
         "bold": [
             "CCND1", "SLC12A2", "EVL", "TFF1", "DUSP4", "GATA3", "C6orf141", "BMPR1B", "ITGB5", "TFF3", "GASK1B",
         ],

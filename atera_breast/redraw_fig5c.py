@@ -9,8 +9,8 @@ calls `plot_featurewise_contributions_dotplot` with `mark_segmentation_passing_g
 the bold labels were applied by hand when the figure was assembled.
 
 They do not agree with the test. Over the 30 gene columns of `source_data/panels/Fig5/Fig5c.csv`,
-the published bolding matches the test at p < 0.05 for only 12 (Endothelial 3/7, CAFs 5/11,
-Luminal DCIS 4/12).
+the published bolding matches the test at p < 0.05 for only 11 (Endothelial 1/7, CAFs 6/11,
+Luminal DCIS 4/12); 25 of the 30 columns pass.
 The Luminal DCIS columns are inverted: CCND1, SLC12A2, EVL, TFF1, DUSP4, GATA3 and C6orf141 all pass
 overwhelmingly (p down to 6e-102) and are not bold, while MUC1 fails (p = 0.15 and 0.35) and is bold.
 
@@ -27,10 +27,10 @@ ABI3BP for Macrophages, EGR1 for T Cells) would then leave that panel with no bo
 `fig5c_bolding.csv` records the per-pair result either way, so the stricter reading can be recovered.
 
 The p-values are read from `source_data/panels/Fig5/Fig5c.csv` rather than recomputed, so the panel
-and the Source Data cannot drift apart. Note that the library's own
-`_get_segmentation_passing_gene_pairs` seeds its subsample with `abs(hash((sender, receiver)))`,
-which is not stable across processes unless PYTHONHASHSEED is set; the exporter's deterministic
-`seed 42 + pair_idx` is used instead.
+and the Source Data cannot drift apart. The exporter's test uses every cell of each group, so there
+is no subsample and no seed; the library's own `_get_segmentation_passing_gene_pairs` still seeds a
+subsample with `abs(hash((sender, receiver)))`, which is not stable across processes unless
+PYTHONHASHSEED is set, and is not used here.
 
 Dot colour, size, gene selection and layout all come from the same library call as the published
 panel, driven by the cached ablation scores, so no model and no GPU are needed.

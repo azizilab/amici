@@ -17,10 +17,12 @@ Mann-Whitney U p-values below 0.05), which is the same rule Fig. 4c and ED 2h us
 labeled twice is bold on both labels when it passes for either sender, so that the least powered
 pair cannot veto the gene's label.
 
-A caveat worth keeping in view: the test has very little power for the rarest receivers. LAMP3+ DCs
-leave 2 to 9 cells per group and IRF7+ DCs 16 to 33, so for those subplots a plain label means the
-comparison could not resolve a difference, not that the gene looks like a segmentation artifact.
-`segmentation_n_cells_per_group` is written out so a reader can see this.
+A caveat worth keeping in view: the rarest receivers still leave few cells to compare, and the group
+that is scarce is usually the distant senders, since a cell type covering the whole section leaves
+almost no sender more than 100um from one. Each comparison now uses every cell it has rather than
+being subsampled to the smallest of the three groups, so a scarce distant-sender group no longer
+throttles the near-vs-distant-receiver comparison. The three group sizes are written out per row so a
+reader can see which comparison is well powered.
 
 Outputs, under `./figures/ed2c_volcano_bolding/`:
 
@@ -113,8 +115,10 @@ labeled.to_csv(os.path.join(OUT_DIR, "ed2c_labeled_genes.csv"), index=False)
 print("\n================ ED 2c: the bolding implied by the test ================")
 for receiver, group in labeled.groupby("receiver", sort=False):
     bold = group[group["bold_in_figure"]]["gene"].tolist()
-    counts = group["segmentation_n_cells_per_group"].dropna()
-    span = f"{int(counts.min())}-{int(counts.max())}" if len(counts) else "n/a"
-    print(f"{receiver:16s} (n per group {span:>9s})  bold {len(bold):2d}/{len(group):2d}: {bold}")
+    near = group["segmentation_n_near_receivers"].dropna()
+    far_s = group["segmentation_n_distant_senders"].dropna()
+    far_r = group["segmentation_n_distant_receivers"].dropna()
+    span = f"{int(near.min())}/{int(far_s.min())}/{int(far_r.min())}" if len(near) else "n/a"
+    print(f"{receiver:16s} (near/far_s/far_r {span:>18s})  bold {len(bold):2d}/{len(group):2d}: {bold}")
 
 print(f"\nWrote {OUT_DIR}/ed2c_labeled_genes.csv and {OUT_DIR}/ed2c_volcano_all_genes.csv")

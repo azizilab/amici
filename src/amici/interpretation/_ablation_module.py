@@ -746,13 +746,13 @@ class AMICIAblationModule:
             if len(near_receiver_indices) < 2 or len(far_sender_indices) < 2 or len(far_receiver_indices) < 2:
                 continue
 
-            n_sample = min(len(near_receiver_indices), len(far_sender_indices), len(far_receiver_indices))
-            rng_seed = abs(hash((str(sender_type), str(receiver_type)))) % (2**32)
-            rng = np.random.default_rng(rng_seed)
-            near_receiver_indices = rng.choice(near_receiver_indices, size=n_sample, replace=False)
-            far_sender_indices = rng.choice(far_sender_indices, size=n_sample, replace=False)
-            far_receiver_indices = rng.choice(far_receiver_indices, size=n_sample, replace=False)
-
+            # Every cell of each group is used. The three groups used to be subsampled to the
+            # smallest of them, seeded by ``hash((sender, receiver))``, which did three kinds of
+            # damage: it tied each comparison to a group it does not use, where a sender type that
+            # is sparse next to a tissue-wide receiver leaves almost no distant senders and starves
+            # the near-vs-distant-receiver test; it made the result depend on the draw; and because
+            # ``hash`` is salted per process, the draw itself was not reproducible without
+            # PYTHONHASHSEED. Mann-Whitney U does not require equal group sizes.
             near_expr = adata.X[near_receiver_indices][:, gene_indices]
             far_sender_expr = adata.X[far_sender_indices][:, gene_indices]
             far_receiver_expr = adata.X[far_receiver_indices][:, gene_indices]
