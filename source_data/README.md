@@ -1,8 +1,10 @@
 # Source Data for the AMICI manuscript
 
 The Source Data workbooks are what the submission attaches: 14 workbooks and 5 companion zips, one per
-figure, deposited at `gs://justin-amici/source_data/`. They are built artifacts, so `output/` and
-`panels/` stay out of the branch (see [`.gitignore`](.gitignore)).
+figure, deposited at `gs://justin-amici/source_data/`. The per-panel tables they were assembled from --
+118 CSVs and the 14 `manifest.json` files that map each one to its sheet -- are deposited beside them
+under `gs://justin-amici/source_data/panels/`, one folder per figure. They are built artifacts, so
+`output/` and `panels/` stay out of the branch (see [`.gitignore`](.gitignore)).
 
 This file is the record of where the numbers in each sheet came from. The exporters that produced them
 were removed from the branch once the workbooks were final, and [Reproducing](#reproducing) says how to
