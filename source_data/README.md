@@ -1,9 +1,15 @@
 # Source Data for the AMICI manuscript
 
-This folder rebuilds the Source Data workbooks for the main figures from the exact datasets and AMICI
-checkpoints that produced them. Each exporter verifies the dataset and `model.pt` by md5, recomputes every
-plotted quantity, checks it against the published panel, and writes per-panel CSVs. `build_workbooks.py`
-then assembles one workbook per figure.
+The Source Data workbooks are what the submission attaches: 14 workbooks and 5 companion zips, one per
+figure, deposited at `gs://justin-amici/source_data/`. They are built artifacts, so `output/` and
+`panels/` stay out of the branch (see [`.gitignore`](.gitignore)).
+
+This file is the record of where the numbers in each sheet came from. The exporters that produced them
+were removed from the branch once the workbooks were final, and [Reproducing](#reproducing) says how to
+get them back. Each one verified the dataset and `model.pt` by md5, recomputed every plotted quantity,
+checked it against the published panel and wrote per-panel CSVs, which `build_workbooks.py` assembled
+into one workbook per figure. `_common.py` stays, because `xenium/ed2c_volcano_bolding.py` imports its
+gene-table and segmentation-test helpers.
 
 | Output | Contents |
 | --- | --- |
@@ -20,6 +26,16 @@ sweep/run, training config, Figshare and bucket locations) and a description of 
 Figure 1 is a schematic and has no Source Data.
 
 ## Reproducing
+
+The exporters are no longer in the branch. Find the commit that removed them and restore the ones you
+need first:
+
+```bash
+git log --diff-filter=D --oneline -- source_data   # the commit that removed them
+git show <commit>^:source_data/extended_data.py > source_data/extended_data.py
+```
+
+Then, from the repository root:
 
 ```bash
 conda activate amici            # /opt/conda/envs/amici on the AMICI VM
@@ -145,10 +161,10 @@ Extended Data panels with no numerical graph, and so no Source Data: 1a, 1b, 2e,
 
 Extended Data panels whose numbers were never written to disk, and which therefore need their analysis
 rerun before they can be exported: 1d, 1e, 2b, 2d, 3a, 5e-g, 6i, 7a, 8f, 8h, 8i. That leaves 61 of the
-74 graph panels exported; `--survey` names the script to rerun for each of the 13.
+74 graph panels exported; `extended_data.py --survey` names the script to rerun for each of the 13.
 
-Run `python source_data/extended_data.py --survey` for the current coverage and
-`--export` to rewrite the Extended Data panel CSVs.
+With `extended_data.py` restored, `--survey` prints the current coverage and `--export` rewrites the
+Extended Data panel CSVs.
 
 The Extended Data items ED 1-9 here are the figures the manuscript still labels **Fig. S1-S9**; the
 panel letters agree one for one (ED 2h is the manuscript's Fig. S2h, and so on). They are *not* the

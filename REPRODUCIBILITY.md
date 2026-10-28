@@ -5,9 +5,10 @@ This document maps scripts and workflows in this repository to the figures they 
 **The `S` numbers below are the pre-condensation supplementary numbering (Fig. S1-S40).** The submitted
 manuscript condenses those panels into nine multi-panel Extended Data items, which it labels Fig. S1-S9,
 so an `S` number here and an `S` number in the paper are different figures. The Extended Data items and
-their panels are enumerated in [`source_data/extended_data.py`](source_data/extended_data.py) (run it
-with `--survey`), and the Source Data for them is under `source_data/panels/ED1` ... `ED9`. Renumbering
-this guide against the submitted figures is still to do.
+their panels are enumerated in `source_data/extended_data.py`, which is no longer in the branch; see
+[`source_data/README.md`](source_data/README.md) for the panel inventory, for how to restore that script
+and for where the built workbooks are deposited. Renumbering this guide against the submitted figures is
+still to do.
 
 Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 
