@@ -75,15 +75,14 @@ DATASETS = {
     },
     "human_tonsil": {
         "title": "CosMx human tonsil",
-        "data": os.path.join(AMICI_DIR, "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad"),
-        "model": os.path.join(
-            AMICI_DIR,
-            "human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26",
-            "human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26",
-        ),
+        # The seed-40 retrain without RPL21/22/32/34/37, UBA52, FAU and MALAT1 (992 genes), which is
+        # what human_tonsil_analysis.py draws the tonsil figure from. The 1000-gene model and its cache
+        # are still in source_data/checkpoints.yaml under figure_6, for the panels as first published.
+        "data": os.path.join(AMICI_DIR, "human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad"),
+        "model": os.path.join(AMICI_DIR, "human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40"),
         "cache": os.path.join(
             AMICI_DIR,
-            "human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
+            "human_tonsil/figures/human_tonsil_no_ribo_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
         ),
         "labels_key": "celltype_manual_fine",
         "section_key": None,
