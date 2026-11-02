@@ -37,7 +37,7 @@ by_figure_prefix: by_figure
 figures:
   - id: fig1
     title: Figure 1 - AMICI overview
-    panels: 1a-d
+    panels: 1a-c
     scripts: []
     note: Schematic. No data, no checkpoint, no Source Data.
     assets: []
@@ -98,7 +98,14 @@ figures:
     title: Figure 3 - MERFISH mouse cortex
     panels: 3a-c
     scripts:
-      - cortex/cortex_analysis.py
+      - cortex/cortex_analysis.py (3a, 3b, 3c)
+    note: >-
+      One script draws the whole figure, one block per panel: visualize_spatial_distribution for 3a,
+      the "Fig. 3b interaction graph" block for 3b, and one dot plot block per receiver for 3c -
+      Astrocytes (senders L2/3 IT and Oligo) and Sst (L2/3 IT and L4/5 IT). Two of those blocks are
+      newer than the published figure: the Sst dot plot had no code at all, and the 3b block carries
+      the published node set, which the cell_type_sub of the exploratory blocks above it does not
+      (it has L6b, which the panel does not draw, and omits Sst).
     assets:
       - kind: dataset
         object: cortex/data/cortex_processed_2025-04-28.h5ad
@@ -123,9 +130,21 @@ figures:
     title: Figure 4 - Xenium breast cancer
     panels: 4a-f
     scripts:
-      - xenium/xenium_analysis.py
-      - xenium/xenium_niche_analysis.py
-      - xenium/segmentation_analysis.py
+      - xenium/xenium_analysis.py (4a, 4b, 4c, 4e)
+      - xenium/xenium_spatial_analysis.py (4d)
+      - xenium/xenium_subtyping_analysis.py (4d, supporting subpopulation analysis)
+      - xenium/xenium_niche_analysis.py (4f)
+      - xenium/segmentation_analysis.py (the test behind 4c's bold genes)
+      - xenium/redraw_fig4c.py (4c bold gene labels)
+    note: >-
+      4c is three dot plots, one block per receiver - M1 macrophages, CD8 T cells and invasive tumor
+      - each drawn over the same three senders (CD4 T cells, CD8 T cells, invasive tumor; a receiver
+      is not ablated against itself) and over all heads. The head-4 single-sender ablation block
+      above them is exploratory and draws no panel. The bottom of 4e is the CD4 to CD8 T cell genes
+      resolved per head, one block for head 4 and one for head 5; the panel draws GNLY, CAVIN2, SELL
+      and LTB out of the genes those blocks select. Both panels' blocks are newer than the published
+      figure. The bold gene labels of 4c were applied by hand at assembly, so no main-script block
+      produces them; redraw_fig4c.py recomputes them from the segmentation test.
     assets:
       - kind: dataset
         object: xenium/data/xenium_sample1_filtered_2025-05-01.h5ad
@@ -160,7 +179,15 @@ figures:
     title: Figure 5 - Atera breast cancer
     panels: 5a-c
     scripts:
-      - atera_breast/atera_breast_analysis.py
+      - atera_breast/atera_breast_analysis.py (5a, 5b, 5c)
+      - atera_breast/atera_breast_segmentation_analysis.py (the test behind 5c's bold genes)
+      - atera_breast/redraw_fig5c.py (5c bold gene labels)
+    note: >-
+      5c is three dot plots, one block per receiver: Endothelial (sender Pericytes), CAFs
+      (Macrophages and T cells) and Luminal DCIS (Myoepithelial and CAFs). The first two blocks are
+      newer than the published figure; only the Luminal DCIS dot plot had code. The bold gene labels
+      were applied by hand at assembly, so no main-script block produces them; redraw_fig5c.py
+      recomputes them from the segmentation test.
     assets:
       - kind: dataset
         object: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
@@ -197,7 +224,8 @@ figures:
     title: Figure 6 - CosMx human tonsil
     panels: 6a-d
     scripts:
-      - human_tonsil/human_tonsil_analysis.py
+      - human_tonsil/human_tonsil_analysis.py (6a, 6b, 6c, 6d)
+      - human_tonsil/redraw_fig6c.py (6c bold gene labels)
     note: >-
       Every panel comes from the no-ribosomal retrain, not the published 1000-gene model. 6a is drawn
       from the dataset alone; the held-out model-selection region it marks is the test split. 6b-d
