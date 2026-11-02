@@ -198,18 +198,21 @@ figures:
     panels: 6a-d
     scripts:
       - human_tonsil/human_tonsil_analysis.py
-    deferred: true
     note: >-
-      Deferred at the author's request on 2026-11-02: the tonsil version behind Figure 6 is still
-      being edited, so this figure gets no manifest yet. Everything it might draw on is deposited all
-      the same -- the published 1000-gene dataset with its train/test splits and its model, the
-      HumanTonsil_annotated_clean.h5ad the preprocessing starts from, the no-ribosomal dataset and
-      splits, and all three no-ribosomal retrain seeds (40, 101 and 102) under
-      human_tonsil/saved_models/human_tonsil_no_ribo_retrain/ -- and source_data/checkpoints.yaml
-      records the first two groups. Build this manifest once the panel set is settled. The Extended
-      Data items that use tonsil assets (ED 3c, 6a-c, 7b, 8j, 10f, 10g) are deposited and carry the
-      same caveat.
-    assets: []
+      Every panel comes from the no-ribosomal retrain, not the published 1000-gene model. 6a is drawn
+      from the dataset alone; the held-out model-selection region it marks is the test split. 6b-d
+      need the seed-40 checkpoint: the interaction graph and both clustermaps are built from the
+      all-cell-type ablation scores, which the script caches under
+      figures/human_tonsil_no_ribo_analysis/cached_ablation_scores/ and recomputes from the
+      checkpoint when the cache is absent (2.1 GB, not deposited), and the dot plots and length
+      scales are computed per receiver cell type. The published 1000-gene dataset and model are
+      still deposited: ED 6a compares the two models, and ED 7b, 10f and 10g use the published one.
+      HumanTonsil_annotated_clean.h5ad, the file the preprocessing starts from, and the two further
+      retrain seeds (101 and 102) are deposited as well, under human_tonsil/data/ and
+      human_tonsil/saved_models/human_tonsil_no_ribo_retrain/.
+    assets:
+      - {ref: tonsil_no_ribo_data, panels: "6a-d"}
+      - {ref: tonsil_no_ribo_model, panels: "6b-d"}
 
   - id: ed1
     title: Extended Data Fig. 1 - architecture, benchmark diagnostics, Xenium reproducibility
@@ -358,15 +361,16 @@ figures:
       - human_tonsil/human_tonsil_fibroblast_attention_de.py (6b, 6c)
     note: >-
       6a compares the tonsil model retrained without the five ribosomal-protein genes, UBA52, FAU
-      and MALAT1 against the published 1000-gene model, so it needs both checkpoints and both
-      datasets. 6b and 6c split the fibroblasts by the attention CD4 T cells assign them and need
-      only the retrained model. The retrained seed-40 checkpoint and the no-ribosomal dataset and
-      splits are deposited under human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/
-      and human_tonsil/data/, as the Figure 6 and tonsil_main_model notes record; they do not yet
-      have catalog entries of their own, so only the original model is referenced below.
+      and MALAT1 against the published 1000-gene model, so it is the one panel in the manuscript
+      that needs both checkpoints and both datasets at once. It reads each model's cached
+      all-cell-type ablation scores and recomputes them from the checkpoint when absent. 6b and 6c
+      split the fibroblasts by the attention CD4 T cells assign them and need the retrained model
+      only.
     assets:
       - {ref: tonsil_main_data, panels: "6a"}
       - {ref: tonsil_main_model, panels: "6a"}
+      - {ref: tonsil_no_ribo_data, panels: "6a-c"}
+      - {ref: tonsil_no_ribo_model, panels: "6a-c"}
 
   - id: ed7
     title: Extended Data Fig. 7 - model selection, attention stability, hyperparameter sensitivity
@@ -596,6 +600,32 @@ catalog:
       The published 1000-gene tonsil model. W&B sweep 0f9rk0na, run 4303v0zu. The no-ribosomal retrain
       that human_tonsil_analysis.py now loads is deposited at
       human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt.
+
+  tonsil_no_ribo_data:
+    kind: dataset
+    object: human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad
+    repo_path: human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad
+    local: human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad
+    md5: 5deb0af78f2b9b98276428d2df19be04
+    note: >-
+      The tonsil dataset Figure 6 is built from: the published 1000-gene panel with the five
+      ribosomal-protein genes, UBA52, FAU and MALAT1 removed and the counts renormalized, leaving
+      992 genes. Built by human_tonsil/human_tonsil_no_ribo_retrain.py from
+      human_tonsil_filtered_2026-07-25.h5ad. The train and test splits sit beside it as
+      human_tonsil_filtered_no_ribo_train_2026-07-25.h5ad and ..._test_2026-07-25.h5ad; 6a marks the
+      test split as the held-out region and retraining needs both, so they are deposited too.
+
+  tonsil_no_ribo_model:
+    kind: checkpoint
+    object: human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt
+    repo_path: human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt
+    local: human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt
+    md5: b06237db3d38002ee7fd4da74197c5b2
+    note: >-
+      The model Figure 6 reports, and the one human_tonsil_analysis.py loads. Retrained by
+      human_tonsil/human_tonsil_no_ribo_retrain.py at the hyperparameters of the published
+      1000-gene model (W&B sweep 0f9rk0na, run 4303v0zu). Seeds 101 and 102 are deposited beside it
+      as retraining replicates and are not used by any panel.
 
   tonsil_seed_sweep:
     kind: checkpoint
