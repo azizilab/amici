@@ -173,8 +173,9 @@ rerun before they can be exported: 1d, 1e, 2b, 2d, 3a, 5e-g, 6i, 7a, 8f, 8h, 8i.
 With `extended_data.py` restored, `--survey` prints the current coverage and `--export` rewrites the
 Extended Data panel CSVs.
 
-The Extended Data items ED 1-9 here are the manuscript's Extended Data Figs. 1-9, panel letter for
-panel letter (ED 2h is Extended Data Fig. 2h, and so on). They are *not* the pre-condensation
+The Extended Data items ED 1-10 here are the manuscript's Extended Data Figs. 1-10, panel letter for
+panel letter (ED 2h is Extended Data Fig. 2h, and so on). ED 6 was inserted for the no-ribosomal
+tonsil retrain, shifting what were ED 6-9 to ED 7-10. They are *not* the pre-condensation
 Fig. S1-S40, which is the numbering [`../REPRODUCIBILITY.md`](../REPRODUCIBILITY.md) and the
 `supplementary:` block of [`checkpoints.yaml`](checkpoints.yaml) still use.
 

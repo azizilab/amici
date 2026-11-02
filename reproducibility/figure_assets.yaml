@@ -26,8 +26,9 @@
 #   md5        recorded md5 of the object (directories record md5s in the manifest instead)
 #   note       anything a reader needs to know before using it
 #
-# Extended Data numbering is the submitted numbering: ED 1-9 are the manuscript's Extended Data
-# Figs. 1-9, panel letter for panel letter. It is NOT the pre-condensation Fig. S1-S40 numbering that
+# Extended Data numbering is the submitted numbering: ED 1-10 are the manuscript's Extended Data
+# Figs. 1-10, panel letter for panel letter. ED 6 was inserted for the no-ribosomal tonsil retrain,
+# shifting the previous ED 6-9 to 7-10. It is NOT the pre-condensation Fig. S1-S40 numbering that
 # REPRODUCIBILITY.md and the `supplementary:` block of source_data/checkpoints.yaml still use.
 
 # Where the per-figure folders go inside the store that --store names.
@@ -206,8 +207,8 @@ figures:
       splits, and all three no-ribosomal retrain seeds (40, 101 and 102) under
       human_tonsil/saved_models/human_tonsil_no_ribo_retrain/ -- and source_data/checkpoints.yaml
       records the first two groups. Build this manifest once the panel set is settled. The Extended
-      Data items that use tonsil assets (ED 3c, 6b, 7j, 9f, 9g) are deposited and carry the same
-      caveat.
+      Data items that use tonsil assets (ED 3c, 6a-c, 7b, 8j, 10f, 10g) are deposited and carry the
+      same caveat.
     assets: []
 
   - id: ed1
@@ -350,90 +351,108 @@ figures:
       - {ref: xenium_lowres_model_march, panels: "5f"}
 
   - id: ed6
-    title: Extended Data Fig. 6 - model selection, attention stability, hyperparameter sensitivity
-    panels: 6a-i
+    title: Extended Data Fig. 6 - no-ribosomal tonsil retrain, T zone fibroblast chemokines
+    panels: 6a-c
     scripts:
-      - atera_breast/atera_breast_attention_consistency.py (6a)
-      - human_tonsil/human_tonsil_attention_consistency.py (6b)
-      - benchmarks/sensitivity_scripts/test_region_composition_diagnostic.py (6c, 6d)
-      - benchmarks/sensitivity_scripts/value_penalty_analysis.py (6e)
-      - benchmarks/sensitivity_scripts/attention_penalty_analysis.py (6f)
-      - benchmarks/sensitivity_scripts/head_analysis.py (6g)
-      - benchmarks/sensitivity_scripts/neighbor_analysis.py (6h)
-      - xenium/xenium_null_z_distribution.py (6i)
+      - human_tonsil/human_tonsil_no_ribo_compare.py (6a)
+      - human_tonsil/human_tonsil_fibroblast_attention_de.py (6b, 6c)
     note: >-
-      6a and 6b are the only panels that need a whole sweep rather than one checkpoint: both scripts
+      6a compares the tonsil model retrained without the five ribosomal-protein genes, UBA52, FAU
+      and MALAT1 against the published 1000-gene model, so it needs both checkpoints and both
+      datasets. 6b and 6c split the fibroblasts by the attention CD4 T cells assign them and need
+      only the retrained model. The retrained seed-40 checkpoint and the no-ribosomal dataset and
+      splits are deposited under human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/
+      and human_tonsil/data/, as the Figure 6 and tonsil_main_model notes record; they do not yet
+      have catalog entries of their own, so only the original model is referenced below.
+    assets:
+      - {ref: tonsil_main_data, panels: "6a"}
+      - {ref: tonsil_main_model, panels: "6a"}
+
+  - id: ed7
+    title: Extended Data Fig. 7 - model selection, attention stability, hyperparameter sensitivity
+    panels: 7a-i
+    scripts:
+      - atera_breast/atera_breast_attention_consistency.py (7a)
+      - human_tonsil/human_tonsil_attention_consistency.py (7b)
+      - benchmarks/sensitivity_scripts/test_region_composition_diagnostic.py (7c, 7d)
+      - benchmarks/sensitivity_scripts/value_penalty_analysis.py (7e)
+      - benchmarks/sensitivity_scripts/attention_penalty_analysis.py (7f)
+      - benchmarks/sensitivity_scripts/head_analysis.py (7g)
+      - benchmarks/sensitivity_scripts/neighbor_analysis.py (7h)
+      - xenium/xenium_null_z_distribution.py (7i)
+    note: >-
+      7a and 7b are the only panels that need a whole sweep rather than one checkpoint: both scripts
       walk the local wandb/ directory, join each run's summary to its saved model and compare attention
       across runs. The full sweeps are deposited, together with each run's wandb-summary.json and
       config.yaml - the two files collect_sweep_runs() reads - so the panels can be rebuilt without the
-      350 MB of W&B logs. 6c-h train their own models inside the sensitivity scripts. 6i needs a rerun.
+      350 MB of W&B logs. 7c-h train their own models inside the sensitivity scripts. 7i needs a rerun.
     assets:
-      - {ref: atera_main_data, panels: "6a"}
-      - {ref: atera_sweep, panels: "6a"}
-      - {ref: atera_wandb, panels: "6a"}
-      - {ref: tonsil_main_data, panels: "6b"}
-      - {ref: tonsil_selection_sweep, panels: "6b"}
-      - {ref: tonsil_wandb, panels: "6b"}
-      - {ref: xenium_main_data, panels: "6i"}
-      - {ref: xenium_main_model, panels: "6i"}
-
-  - id: ed7
-    title: Extended Data Fig. 7 - threshold sensitivity, hub stability, multi-scale interactions, monotonicity
-    panels: 7a-k
-    scripts:
-      - benchmarks/length_scale_task/sensitivity_test.py (7a)
-      - xenium/xenium_niche_analysis.py (7b, 7c)
-      - benchmarks/sensitivity_scripts/2_phase/ (7e, 7f)
-      - benchmarks/sensitivity_scripts/unimodal_two_phase/ (7g, 7i)
-      - human_tonsil/human_tonsil_empirical_distance_expression.py (7j)
-      - benchmarks/make_monotonicity_figure.py (7k)
-    note: >-
-      7d and 7h are spatial maps. 7a needs a rerun. 7e-g and 7i are two-phase and unimodal
-      semisynthetic studies that generate their data and train their models internally. 7j reads the
-      tonsil dataset directly and needs no checkpoint. 7k reads figures/monotonicity/monotonicity_by_pair.csv,
-      which benchmarks/make_monotonicity_figure.py writes from the per-dataset analyses.
-    assets:
-      - {ref: xenium_main_data, panels: "7b, 7c"}
-      - {ref: xenium_main_model, panels: "7b, 7c"}
-      - {ref: tonsil_main_data, panels: "7j"}
+      - {ref: atera_main_data, panels: "7a"}
+      - {ref: atera_sweep, panels: "7a"}
+      - {ref: atera_wandb, panels: "7a"}
+      - {ref: tonsil_main_data, panels: "7b"}
+      - {ref: tonsil_selection_sweep, panels: "7b"}
+      - {ref: tonsil_wandb, panels: "7b"}
+      - {ref: xenium_main_data, panels: "7i"}
+      - {ref: xenium_main_model, panels: "7i"}
 
   - id: ed8
-    title: Extended Data Fig. 8 - attention variants, neighbor occlusion, negative controls
-    panels: 8a-i
+    title: Extended Data Fig. 8 - threshold sensitivity, hub stability, multi-scale interactions, monotonicity
+    panels: 8a-k
     scripts:
-      - benchmarks/sensitivity_scripts/amici_variants (8a, 8b, 8c, 8d)
-      - benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py (8e, 8f)
-      - benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py (8g)
-      - benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py (8h, 8i)
+      - benchmarks/length_scale_task/sensitivity_test.py (8a)
+      - xenium/xenium_niche_analysis.py (8b, 8c)
+      - benchmarks/sensitivity_scripts/2_phase/ (8e, 8f)
+      - benchmarks/sensitivity_scripts/unimodal_two_phase/ (8g, 8i)
+      - human_tonsil/human_tonsil_empirical_distance_expression.py (8j)
+      - benchmarks/make_monotonicity_figure.py (8k)
+    note: >-
+      8d and 8h are spatial maps. 8a needs a rerun. 8e-g and 8i are two-phase and unimodal
+      semisynthetic studies that generate their data and train their models internally. 8j reads the
+      tonsil dataset directly and needs no checkpoint. 8k reads figures/monotonicity/monotonicity_by_pair.csv,
+      which benchmarks/make_monotonicity_figure.py writes from the per-dataset analyses.
+    assets:
+      - {ref: xenium_main_data, panels: "8b, 8c"}
+      - {ref: xenium_main_model, panels: "8b, 8c"}
+      - {ref: tonsil_main_data, panels: "8j"}
+
+  - id: ed9
+    title: Extended Data Fig. 9 - attention variants, neighbor occlusion, negative controls
+    panels: 9a-i
+    scripts:
+      - benchmarks/sensitivity_scripts/amici_variants (9a, 9b, 9c, 9d)
+      - benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py (9e, 9f)
+      - benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py (9g)
+      - benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py (9h, 9i)
     note: >-
       Every panel is semisynthetic. The scripts generate their own PBMC and realistic datasets and
       train the variant and occlusion models internally under benchmarks/sensitivity_scripts/saved_models/,
-      so this figure needs no deposited checkpoint or dataset. 8f, 8h and 8i need a rerun: the PR curves
+      so this figure needs no deposited checkpoint or dataset. 9f, 9h and 9i need a rerun: the PR curves
       are drawn from memory and only the AUPRC summaries are written.
     assets: []
 
-  - id: ed9
-    title: Extended Data Fig. 9 - noise, multiple-testing family, spatial dependence, stromal exclusion
-    panels: 9a-i
+  - id: ed10
+    title: Extended Data Fig. 10 - noise, multiple-testing family, spatial dependence, stromal exclusion
+    panels: 10a-i
     scripts:
-      - benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py (9a)
-      - benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py (9b, 9d, 9f)
-      - benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py (9c, 9e, 9g)
-      - xenium/xenium_stromal_bleeding_analysis.py (9h, 9i)
+      - benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py (10a)
+      - benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py (10b, 10d, 10f)
+      - benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py (10c, 10e, 10g)
+      - xenium/xenium_stromal_bleeding_analysis.py (10h, 10i)
     note: >-
-      9a is semisynthetic and self-contained. 9b-g run the same two analyses over all three real
+      10a is semisynthetic and self-contained. 10b-g run the same two analyses over all three real
       datasets, so this figure needs the Xenium, Atera and tonsil models together. Both scripts reuse
       each dataset's cached all-cell-type ablation scores when present and recompute them from the
       checkpoint otherwise; the caches are 1.4-3 GB each and are not deposited.
     assets:
-      - {ref: xenium_main_data, panels: "9b, 9c, 9h, 9i"}
-      - {ref: xenium_main_model, panels: "9b, 9c, 9h, 9i"}
-      - {ref: xenium_stromal_data, panels: "9h, 9i"}
-      - {ref: xenium_stromal_model, panels: "9h, 9i"}
-      - {ref: atera_main_data, panels: "9d, 9e"}
-      - {ref: atera_main_model, panels: "9d, 9e"}
-      - {ref: tonsil_main_data, panels: "9f, 9g"}
-      - {ref: tonsil_main_model, panels: "9f, 9g"}
+      - {ref: xenium_main_data, panels: "10b, 10c, 10h, 10i"}
+      - {ref: xenium_main_model, panels: "10b, 10c, 10h, 10i"}
+      - {ref: xenium_stromal_data, panels: "10h, 10i"}
+      - {ref: xenium_stromal_model, panels: "10h, 10i"}
+      - {ref: atera_main_data, panels: "10d, 10e"}
+      - {ref: atera_main_model, panels: "10d, 10e"}
+      - {ref: tonsil_main_data, panels: "10f, 10g"}
+      - {ref: tonsil_main_model, panels: "10f, 10g"}
 
 # Assets shared by several figures, referenced above as {ref: <name>}. The staging script merges a
 # catalog entry with the per-figure `panels` and `note` overrides, and uploads each object once.
