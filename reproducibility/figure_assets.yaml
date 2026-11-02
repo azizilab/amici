@@ -200,11 +200,14 @@ figures:
     deferred: true
     note: >-
       Deferred at the author's request on 2026-11-02: the tonsil version behind Figure 6 is still
-      being edited, so this figure gets no manifest yet. The published 1000-gene dataset and model and
-      the no-ribosomal retrain are already deposited under human_tonsil/ and are
-      recorded in source_data/checkpoints.yaml; build this manifest once the panel set is settled.
-      The Extended Data items that use tonsil assets (ED 3c, 6b, 7j, 9f, 9g) are deposited and carry
-      the same caveat.
+      being edited, so this figure gets no manifest yet. Everything it might draw on is deposited all
+      the same -- the published 1000-gene dataset with its train/test splits and its model, the
+      HumanTonsil_annotated_clean.h5ad the preprocessing starts from, the no-ribosomal dataset and
+      splits, and all three no-ribosomal retrain seeds (40, 101 and 102) under
+      human_tonsil/saved_models/human_tonsil_no_ribo_retrain/ -- and source_data/checkpoints.yaml
+      records the first two groups. Build this manifest once the panel set is settled. The Extended
+      Data items that use tonsil assets (ED 3c, 6b, 7j, 9f, 9g) are deposited and carry the same
+      caveat.
     assets: []
 
   - id: ed1
