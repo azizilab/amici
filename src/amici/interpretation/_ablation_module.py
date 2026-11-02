@@ -14,7 +14,7 @@ import torch
 import wandb
 from anndata import AnnData
 from matplotlib.lines import Line2D
-from scipy.spatial.distance import cdist
+from scipy.spatial import cKDTree
 from scipy.stats import mannwhitneyu, norm
 from scvi import REGISTRY_KEYS
 from statsmodels.stats.multitest import multipletests
@@ -698,6 +698,7 @@ class AMICIAblationModule:
         far_threshold=100.0,
         pval_threshold=0.05,
         coord_obsm_key="spatial",
+        compare_near_senders=False,
     ):
         """Return sender-gene pairs that pass the segmentation artifact test.
 
@@ -706,9 +707,16 @@ class AMICIAblationModule:
         ``pval_threshold``), so its elevated expression is unlikely to be a segmentation artifact.
         Pairs that pass are therefore the ones that are NOT potential artifacts; the Methods
         describe this as rejecting the null hypothesis in both comparisons.
+
+        With ``compare_near_senders``, interacting receivers must also exceed the senders lying
+        within ``near_threshold`` of a receiver. The two comparisons above pass a gene that only
+        the senders bordering the receiver express, such as CCL19 and CCL21 from T-zone
+        fibroblasts next to CD4 T cells in the tonsil: distant senders and distant receivers both
+        lack it, and spillover puts it in the interacting receivers. Spillover leaves those
+        receivers below the senders they border, which this third comparison detects.
         """
         if adata is None:
-            raise ValueError("segmentation_adata must be provided when mark_segmentation_passing_genes=True.")
+            raise ValueError("segmentation_adata must be provided to run the segmentation artifact test.")
         if coord_obsm_key not in adata.obsm:
             raise KeyError(f"{coord_obsm_key!r} not found in segmentation_adata.obsm.")
         if self._labels_key not in adata.obs:
@@ -722,7 +730,12 @@ class AMICIAblationModule:
         coords = np.asarray(adata.obsm[coord_obsm_key])
         receiver_coords = coords[receiver_mask.to_numpy()]
         receiver_indices = np.flatnonzero(receiver_mask.to_numpy())
+        receiver_tree = cKDTree(receiver_coords)
         passing_pairs = set()
+
+        def dense_expression(cell_indices, gene_indices):
+            expression = adata.X[cell_indices][:, gene_indices]
+            return np.asarray(expression.toarray() if hasattr(expression, "toarray") else expression)
 
         for sender_type, genes in genes_by_sender.items():
             genes = [gene for gene in genes if gene in adata.var_names]
@@ -736,14 +749,17 @@ class AMICIAblationModule:
             gene_indices = [adata.var_names.get_loc(gene) for gene in genes]
             sender_coords = coords[sender_mask.to_numpy()]
             sender_indices = np.flatnonzero(sender_mask.to_numpy())
-            receiver_to_sender = cdist(receiver_coords, sender_coords)
-            sender_to_receiver = receiver_to_sender.T
-
-            min_receiver_to_sender = receiver_to_sender.min(axis=1)
+            # Nearest-neighbour distances from KD-trees: the full receiver x sender distance matrix
+            # runs to tens of GB for tissue-wide cell types (18 GB for tonsil CD4 T cells x fibroblasts).
+            min_receiver_to_sender = cKDTree(sender_coords).query(receiver_coords, k=1)[0]
+            min_sender_to_receiver = receiver_tree.query(sender_coords, k=1)[0]
             near_receiver_indices = receiver_indices[min_receiver_to_sender <= near_threshold]
             far_receiver_indices = receiver_indices[min_receiver_to_sender >= far_threshold]
-            far_sender_indices = sender_indices[sender_to_receiver.min(axis=1) >= far_threshold]
-            if len(near_receiver_indices) < 2 or len(far_sender_indices) < 2 or len(far_receiver_indices) < 2:
+            far_sender_indices = sender_indices[min_sender_to_receiver >= far_threshold]
+            comparison_indices = [far_sender_indices, far_receiver_indices]
+            if compare_near_senders:
+                comparison_indices.append(sender_indices[min_sender_to_receiver <= near_threshold])
+            if len(near_receiver_indices) < 2 or any(len(indices) < 2 for indices in comparison_indices):
                 continue
 
             # Every cell of each group is used. The three groups used to be subsampled to the
@@ -753,33 +769,76 @@ class AMICIAblationModule:
             # the near-vs-distant-receiver test; it made the result depend on the draw; and because
             # ``hash`` is salted per process, the draw itself was not reproducible without
             # PYTHONHASHSEED. Mann-Whitney U does not require equal group sizes.
-            near_expr = adata.X[near_receiver_indices][:, gene_indices]
-            far_sender_expr = adata.X[far_sender_indices][:, gene_indices]
-            far_receiver_expr = adata.X[far_receiver_indices][:, gene_indices]
-            if hasattr(near_expr, "toarray"):
-                near_expr = near_expr.toarray()
-            if hasattr(far_sender_expr, "toarray"):
-                far_sender_expr = far_sender_expr.toarray()
-            if hasattr(far_receiver_expr, "toarray"):
-                far_receiver_expr = far_receiver_expr.toarray()
-            near_expr = np.asarray(near_expr)
-            far_sender_expr = np.asarray(far_sender_expr)
-            far_receiver_expr = np.asarray(far_receiver_expr)
+            near_expr = dense_expression(near_receiver_indices, gene_indices)
+            comparison_exprs = [dense_expression(indices, gene_indices) for indices in comparison_indices]
 
             for idx, gene in enumerate(genes):
-                _, near_vs_sender_pval = mannwhitneyu(
-                    near_expr[:, idx],
-                    far_sender_expr[:, idx],
-                    alternative="greater",
-                )
-                _, near_vs_receiver_pval = mannwhitneyu(
-                    near_expr[:, idx],
-                    far_receiver_expr[:, idx],
-                    alternative="greater",
-                )
-                if near_vs_sender_pval < pval_threshold and near_vs_receiver_pval < pval_threshold:
+                pvals = [
+                    mannwhitneyu(near_expr[:, idx], comparison_expr[:, idx], alternative="greater")[1]
+                    for comparison_expr in comparison_exprs
+                ]
+                if max(pvals) < pval_threshold:
                     passing_pairs.add((str(sender_type), str(gene)))
         return passing_pairs
+
+    def _get_dotplot_top_genes(
+        self,
+        ct_scores_df,
+        cell_type,
+        color_by,
+        size_by,
+        n_top_genes,
+        min_size_by,
+        segmentation_kwargs=None,
+    ):
+        """Top genes per sender for the dotplot, as index labels of ``ct_scores_df`` keyed by sender type.
+
+        Without ``segmentation_kwargs`` this is the original selection: the ``n_top_genes`` positive
+        genes with the highest ``color_by``, of which those failing the p-value or ``min_size_by``
+        filter are then dropped, so a sender can show fewer than ``n_top_genes``. With
+        ``segmentation_kwargs`` (keyword arguments of ``_get_segmentation_passing_gene_pairs``) the
+        filters come first and genes flagged by the segmentation artifact test are skipped, so each
+        sender shows its ``n_top_genes`` highest-ranked genes that pass.
+        """
+        top_genes_per_ct = {}
+        gene_names = ct_scores_df["gene"].astype(str)
+        for ct_name in self._cell_types:
+            if ct_name == cell_type:
+                continue
+            colname = f"{ct_name}_{color_by}"
+            # Filter for positive neighbor contribution scores
+            diff_filter = ct_scores_df[f"{ct_name}_diff"] > 0
+            pval_filter = ct_scores_df[f"{ct_name}_nl10_pval_adj"] > -np.log10(0.05)
+            size_by_filter = ct_scores_df[f"{ct_name}_{size_by}"] > min_size_by
+            if segmentation_kwargs is None:
+                top_genes_per_ct[ct_name] = (
+                    ct_scores_df[diff_filter][colname]
+                    .astype(float)
+                    .nlargest(n_top_genes)[size_by_filter][pval_filter]
+                    .index
+                )
+                continue
+
+            ranked = (
+                ct_scores_df[diff_filter & pval_filter & size_by_filter][colname]
+                .astype(float)
+                .sort_values(ascending=False)
+                .index
+            )
+            # Test down the ranking a batch at a time, stopping once enough genes pass.
+            kept = []
+            for start in range(0, len(ranked), n_top_genes):
+                batch = ranked[start : start + n_top_genes]
+                passing = self._get_segmentation_passing_gene_pairs(
+                    genes_by_sender={ct_name: gene_names.loc[batch].tolist()},
+                    receiver_type=cell_type,
+                    **segmentation_kwargs,
+                )
+                kept.extend(idx for idx in batch if (str(ct_name), gene_names.loc[idx]) in passing)
+                if len(kept) >= n_top_genes:
+                    break
+            top_genes_per_ct[ct_name] = pd.Index(kept[:n_top_genes])
+        return top_genes_per_ct
 
     @staticmethod
     def _mark_segmentation_passing_gene_pairs(dotplot_fig, passing_pairs):
@@ -827,6 +886,8 @@ class AMICIAblationModule:
         segmentation_far_threshold=100.0,
         segmentation_pval_threshold=0.05,
         segmentation_coord_obsm_key="spatial",
+        exclude_segmentation_flagged_genes=False,
+        segmentation_compare_near_senders=False,
     ):
         """Plots a dotplot of the top genes by color_by and size_by for a given cell type and head index.
 
@@ -848,12 +909,19 @@ class AMICIAblationModule:
             mark_segmentation_passing_genes (bool, optional): Whether to mark the top sender-gene pairs that PASS the
                 segmentation artifact test, i.e. those unlikely to be segmentation artifacts. The marked pairs are the
                 ones figure legends describe as not flagged as potential segmentation artifacts.
-            segmentation_adata (AnnData, optional): AnnData used for segmentation testing when mark_segmentation_passing_genes is True.
+            segmentation_adata (AnnData, optional): AnnData used for segmentation testing when
+                mark_segmentation_passing_genes or exclude_segmentation_flagged_genes is True.
             segmentation_near_threshold (float, optional): Maximum receiver-to-sender distance for near receivers.
             segmentation_far_threshold (float, optional): Minimum sender-to-receiver distance for far senders.
             segmentation_pval_threshold (float, optional): Mann-Whitney U p-value threshold below which a gene passes
-                each of the two comparisons.
+                each of the comparisons.
             segmentation_coord_obsm_key (str, optional): obsm key containing spatial coordinates for segmentation testing.
+            exclude_segmentation_flagged_genes (bool, optional): Whether to skip sender-gene pairs that fail the
+                segmentation artifact test when choosing each sender's top genes, so each sender shows its
+                n_top_genes highest-ranked passing genes. A gene chosen for one sender is still drawn for the others.
+            segmentation_compare_near_senders (bool, optional): Whether the segmentation artifact test also requires
+                interacting receivers to exceed senders within segmentation_near_threshold of a receiver (see
+                _get_segmentation_passing_gene_pairs).
         """
         assert color_by in [
             "z_value",
@@ -876,24 +944,26 @@ class AMICIAblationModule:
         cell_type = self._ablation_scores_df["cell_type"].unique()[0] if cell_type is None else cell_type
         head_idx = self._ablation_scores_df["head_idx"].unique()[0]
 
-        top_genes_per_ct = {}
-
         size_by_cols = [f"{ct_name}_{size_by}" for ct_name in self._cell_types if ct_name != cell_type]
         color_by_cols = [f"{ct_name}_{color_by}" for ct_name in self._cell_types if ct_name != cell_type]
         ct_scores_df = self._ablation_scores_df[self._ablation_scores_df["cell_type"] == cell_type]
-        for colname in color_by_cols:
-            ct_name = colname.replace(f"_{color_by}", "")
-            # Filter for positive neighbor contribution scores
-            diff_filter = ct_scores_df[f"{ct_name}_diff"] > 0
-            pval_filter = ct_scores_df[f"{ct_name}_nl10_pval_adj"] > -np.log10(0.05)
-            size_by_filter = ct_scores_df[f"{ct_name}_{size_by}"] > min_size_by
-            top_genes_idx = (
-                ct_scores_df[diff_filter][colname]
-                .astype(float)
-                .nlargest(n_top_genes)[size_by_filter][pval_filter]
-                .index
-            )
-            top_genes_per_ct[ct_name] = top_genes_idx
+        segmentation_kwargs = {
+            "adata": segmentation_adata,
+            "near_threshold": segmentation_near_threshold,
+            "far_threshold": segmentation_far_threshold,
+            "pval_threshold": segmentation_pval_threshold,
+            "coord_obsm_key": segmentation_coord_obsm_key,
+            "compare_near_senders": segmentation_compare_near_senders,
+        }
+        top_genes_per_ct = self._get_dotplot_top_genes(
+            ct_scores_df,
+            cell_type,
+            color_by,
+            size_by,
+            n_top_genes,
+            min_size_by,
+            segmentation_kwargs=segmentation_kwargs if exclude_segmentation_flagged_genes else None,
+        )
 
         all_top_genes = []
         for genes in top_genes_per_ct.values():
@@ -940,11 +1010,7 @@ class AMICIAblationModule:
             segmentation_passing_pairs = self._get_segmentation_passing_gene_pairs(
                 genes_by_sender=top_gene_names_by_sender,
                 receiver_type=cell_type,
-                adata=segmentation_adata,
-                near_threshold=segmentation_near_threshold,
-                far_threshold=segmentation_far_threshold,
-                pval_threshold=segmentation_pval_threshold,
-                coord_obsm_key=segmentation_coord_obsm_key,
+                **segmentation_kwargs,
             )
 
         head_idx_str = f"head {head_idx}" if head_idx is not None else "all heads"
