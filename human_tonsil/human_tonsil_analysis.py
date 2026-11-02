@@ -11,6 +11,11 @@ import seaborn as sns
 from amici import AMICI
 from amici.interpretation._ablation_module import AMICIAblationModule
 
+# Keep SVG labels as real <text> elements rather than glyph outlines. Matplotlib's default
+# ("path") traces every character as a vector shape, which the figure editor then imports as
+# unselectable paths, so gene names cannot be restyled or bolded when the panels are assembled.
+plt.rcParams["svg.fonttype"] = "none"
+
 # %% Seed everything
 seed = 40
 pl.seed_everything(seed)
@@ -256,6 +261,13 @@ plt.savefig(f"{figures_dir}/human_tonsil_interaction_weight_clustermap.png", dpi
 plt.savefig(f"{figures_dir}/human_tonsil_interaction_weight_clustermap.svg", dpi=300, bbox_inches="tight")
 plt.show()
 
+# On the no-ribosomal matrix the row order below (GC B resting, GC B cycling, follicular dendritic
+# cell, macrophage) is the same under ward, average, complete, single and centroid linkage, so it
+# is not an artefact of the linkage choice. It differs from the 1000-gene model, where the two GC B
+# rows clustered together and four of those five methods put the follicular dendritic cell and
+# macrophage rows first; there GC B resting's row was flat across the subset (297/290/288) and here
+# it is peaked (360/259/335), which leaves it the last row to join. The column order is the same
+# for both models under every method.
 g = sns.clustermap(
     interaction_weight_matrix_sub_df,
     method="ward",
@@ -287,6 +299,31 @@ ablation_residuals.plot_interaction_directed_graph(
     palette=CELL_TYPE_PALETTE,
     save_svg=True,
     save_dir=figures_dir,
+)
+
+# %% Fig. 6b interaction graph
+# The published panel shows seven cell types, not the four of cell_type_sub, which belong to the
+# clustermap subset above. The circular layout walks the list counter-clockwise from three
+# o'clock, so this order is the one the panel's hand-placed cell type labels sit at; changing it
+# moves every node and leaves the labels pointing at the wrong vertices.
+fig6b_cell_types = [
+    "GC B cell (resting)",
+    "CD4 T cell",
+    "Tfh cell",
+    "Macrophage (C1Q+)",
+    "Macrophage (GPNMB+)",
+    "Follicular dendritic cell",
+    "Fibroblast",
+]
+fig6b_dir = os.path.join(figures_dir, "fig6b")
+os.makedirs(fig6b_dir, exist_ok=True)
+ablation_residuals.plot_interaction_directed_graph(
+    cell_type_sub=fig6b_cell_types,
+    significance_threshold=0.05,
+    weight_threshold=weight_threshold,
+    palette=CELL_TYPE_PALETTE,
+    save_svg=True,
+    save_dir=fig6b_dir,
 )
 
 # %% Compute and plot variance scores for heads
@@ -442,6 +479,43 @@ plot_length_scale_distribution_um(
     palette=CELL_TYPE_PALETTE,
     save_dir=figures_dir,
     output_prefix="human_tonsil_all_heads",
+    show=True,
+)
+
+# %% Fig. 6d: the head-4 fibroblast -> CD4 T cell interaction
+# Head 4 is the one head whose fibroblast -> CD4 T cell radius sits in the tens of microns, the
+# range a chemokine gradient acts over; the contact heads are an order of magnitude shorter. The
+# panel pairs that radius with head 4's own ablation dot plot, where CCR7 is the receiver gene,
+# which is the pairing the earlier two-head version could not support.
+fig6d_dir = os.path.join(figures_dir, "fig6d")
+os.makedirs(fig6d_dir, exist_ok=True)
+
+# Head-specific ablation: every other head is zeroed, then the sender is masked within head 4, so
+# the contributions are the ones carried by this head alone rather than by the whole model.
+fig6d_ablation = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type=receiver_ct,
+    head_idx=head_idx,
+    ablated_neighbor_ct_sub=sender_cts,
+    compute_z_value=True,
+)
+fig6d_ablation.plot_featurewise_contributions_dotplot(
+    cell_type=receiver_ct,
+    **{**dotplot_kwargs, "save_dir": fig6d_dir},
+)
+
+# The head-4 median radius is about 27 um, which the 150 px (18 um) window of the diagnostic plot
+# above would clip; 50 um leaves the whole distribution visible.
+plot_length_scale_distribution_um(
+    counterfactual_attention_patterns=counterfactual_attention_patterns,
+    head_idxs=[head_idx],
+    sender_types=sender_cts,
+    attention_threshold=0.1,
+    sample_threshold=0.01,
+    max_length_scale_px=50 / cosmx_pixel_size_um,
+    palette=CELL_TYPE_PALETTE,
+    save_dir=fig6d_dir,
+    output_prefix=f"fig6d_head_{head_idx}",
     show=True,
 )
 
