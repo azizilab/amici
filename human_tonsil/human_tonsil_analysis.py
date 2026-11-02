@@ -292,7 +292,6 @@ ablation_residuals.plot_interaction_directed_graph(
 # %% Compute and plot variance scores for heads
 expl_variance_scores = model.get_expl_variance_scores(
     adata,
-    cell_type_sub=cell_type_sub,
     run_permutation_test=False,
 )
 expl_variance_scores.plot_explained_variance_barplot(
