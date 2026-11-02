@@ -18,25 +18,22 @@ pl.seed_everything(seed)
 # %% Load data
 labels_key = "celltype_manual_fine"
 data_date = "2026-07-25"
-model_date = "2026-07-26"
 cosmx_pixel_size_um = 0.12028
-adata = sc.read_h5ad(f"./data/human_tonsil_filtered_{data_date}.h5ad")
-adata_train = sc.read_h5ad(f"./data/human_tonsil_filtered_train_{data_date}.h5ad")
-adata_test = sc.read_h5ad(f"./data/human_tonsil_filtered_test_{data_date}.h5ad")
+# The filtered data without the five RPL genes, UBA52, FAU and MALAT1, renormalized; built by
+# human_tonsil_no_ribo_retrain.py from human_tonsil_filtered_{data_date}.h5ad.
+adata = sc.read_h5ad(f"./data/human_tonsil_filtered_no_ribo_{data_date}.h5ad")
+adata_train = sc.read_h5ad(f"./data/human_tonsil_filtered_no_ribo_train_{data_date}.h5ad")
+adata_test = sc.read_h5ad(f"./data/human_tonsil_filtered_no_ribo_test_{data_date}.h5ad")
 
-figures_dir = "./figures/human_tonsil_analysis"
+figures_dir = "./figures/human_tonsil_no_ribo_analysis"
 os.makedirs(figures_dir, exist_ok=True)
 ablation_cache_dir = os.path.join(figures_dir, "cached_ablation_scores")
 os.makedirs(ablation_cache_dir, exist_ok=True)
 
-saved_models_dir = f"saved_models/human_tonsil_sweep_{data_date}_model_{model_date}"
-wandb_run_id = "4303v0zu"
-wandb_sweep_id = "0f9rk0na"
-model_seed = seed
-model_path = os.path.join(
-    saved_models_dir,
-    f"human_tonsil_{model_seed}_sweep_{wandb_sweep_id}_{wandb_run_id}_params_{model_date}",
-)
+# Seed-40 model trained by human_tonsil_no_ribo_retrain.py at the hyperparameters of wandb sweep
+# 0f9rk0na run 4303v0zu, which was the model on all 1000 genes
+# (saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26).
+model_path = "saved_models/human_tonsil_no_ribo_retrain/seed_40"
 model_path = os.environ.get("HUMAN_TONSIL_AMICI_MODEL_DIR", model_path)
 
 CELL_TYPE_PALETTE = dict(
@@ -368,25 +365,38 @@ ablation_ct_residuals.plot_featurewise_contributions_heatmap(
     save_dir=figures_dir,
 )
 
-# %%
-ablation_ct_residuals.plot_featurewise_contributions_dotplot(
-    cell_type=receiver_ct,
-    mark_segmentation_passing_genes=True,
-    segmentation_adata=adata,
+# %% Fig. 6c dot plots: each sender's top 10 genes, skipping segmentation-flagged genes
+dotplot_kwargs = {
+    "segmentation_adata": adata,
     # adata.obsm["spatial"] holds CosMx global pixels, not microns, so the 20/100 um thresholds of
     # the Methods have to be converted. Left at the library defaults they would select receivers
     # within 2.4 um and senders beyond 12 um, which leaves single-digit interacting-receiver groups.
-    segmentation_near_threshold=20.0 / cosmx_pixel_size_um,
-    segmentation_far_threshold=100.0 / cosmx_pixel_size_um,
-    color_by="diff",
-    size_by="z_value",
-    n_top_genes=10,
-    min_size_by=-10,
-    step=20,
-    save_svg=True,
-    save_png=True,
-    save_dir=figures_dir,
+    "segmentation_near_threshold": 20.0 / cosmx_pixel_size_um,
+    "segmentation_far_threshold": 100.0 / cosmx_pixel_size_um,
+    "exclude_segmentation_flagged_genes": True,
+    # The two Methods comparisons pass fibroblast CCL19 and CCL21 in CD4 T cells: T-zone fibroblasts
+    # express them where they border CD4 T cells and distant fibroblasts do not, so the spillover
+    # beats both distant groups. It does not beat the fibroblasts the receivers border.
+    "segmentation_compare_near_senders": True,
+    "color_by": "diff",
+    "size_by": "z_value",
+    "n_top_genes": 10,
+    "min_size_by": -10,
+    "step": 20,
+    "save_svg": True,
+    "save_png": True,
+    "save_dir": figures_dir,
+}
+ablation_ct_residuals.plot_featurewise_contributions_dotplot(cell_type=receiver_ct, **dotplot_kwargs)
+
+gc_b_receiver_ct = "GC B cell (resting)"
+gc_b_ablation_residuals = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type=gc_b_receiver_ct,
+    ablated_neighbor_ct_sub=["Tfh cell", "Follicular dendritic cell"],
+    compute_z_value=True,
 )
+gc_b_ablation_residuals.plot_featurewise_contributions_dotplot(cell_type=gc_b_receiver_ct, **dotplot_kwargs)
 
 # %% Compute counterfactual attention patterns for a query cell type
 counterfactual_attention_patterns = model.get_counterfactual_attention_patterns(
@@ -421,10 +431,11 @@ for idx in range(model.module.n_heads):
         save_dir=figures_dir,
     )
 
-# %%
+# %% Heads 3 and 2 are this model's long (~28-30 um) and short (~9-13 um) FDC / Tfh -> GC B cell
+# (resting) heads, the two with a median radius in (0, 50] um; the 1000-gene model's were 3 and 6.
 plot_length_scale_distribution_um(
     counterfactual_attention_patterns=counterfactual_attention_patterns,
-    head_idxs=[3, 6],
+    head_idxs=[3, 2],
     sender_types=sender_cts,
     attention_threshold=0.1,
     sample_threshold=0.01,
