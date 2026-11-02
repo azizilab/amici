@@ -82,7 +82,8 @@ figure_5:
   raw_data: https://www.10xgenomics.com/datasets/atera-wta-ffpe-human-breast-cancer (public)
   remote:
     figshare: not deposited (Figshare v1 predates this model)
-    gcs_model: not deposited
+    # Model uploaded 2026-11-02; its bucket md5 matches model_md5.
+    gcs_model: gs://justin-amici/atera_breast/saved_models/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
     gcs_data: gs://justin-amici/atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
   derived_caches:
     all_cell_type_ablation: atera_breast/figures/atera_breast_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
@@ -91,6 +92,10 @@ figure_6:
   dataset: human_tonsil (CosMx 1k)
   data: human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
   data_md5: 8a7e318a95e517942fda74a584eeb597
+  train_md5: bf6ee333317bd3865d9eb8008967552a  # human_tonsil_filtered_train_2026-07-25.h5ad
+  test_md5: 602fae3d62ee877f4ed10895ad4f3588  # human_tonsil_filtered_test_2026-07-25.h5ad
+  source: human_tonsil/data/HumanTonsil_annotated_clean.h5ad  # human_tonsil_preprocess.py input
+  source_md5: 160697a8189923b3f4beff10f2fd5a8d
   model: human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt
   model_md5: e12cc39256feed3781ef711cc463b07a
   wandb: {sweep: 0f9rk0na, run: 4303v0zu}
@@ -99,7 +104,12 @@ figure_6:
   raw_data: NCBI GEO GSE351148 (public since 2026-10; the accession cited in Data Availability)
   remote:
     figshare: not deposited (Figshare v1 predates this model)
-    gcs: not deposited
+    # Uploaded 2026-11-02 as single (non-composite) objects; every bucket md5 matches the local md5 above.
+    gcs_model: gs://justin-amici/human_tonsil/saved_models/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt
+    gcs_data: gs://justin-amici/human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
+    gcs_train: gs://justin-amici/human_tonsil/data/human_tonsil_filtered_train_2026-07-25.h5ad
+    gcs_test: gs://justin-amici/human_tonsil/data/human_tonsil_filtered_test_2026-07-25.h5ad
+    gcs_source: gs://justin-amici/human_tonsil/data/HumanTonsil_annotated_clean.h5ad
   derived_caches:
     all_cell_type_ablation: human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
   no_ribo_retrain:

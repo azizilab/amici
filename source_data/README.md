@@ -63,8 +63,8 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 | 2 | semisynthetic PBMC (10 seeds) and realistic breast cancer | per-seed `amici_*_best_model` from the original Snakemake run | in `fig2_manifest.txt` | gs://justin-amici/semisyn/fig2_amici_results/ (PBMC only) |
 | 3 | `cortex_processed_2025-04-28.h5ad` | `plm73bmg` / `xrtcnlt0` | `76eadfaa...` | Figshare 63409695; bucket |
 | 4 | `xenium_sample1_filtered_2025-05-01.h5ad` | `g3mucw4s` / `te7pkv3z` | `c118e838...` | Figshare 63409710; bucket |
-| 5 | `atera_breast_filtered_2026-07-22.h5ad` | `25xpxkuk` / `zhtraubt` | `f53e6ab5...` | local only |
-| 6 | `human_tonsil_filtered_2026-07-25.h5ad` | `0f9rk0na` / `4303v0zu` | `e12cc392...` | local only |
+| 5 | `atera_breast_filtered_2026-07-22.h5ad` | `25xpxkuk` / `zhtraubt` | `f53e6ab5...` | bucket |
+| 6 | `human_tonsil_filtered_2026-07-25.h5ad` | `0f9rk0na` / `4303v0zu` | `e12cc392...` | bucket |
 
 ## How each panel was checked against the manuscript
 
