@@ -445,6 +445,17 @@ Stability of attention scores across models trained over varying hyperparameters
 
 Some of the analyses above depend on pretrained AMICI models and preprocessed datasets. The table below lists each artifact required to reproduce the figures. All datasets and models are available on [Figshare](https://doi.org/10.6084/m9.figshare.31927956).
 
+**Per figure.** [`reproducibility/figure_assets.yaml`](reproducibility/figure_assets.yaml) maps every figure of the manuscript -- main figures and Extended Data Figs. 1-9 -- to the checkpoints and datasets it needs, which panels need each one, and the script that draws it. Each asset is named by its path relative to the root of the deposit, which is the same path it has in this repository, so one name identifies it in any copy of the deposit. [`reproducibility/stage_figure_assets.py`](reproducibility/stage_figure_assets.py) builds the deposit from that file: one folder per figure under `by_figure/`, each with a `MANIFEST.yaml` and a `fetch.sh` that downloads that figure's assets into the paths the scripts below expect.
+
+```bash
+# DEPOSIT is the root of the deposit you are reading from -- the Figshare record, or a staging copy.
+gsutil cp $DEPOSIT/by_figure/fig4/fetch.sh .   # from the repository root
+bash fetch.sh $DEPOSIT
+python xenium/xenium_analysis.py
+```
+
+Two things that table does not cover: Figure 2's original per-seed semisynthetic datasets, which the run did not keep, and the derived caches (all-cell-type ablation scores, hub caches), which the analyses recompute from the checkpoint. The per-figure manifests say so panel by panel. W&B sweep and run ids, verified md5 sums and Figshare file ids for the main-figure checkpoints stay in [`source_data/checkpoints.yaml`](source_data/checkpoints.yaml).
+
 ### Cortex (MERFISH)
 
 | Dataset              | Local Dataset Path                             | Local Model Path                                                          | Model YAML Config |
@@ -455,9 +466,9 @@ Some of the analyses above depend on pretrained AMICI models and preprocessed da
 
 | Dataset            | Local Dataset Path                                                        | Local Model Path                                                                   | Model YAML Config |
 | ------------------ | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------- |
-| Xenium Full        | `xenium/data/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02` | [`reproducibility/xenium_full_config.yaml`](reproducibility/xenium_full_config.yaml) |
-| Xenium Replicate 1 | `xenium/data/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13` | [`reproducibility/xenium_rep1_config.yaml`](reproducibility/xenium_rep1_config.yaml) |
-| Xenium Replicate 2 | `xenium/data/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14` | [`reproducibility/xenium_rep2_config.yaml`](reproducibility/xenium_rep2_config.yaml) |
+| Xenium Full        | `xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad`      | `xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02` | [`reproducibility/xenium_full_config.yaml`](reproducibility/xenium_full_config.yaml) |
+| Xenium Replicate 1 | `xenium/data/xenium_sample1/xenium_sample1_rep1_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13` | [`reproducibility/xenium_rep1_config.yaml`](reproducibility/xenium_rep1_config.yaml) |
+| Xenium Replicate 2 | `xenium/data/xenium_sample1/xenium_sample1_rep2_filtered_2025-05-01.h5ad` | `xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14` | [`reproducibility/xenium_rep2_config.yaml`](reproducibility/xenium_rep2_config.yaml) |
 | Xenium Low-Res     | `xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad` | `xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-09-19/xenium_42_retrain_5tfi78lp_params_2026-09-19` | [`reproducibility/xenium_lowres_config.yaml`](reproducibility/xenium_lowres_config.yaml) |
 
 ### Human Tonsil (CosMx)

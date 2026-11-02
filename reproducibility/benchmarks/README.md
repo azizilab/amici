@@ -7,8 +7,8 @@ only its dataset runs.
 
 | Config | Figures | Code | Published outputs |
 | --- | --- | --- | --- |
-| `fig2_pbmc_benchmark_config.yaml` | Fig. 2a-e, Fig. S2, Fig. S3 | any commit (PBMC settings unchanged since e768bc5) | khushi-gpu-migrated:`/home/khushidesai/amici_results`; Fig. 2 subset in `gs://justin-amici/semisyn/fig2_amici_results/` |
-| `fig2_realistic_benchmark_config.yaml` | Fig. 2f-j | `3a3cc16` (2026-04-02); HEAD selects models the same way | not kept; values in an April-2026 message. Re-run's selected model, its scores and the sweep logs: `gs://justin-amici/semisyn/fig2_realistic_april_sweep/` |
+| `fig2_pbmc_benchmark_config.yaml` | Fig. 2a-e, Fig. S2, Fig. S3 | any commit (PBMC settings unchanged since e768bc5) | khushi-gpu-migrated:`/home/khushidesai/amici_results`; Fig. 2 subset deposited as `semisyn/fig2_amici_results/` |
+| `fig2_realistic_benchmark_config.yaml` | Fig. 2f-j | `3a3cc16` (2026-04-02); HEAD selects models the same way | not kept; values in an April-2026 message. Re-run's selected model, its scores and the sweep logs deposited as `semisyn/fig2_realistic_april_sweep/` |
 | `figS35a_spatial_cv_benchmark_config.yaml` | Fig. S35a | `26a28ec` or later | `benchmarks/results_cv/breast_cancer_42/` |
 
 The realistic configs both use `data/breast_cancer_42.h5ad` (md5 1e185c0bddb7795d30e8729d289ad8d3). The Fig. 2f-j

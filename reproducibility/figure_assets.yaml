@@ -1,0 +1,615 @@
+# Model checkpoints and datasets behind each figure of the AMICI manuscript, keyed by figure.
+#
+# This file is the single source of truth for the per-figure deposit. `stage_figure_assets.py` reads
+# it, sends anything missing to whichever store is passed on the command line, and writes one
+# MANIFEST.yaml and one fetch.sh per figure. Nothing is stored twice: the per-figure folders hold
+# manifests and fetch scripts, and every asset lives once under <dataset>/data/ or
+# <dataset>/saved_models/.
+#
+# Assets are named, never linked. `object` is a path relative to the root of the deposit, and it is
+# the same path the asset has in the repository, so one name identifies the asset in any store it is
+# staged to. The staging store is given with --store at deposit time and is deliberately absent from
+# this file, because the published deposit is the Figshare record rather than any staging copy. Add a
+# `figshare` file id per asset once the record is minted.
+#
+# `source_data/checkpoints.yaml` stays the provenance record for the main figures (W&B sweep/run ids,
+# verified md5 sums, Figshare ids). This file is the coverage record: which figure needs what, and
+# under what name a reader finds it.
+#
+# Asset fields:
+#   kind       dataset | checkpoint | results
+#   object     the asset's name: its path relative to the deposit root, or a prefix ending in / for a
+#              directory of checkpoints
+#   repo_path  where the analysis scripts expect it, relative to the repository root
+#   local      path on the AMICI VM to upload from; omit when the deposit is the only copy
+#   panels     the panels that need it
+#   md5        recorded md5 of the object (directories record md5s in the manifest instead)
+#   note       anything a reader needs to know before using it
+#
+# Extended Data numbering is the submitted numbering: ED 1-9 are the manuscript's Extended Data
+# Figs. 1-9, panel letter for panel letter. It is NOT the pre-condensation Fig. S1-S40 numbering that
+# REPRODUCIBILITY.md and the `supplementary:` block of source_data/checkpoints.yaml still use.
+
+# Where the per-figure folders go inside the store that --store names.
+by_figure_prefix: by_figure
+
+figures:
+  - id: fig1
+    title: Figure 1 - AMICI overview
+    panels: 1a-d
+    scripts: []
+    note: Schematic. No data, no checkpoint, no Source Data.
+    assets: []
+
+  - id: fig2
+    title: Figure 2 - semisynthetic benchmarks
+    panels: 2a-j
+    scripts:
+      - benchmarks/Snakefile with reproducibility/benchmarks/fig2_pbmc_benchmark_config.yaml (2a-e)
+      - benchmarks/Snakefile with reproducibility/benchmarks/fig2_realistic_benchmark_config.yaml (2f-j)
+    note: >-
+      2a-e come from the original PBMC run, whose ten per-seed AMICI models are deposited; its
+      3ct_dataset_2way_{seed}.h5ad inputs were not kept, so those panels are reproducible from the
+      deposited scores and models but not retrainable from the original data. 2f-j come from the
+      realistic re-run; 2h-j are kept as published, and 2g is redrawn from the re-run model. See the
+      Figure 2 section of source_data/README.md.
+    assets:
+      - kind: checkpoint
+        object: semisyn/fig2_amici_results/
+        repo_path: benchmarks/results_fig2_original
+        panels: 2a-e
+        note: >-
+          Ten per-seed models at 3ct_dataset_2way_{seed}/saved_models/amici_3ct_dataset_2way_{seed}_best_model/model.pt
+          (seeds 40, 123, 6, 23, 25, 88, 72, 58, 22, 31), the per-seed AUPRC and PR CSVs for every
+          method, and the seed-72 files behind 2a. md5s in fig2_manifest.txt and
+          fig2_manifest_addendum.txt. 288 files + 2.
+      - kind: dataset
+        object: semisyn/fig2_amici_results/3ct_dataset_2way_{seed}.h5ad
+        repo_path: benchmarks/data/3ct_dataset_2way_{seed}.h5ad
+        panels: 2a-e
+        missing: true
+        note: >-
+          Not kept by the original run. benchmarks/data/ on the AMICI VM holds later regenerations
+          that do not match the deposited models (495/500 shared genes, different cell counts), so
+          they are not a substitute. Regenerate with benchmarks/generate_dataset.py to train afresh.
+      - kind: dataset
+        object: semisyn/fig2_realistic_april_sweep/data/breast_cancer_42.h5ad
+        repo_path: benchmarks/results_realistic_rerun/data/breast_cancer_42.h5ad
+        local: benchmarks/results_realistic_rerun/data/breast_cancer_42.h5ad
+        md5: 1e185c0bddb7795d30e8729d289ad8d3
+        panels: 2f-j
+        note: >-
+          The realistic breast cancer semisynthetic dataset, byte-identical to data/breast_cancer_42.h5ad.
+          Identified as the published dataset by the deterministic baselines reproducing their published bars.
+      - kind: checkpoint
+        object: semisyn/fig2_realistic_april_sweep/breast_cancer_42/saved_models/amici_breast_cancer_42_best_model/model.pt
+        repo_path: benchmarks/results_realistic_rerun_april_family/breast_cancer_42/saved_models/amici_breast_cancer_42_best_model/model.pt
+        md5: 9bc5b8181fff5bb8ad676fdf88028378
+        panels: 2f-j
+        note: Lowest test loss of the 30-run April-family sweep; 14 heads, seed 42. Draws 2g.
+      - kind: results
+        object: semisyn/fig2_realistic_april_sweep/
+        repo_path: benchmarks/results_realistic_rerun_april_family
+        panels: 2f-j
+        note: Selected model, its scores (scores/run_329/), the sweep logs and MANIFEST.md5.
+
+  - id: fig3
+    title: Figure 3 - MERFISH mouse cortex
+    panels: 3a-c
+    scripts:
+      - cortex/cortex_analysis.py
+    assets:
+      - kind: dataset
+        object: cortex/data/cortex_processed_2025-04-28.h5ad
+        repo_path: cortex/data/cortex_processed_2025-04-28.h5ad
+        local: cortex/data/cortex_processed_2025-04-28.h5ad
+        md5: 5f9081deef1132c89c09ae7f6819264a
+        panels: 3a-c
+        note: Also on Figshare as file 63409731.
+      - kind: checkpoint
+        object: cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        repo_path: cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        local: cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        md5: 76eadfaa20920ae7b9a4044d9094512e
+        panels: 3a-c
+        note: >-
+          W&B sweep plm73bmg, run xrtcnlt0; trained with reproducibility/cortex_config.yaml. Also on
+          Figshare as file 63409695. cortex_analysis.py loads it from ./saved_models/cortex_18_sweep_...
+          without the sweep subfolder, so fetch.sh places a copy at both paths.
+        also_repo_path: cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+
+  - id: fig4
+    title: Figure 4 - Xenium breast cancer
+    panels: 4a-f
+    scripts:
+      - xenium/xenium_analysis.py
+      - xenium/xenium_niche_analysis.py
+      - xenium/segmentation_analysis.py
+    assets:
+      - kind: dataset
+        object: xenium/data/xenium_sample1_filtered_2025-05-01.h5ad
+        repo_path: xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad
+        local: xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad
+        md5: 670168c3a8a8816a075d0d619372dd5b
+        panels: 4a-f
+        note: Also on Figshare as file 63409728.
+      - kind: dataset
+        object: xenium/data/xenium_sample1_filtered_train_2025-05-01.h5ad
+        repo_path: xenium/data/xenium_sample1/xenium_sample1_filtered_train_2025-05-01.h5ad
+        local: xenium/data/xenium_sample1/xenium_sample1_filtered_train_2025-05-01.h5ad
+        panels: 4a-f
+        note: Train split; needed only to retrain, not to reproduce the panels.
+      - kind: dataset
+        object: xenium/data/xenium_sample1_filtered_test_2025-05-01.h5ad
+        repo_path: xenium/data/xenium_sample1/xenium_sample1_filtered_test_2025-05-01.h5ad
+        local: xenium/data/xenium_sample1/xenium_sample1_filtered_test_2025-05-01.h5ad
+        panels: 4a-f
+        note: Test split; needed only to retrain, not to reproduce the panels.
+      - kind: checkpoint
+        object: xenium/saved_models/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+        repo_path: xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+        local: xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+        md5: c118e838b4ff896245d21000a4a04f7e
+        panels: 4a-f
+        note: >-
+          W&B sweep g3mucw4s, run te7pkv3z; trained with reproducibility/xenium_full_config.yaml. Also
+          on Figshare as file 63409710. This is the Xenium model ED 2, 3, 4, 5, 6i, 7 and 9 also use.
+
+  - id: fig5
+    title: Figure 5 - Atera breast cancer
+    panels: 5a-c
+    scripts:
+      - atera_breast/atera_breast_analysis.py
+    assets:
+      - kind: dataset
+        object: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+        repo_path: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+        local: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+        md5: aba4c26e3119d816f55b32a7e9e00fd1
+        panels: 5a-c
+        note: >-
+          Preprocessed from the public 10x Atera WTA FFPE human breast cancer dataset. Not on
+          Figshare; Figshare v1 predates this model.
+      - kind: dataset
+        object: atera_breast/data/atera_breast_filtered_train_2026-07-22.h5ad
+        repo_path: atera_breast/data/atera_breast_filtered_train_2026-07-22.h5ad
+        local: atera_breast/data/atera_breast_filtered_train_2026-07-22.h5ad
+        panels: 5a-c
+        note: Train split; needed only to retrain.
+      - kind: dataset
+        object: atera_breast/data/atera_breast_filtered_test_2026-07-22.h5ad
+        repo_path: atera_breast/data/atera_breast_filtered_test_2026-07-22.h5ad
+        local: atera_breast/data/atera_breast_filtered_test_2026-07-22.h5ad
+        panels: 5a-c
+        note: Test split; needed only to retrain.
+      - kind: checkpoint
+        object: atera_breast/saved_models/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+        repo_path: atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+        local: atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+        md5: f53e6ab53c322735193998ecc2db959a
+        panels: 5a-c
+        note: >-
+          W&B sweep 25xpxkuk, run zhtraubt; trained with reproducibility/atera_breast_config.yaml.
+          ED 5c, 6a, 9d and 9e also use it.
+
+  - id: fig6
+    title: Figure 6 - CosMx human tonsil
+    panels: 6a-d
+    scripts:
+      - human_tonsil/human_tonsil_analysis.py
+    deferred: true
+    note: >-
+      Deferred at the author's request on 2026-11-02: the tonsil version behind Figure 6 is still
+      being edited, so this figure gets no manifest yet. The published 1000-gene dataset and model and
+      the no-ribosomal retrain are already deposited under human_tonsil/ and are
+      recorded in source_data/checkpoints.yaml; build this manifest once the panel set is settled.
+      The Extended Data items that use tonsil assets (ED 3c, 6b, 7j, 9f, 9g) are deposited and carry
+      the same caveat.
+    assets: []
+
+  - id: ed1
+    title: Extended Data Fig. 1 - architecture, benchmark diagnostics, Xenium reproducibility
+    panels: 1a-i
+    scripts:
+      - benchmarks/gene_task/plot_pr_curves.py and the neighbor_interaction_task and receiver_subtype_task equivalents (1c, 1f)
+      - benchmarks/train_cgcom_model.py, train_ncem_model.py, train_gitiii_model.py (1d, 1e)
+      - cortex/cortex_analysis.py (1g)
+      - xenium/xenium_replicate_validation.py (1h)
+      - xenium/redraw_fig_s5b.py (1i)
+    note: >-
+      1a and 1b are schematics. 1d and 1e need a rerun: the published run kept only PR curves, not the
+      per-method interaction scores or the baseline loss curves.
+    assets:
+      - kind: checkpoint
+        object: semisyn/fig2_amici_results/
+        repo_path: benchmarks/results_fig2_original
+        panels: 1c, 1f
+        note: Same deposit as Figure 2a-e; 1c and 1f are its PR curves before and after the sweeps.
+      - kind: dataset
+        object: cortex/data/cortex_processed_2025-04-28.h5ad
+        repo_path: cortex/data/cortex_processed_2025-04-28.h5ad
+        local: cortex/data/cortex_processed_2025-04-28.h5ad
+        md5: 5f9081deef1132c89c09ae7f6819264a
+        panels: 1g
+      - kind: checkpoint
+        object: cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        repo_path: cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        local: cortex/saved_models/cortex_sweep_2025-04-28_model_2025-05-05/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        md5: 76eadfaa20920ae7b9a4044d9094512e
+        panels: 1g
+        also_repo_path: cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt
+        note: The Figure 3 model. 1g is the full cortex interaction network behind Fig. 3b.
+      - kind: dataset
+        object: xenium/data/xenium_sample1_rep1_filtered_2025-05-01.h5ad
+        repo_path: xenium/data/xenium_sample1/xenium_sample1_rep1_filtered_2025-05-01.h5ad
+        local: xenium/data/xenium_sample1/xenium_sample1_rep1_filtered_2025-05-01.h5ad
+        panels: 1h, 1i
+      - kind: dataset
+        object: xenium/data/xenium_sample1_rep2_filtered_2025-05-01.h5ad
+        repo_path: xenium/data/xenium_sample1/xenium_sample1_rep2_filtered_2025-05-01.h5ad
+        local: xenium/data/xenium_sample1/xenium_sample1_rep2_filtered_2025-05-01.h5ad
+        panels: 1h, 1i
+      - kind: checkpoint
+        object: xenium/saved_models/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13/model.pt
+        repo_path: xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13/model.pt
+        local: xenium/saved_models/xenium_sample1_rep1_proseg_sweep_2025-05-01_model_2025-05-13/xenium_42_sweep_4jrcb6jd_6xyu2ted_params_2025-05-13/model.pt
+        md5: b0fcd7a0e5a17b2e115ced59a1919bc4
+        panels: 1h, 1i
+        note: Replicate 1 model. W&B sweep 4jrcb6jd, run 6xyu2ted. Also on Figshare as file 63409704.
+      - kind: checkpoint
+        object: xenium/saved_models/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
+        repo_path: xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
+        local: xenium/saved_models/xenium_sample1_rep2_proseg_sweep_2025-05-01_model_2025-05-14/xenium_22_sweep_pwyd8qid_8h73cxui_params_2025-05-14/model.pt
+        md5: 1707ef52dfa1eeb2a4329ada81a9e464
+        panels: 1h, 1i
+        note: Replicate 2 model. W&B sweep pwyd8qid, run 8h73cxui. Also on Figshare as file 63409707.
+
+  - id: ed2
+    title: Extended Data Fig. 2 - further Xenium analyses
+    panels: 2a-h
+    scripts:
+      - xenium/xenium_stromal_bleeding_analysis.py (2a)
+      - xenium/xenium_analysis.py (2b)
+      - xenium/ed2c_volcano_bolding.py (2c)
+      - xenium/xenium_lr_analysis.py (2d)
+      - benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py (2g)
+      - xenium/segmentation_analysis.py (2h)
+    note: >-
+      2e and 2f are spatial maps. 2b and 2d need a rerun: both plot from memory. 2a is the only panel
+      in the manuscript that uses the earlier April-2025 Xenium model and its stromal-cell dataset,
+      which source_data/checkpoints.yaml does not list; both are deposited and listed here.
+    assets:
+      - {ref: xenium_stromal_data, panels: "2a"}
+      - {ref: xenium_stromal_model, panels: "2a"}
+      - {ref: xenium_main_data, panels: "2a, 2b, 2c, 2d, 2g, 2h"}
+      - {ref: xenium_main_model, panels: "2a, 2b, 2c, 2d, 2g, 2h"}
+
+  - id: ed3
+    title: Extended Data Fig. 3 - segmentation testing, length-scale uncertainty, hub selection
+    panels: 3a-j
+    scripts:
+      - xenium/segmentation_analysis_gitiii.py (3a)
+      - xenium/xenium_length_scale_seed_sweep_reanalysis.py (3b)
+      - human_tonsil/human_tonsil_length_scale_seed_sweep_reanalysis.py (3c)
+      - xenium/xenium_niche_analysis.py (3d, 3e)
+      - benchmarks/sensitivity_scripts/length_scale_uncertainty.py (3f)
+      - benchmarks/sensitivity_scripts/length_scale_dataset_bootstrap_ci.py (3g)
+      - benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py (3h, 3i)
+      - benchmarks/sensitivity_scripts/length_scale_coordinate_shuffle_sensitivity.py (3j)
+    note: >-
+      3a needs a rerun. 3f-j are standalone sensitivity scripts: each generates its own semisynthetic
+      datasets and trains its own models under benchmarks/sensitivity_scripts/saved_models/, so there is
+      no checkpoint to deposit for them - the dataset generator and the script are the inputs.
+    assets:
+      - {ref: xenium_rep1_io_data, panels: "3a"}
+      - {ref: xenium_main_data, panels: "3b, 3d, 3e"}
+      - {ref: xenium_main_model, panels: "3d, 3e"}
+      - {ref: xenium_seed_sweep, panels: "3b"}
+      - {ref: tonsil_main_data, panels: "3c"}
+      - {ref: tonsil_seed_sweep, panels: "3c"}
+
+  - id: ed4
+    title: Extended Data Fig. 4 - hubs against niche composition and graph baselines
+    panels: 4a-h
+    scripts:
+      - xenium/xenium_niche_validation_gsea.py (4b, 4d, 4e, 4f, 4g)
+      - xenium/xenium_hub_analysis.py (4c)
+      - xenium/hub_graph_baseline_utils.py (4h)
+    note: >-
+      4a is a spatial map. Every graph panel runs off the Figure 4 Xenium model and dataset. The GSEA
+      panels also read xenium/data/xenium_sample1/grid_search_cache/, which is not on the AMICI VM and
+      is not deposited; xenium/xenium_niche_analysis.py regenerates it from the model and dataset below.
+    assets:
+      - {ref: xenium_main_data, panels: "4b-h"}
+      - {ref: xenium_main_model, panels: "4b-h"}
+
+  - id: ed5
+    title: Extended Data Fig. 5 - CAF subpopulations, label resolution, runtime, spatial CV
+    panels: 5a-j
+    scripts:
+      - atera_breast/atera_breast_analysis.py (5c)
+      - xenium/xenium_analysis.py (5d)
+      - xenium/xenium_analysis_lowres.py (5e, 5f, 5g)
+      - xenium/xenium_within_type_autocorrelation.py (5h)
+      - xenium/runtime_benchmark/plot_benchmark.py (5i)
+      - benchmarks/Snakefile with reproducibility/benchmarks/figS35a_spatial_cv_benchmark_config.yaml (5j)
+    note: >-
+      5a and 5b are a UMAP and a spatial map with no numerical graph. 5e-g need a rerun. 5j is the
+      spatial cross-validation sweep: its outputs are 17 GB under benchmarks/results_cv/ and are not
+      deposited, so rerun the pipeline from the config instead.
+    assets:
+      - {ref: atera_main_data, panels: "5c, 5i"}
+      - {ref: atera_main_model, panels: "5c, 5i"}
+      - {ref: xenium_main_data, panels: "5d, 5e, 5g, 5h"}
+      - {ref: xenium_main_model, panels: "5d, 5e, 5g, 5h"}
+      - {ref: xenium_lowres_data, panels: "5f, 5g"}
+      - {ref: xenium_lowres_model, panels: "5f, 5g"}
+      - {ref: xenium_lowres_model_march, panels: "5f"}
+
+  - id: ed6
+    title: Extended Data Fig. 6 - model selection, attention stability, hyperparameter sensitivity
+    panels: 6a-i
+    scripts:
+      - atera_breast/atera_breast_attention_consistency.py (6a)
+      - human_tonsil/human_tonsil_attention_consistency.py (6b)
+      - benchmarks/sensitivity_scripts/test_region_composition_diagnostic.py (6c, 6d)
+      - benchmarks/sensitivity_scripts/value_penalty_analysis.py (6e)
+      - benchmarks/sensitivity_scripts/attention_penalty_analysis.py (6f)
+      - benchmarks/sensitivity_scripts/head_analysis.py (6g)
+      - benchmarks/sensitivity_scripts/neighbor_analysis.py (6h)
+      - xenium/xenium_null_z_distribution.py (6i)
+    note: >-
+      6a and 6b are the only panels that need a whole sweep rather than one checkpoint: both scripts
+      walk the local wandb/ directory, join each run's summary to its saved model and compare attention
+      across runs. The full sweeps are deposited, together with each run's wandb-summary.json and
+      config.yaml - the two files collect_sweep_runs() reads - so the panels can be rebuilt without the
+      350 MB of W&B logs. 6c-h train their own models inside the sensitivity scripts. 6i needs a rerun.
+    assets:
+      - {ref: atera_main_data, panels: "6a"}
+      - {ref: atera_sweep, panels: "6a"}
+      - {ref: atera_wandb, panels: "6a"}
+      - {ref: tonsil_main_data, panels: "6b"}
+      - {ref: tonsil_selection_sweep, panels: "6b"}
+      - {ref: tonsil_wandb, panels: "6b"}
+      - {ref: xenium_main_data, panels: "6i"}
+      - {ref: xenium_main_model, panels: "6i"}
+
+  - id: ed7
+    title: Extended Data Fig. 7 - threshold sensitivity, hub stability, multi-scale interactions, monotonicity
+    panels: 7a-k
+    scripts:
+      - benchmarks/length_scale_task/sensitivity_test.py (7a)
+      - xenium/xenium_niche_analysis.py (7b, 7c)
+      - benchmarks/sensitivity_scripts/2_phase/ (7e, 7f)
+      - benchmarks/sensitivity_scripts/unimodal_two_phase/ (7g, 7i)
+      - human_tonsil/human_tonsil_empirical_distance_expression.py (7j)
+      - benchmarks/make_monotonicity_figure.py (7k)
+    note: >-
+      7d and 7h are spatial maps. 7a needs a rerun. 7e-g and 7i are two-phase and unimodal
+      semisynthetic studies that generate their data and train their models internally. 7j reads the
+      tonsil dataset directly and needs no checkpoint. 7k reads figures/monotonicity/monotonicity_by_pair.csv,
+      which benchmarks/make_monotonicity_figure.py writes from the per-dataset analyses.
+    assets:
+      - {ref: xenium_main_data, panels: "7b, 7c"}
+      - {ref: xenium_main_model, panels: "7b, 7c"}
+      - {ref: tonsil_main_data, panels: "7j"}
+
+  - id: ed8
+    title: Extended Data Fig. 8 - attention variants, neighbor occlusion, negative controls
+    panels: 8a-i
+    scripts:
+      - benchmarks/sensitivity_scripts/amici_variants (8a, 8b, 8c, 8d)
+      - benchmarks/sensitivity_scripts/neighbor_occlusion_analysis.py (8e, 8f)
+      - benchmarks/sensitivity_scripts/matched_neighbor_occlusion_analysis.py (8g)
+      - benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py (8h, 8i)
+    note: >-
+      Every panel is semisynthetic. The scripts generate their own PBMC and realistic datasets and
+      train the variant and occlusion models internally under benchmarks/sensitivity_scripts/saved_models/,
+      so this figure needs no deposited checkpoint or dataset. 8f, 8h and 8i need a rerun: the PR curves
+      are drawn from memory and only the AUPRC summaries are written.
+    assets: []
+
+  - id: ed9
+    title: Extended Data Fig. 9 - noise, multiple-testing family, spatial dependence, stromal exclusion
+    panels: 9a-i
+    scripts:
+      - benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py (9a)
+      - benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py (9b, 9d, 9f)
+      - benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py (9c, 9e, 9g)
+      - xenium/xenium_stromal_bleeding_analysis.py (9h, 9i)
+    note: >-
+      9a is semisynthetic and self-contained. 9b-g run the same two analyses over all three real
+      datasets, so this figure needs the Xenium, Atera and tonsil models together. Both scripts reuse
+      each dataset's cached all-cell-type ablation scores when present and recompute them from the
+      checkpoint otherwise; the caches are 1.4-3 GB each and are not deposited.
+    assets:
+      - {ref: xenium_main_data, panels: "9b, 9c, 9h, 9i"}
+      - {ref: xenium_main_model, panels: "9b, 9c, 9h, 9i"}
+      - {ref: xenium_stromal_data, panels: "9h, 9i"}
+      - {ref: xenium_stromal_model, panels: "9h, 9i"}
+      - {ref: atera_main_data, panels: "9d, 9e"}
+      - {ref: atera_main_model, panels: "9d, 9e"}
+      - {ref: tonsil_main_data, panels: "9f, 9g"}
+      - {ref: tonsil_main_model, panels: "9f, 9g"}
+
+# Assets shared by several figures, referenced above as {ref: <name>}. The staging script merges a
+# catalog entry with the per-figure `panels` and `note` overrides, and uploads each object once.
+catalog:
+  xenium_main_data:
+    kind: dataset
+    object: xenium/data/xenium_sample1_filtered_2025-05-01.h5ad
+    repo_path: xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad
+    local: xenium/data/xenium_sample1/xenium_sample1_filtered_2025-05-01.h5ad
+    md5: 670168c3a8a8816a075d0d619372dd5b
+    note: The Figure 4 Xenium breast cancer dataset (proseg segmentation). Figshare file 63409728.
+
+  xenium_main_model:
+    kind: checkpoint
+    object: xenium/saved_models/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+    repo_path: xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+    local: xenium/saved_models/xenium_sample1_proseg_sweep_2025-05-01_model_2025-05-02/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt
+    md5: c118e838b4ff896245d21000a4a04f7e
+    note: The Figure 4 Xenium model. W&B sweep g3mucw4s, run te7pkv3z. Figshare file 63409710.
+
+  xenium_stromal_data:
+    kind: dataset
+    object: xenium/data/xenium_proseg_filtered_2025-04-08.h5ad
+    repo_path: xenium/data/xenium_proseg_filtered_2025-04-08.h5ad
+    local: xenium/data/xenium_proseg_filtered_2025-04-08.h5ad
+    note: >-
+      The April-2025 Xenium dataset that still carries the stromal cell types. Used only by
+      xenium_stromal_bleeding_analysis.py, which compares it against the Figure 4 dataset.
+
+  xenium_stromal_model:
+    kind: checkpoint
+    object: xenium/saved_models/xenium_18_sweep_pp3avuwy_rttj3z4d_params_2025-04-08/model.pt
+    repo_path: xenium/saved_models/xenium_18_sweep_pp3avuwy_rttj3z4d_params_2025-04-08/model.pt
+    local: xenium/saved_models/xenium_18_sweep_pp3avuwy_rttj3z4d_params_2025-04-08/model.pt
+    note: >-
+      The model trained on the stromal-cell dataset above. W&B sweep pp3avuwy, run rttj3z4d. Not in
+      source_data/checkpoints.yaml, which covers the main figures only.
+
+  xenium_rep1_io_data:
+    kind: dataset
+    object: xenium/data/xenium_rep1_io.h5ad
+    repo_path: xenium/data/xenium_rep1_io.h5ad
+    note: >-
+      The replicate-1 input GITIII was run on for the GITIII segmentation test. Deposited only in the
+      bucket; not on this VM, so fetch it before rerunning segmentation_analysis_gitiii.py.
+
+  xenium_seed_sweep:
+    kind: checkpoint
+    object: xenium/saved_models/xenium_length_scale_seed_sweep/
+    repo_path: xenium/saved_models/xenium_length_scale_seed_sweep
+    local: xenium/saved_models/xenium_length_scale_seed_sweep
+    include: [model.pt]
+    note: >-
+      Twenty refits of the Figure 4 Xenium model, seeds 101-120, from
+      xenium/xenium_length_scale_seed_sweep.py. One model.pt per seed_<n>/ folder.
+
+  xenium_lowres_data:
+    kind: dataset
+    object: xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad
+    repo_path: xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad
+    local: xenium/data/xenium_sample1_filtered_lowres_2026-03-27.h5ad
+    note: The Figure 4 Xenium dataset relabelled to the coarse cell-type set. Train and test splits are deposited beside it.
+
+  xenium_lowres_model:
+    kind: checkpoint
+    object: xenium/saved_models/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
+    repo_path: xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-09-19/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
+    local: xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-09-19/xenium_42_retrain_5tfi78lp_params_2026-09-19/model.pt
+    md5: 3af4d45569f746bf42297f59edaebd10
+    note: >-
+      The coarse-label retrain. Take it from the bucket, not from Figshare: Figshare v1 file 63409713
+      holds a different low-resolution run (xsjrwnof/t4t8pzvi, md5 1bb7e22247843768bf454bba634b8ad1).
+
+  xenium_lowres_model_march:
+    kind: checkpoint
+    object: xenium/saved_models/xenium_42_sweep_xsjrwnof_t4t8pzvi_params_2026-03-29/model.pt
+    repo_path: xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-03-29/xenium_42_sweep_xsjrwnof_t4t8pzvi_params_2026-03-29/model.pt
+    local: xenium/saved_models/xenium_sample1_lowres_sweep_2026-03-27_model_2026-03-29/xenium_42_sweep_xsjrwnof_t4t8pzvi_params_2026-03-29/model.pt
+    md5: 1bb7e22247843768bf454bba634b8ad1
+    note: The earlier March low-resolution run, the one Figshare v1 file 63409713 holds. Kept for the panel that compares the two.
+
+  atera_main_data:
+    kind: dataset
+    object: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+    repo_path: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+    local: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
+    md5: aba4c26e3119d816f55b32a7e9e00fd1
+    note: The Figure 5 Atera breast cancer dataset. Train and test splits are deposited beside it.
+
+  atera_main_model:
+    kind: checkpoint
+    object: atera_breast/saved_models/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+    repo_path: atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+    local: atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt
+    md5: f53e6ab53c322735193998ecc2db959a
+    note: The Figure 5 Atera model. W&B sweep 25xpxkuk, run zhtraubt.
+
+  atera_sweep:
+    kind: checkpoint
+    object: atera_breast/saved_models/sweep_25xpxkuk_all_runs/
+    repo_path: atera_breast/saved_models
+    local: atera_breast/saved_models
+    include: [model.pt]
+    note: >-
+      All 33 runs of W&B sweep 25xpxkuk, in their model_<date>/<run>/ folders, including the selected
+      model above. atera_breast_attention_consistency.py needs the whole sweep to rank the runs by
+      held-out loss and compare attention between them.
+
+  atera_wandb:
+    kind: results
+    object: atera_breast/wandb_run_summaries/
+    repo_path: atera_breast/wandb
+    local: atera_breast/wandb
+    include: [wandb-summary.json, config.yaml]
+    note: >-
+      The wandb-summary.json and config.yaml of each sweep run - the two files
+      collect_sweep_runs() reads for the held-out loss, the model path and the run config. The W&B
+      logs themselves are not deposited. 35 runs are here and 33 of them record a model_path, which
+      matches the 33 deposited models one for one; collect_sweep_runs() skips the other two, which
+      crashed before saving.
+
+  tonsil_main_data:
+    kind: dataset
+    object: human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
+    repo_path: human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
+    local: human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
+    md5: 8a7e318a95e517942fda74a584eeb597
+    pending_fig6_revision: true
+    note: >-
+      The published 1000-gene CosMx tonsil dataset. Coordinates are CosMx pixels, 0.12028 um per pixel.
+      Raw data at NCBI GEO GSE351148.
+
+  tonsil_main_model:
+    kind: checkpoint
+    object: human_tonsil/saved_models/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt
+    repo_path: human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt
+    local: human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt
+    md5: e12cc39256feed3781ef711cc463b07a
+    pending_fig6_revision: true
+    note: >-
+      The published 1000-gene tonsil model. W&B sweep 0f9rk0na, run 4303v0zu. The no-ribosomal retrain
+      that human_tonsil_analysis.py now loads is deposited at
+      human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt.
+
+  tonsil_seed_sweep:
+    kind: checkpoint
+    object: human_tonsil/saved_models/human_tonsil_length_scale_seed_sweep/
+    repo_path: human_tonsil/saved_models/human_tonsil_length_scale_seed_sweep
+    local: human_tonsil/saved_models/human_tonsil_length_scale_seed_sweep
+    include: [model.pt]
+    pending_fig6_revision: true
+    note: >-
+      Twenty refits of the tonsil model, seeds 101-120, from
+      human_tonsil/human_tonsil_length_scale_seed_sweep.py. One model.pt per seed_<n>/ folder.
+
+  tonsil_selection_sweep:
+    kind: checkpoint
+    object: human_tonsil/saved_models/sweep_0f9rk0na_all_runs/
+    repo_path: human_tonsil/saved_models
+    local: human_tonsil/saved_models
+    include: [model.pt]
+    exclude_dirs: [human_tonsil_length_scale_seed_sweep, human_tonsil_no_ribo_retrain]
+    pending_fig6_revision: true
+    note: >-
+      All 19 runs of the tonsil sweep in their model_<date>/<run>/ folders - 17 from W&B sweep 0f9rk0na,
+      including the selected model, and 2 from the earlier t9mvba6z sweep.
+      human_tonsil_attention_consistency.py needs the whole sweep, and reaches each run through the
+      W&B summaries deposited beside it, which cover 14 of the 19.
+
+  tonsil_wandb:
+    kind: results
+    object: human_tonsil/wandb_run_summaries/
+    repo_path: human_tonsil/wandb
+    local: human_tonsil/wandb
+    include: [wandb-summary.json, config.yaml]
+    pending_fig6_revision: true
+    note: >-
+      The wandb-summary.json and config.yaml of each tonsil sweep run, as for the Atera sweep. These
+      are thinner than the Atera set: 14 of the 19 deposited models have a summary on the AMICI VM, so
+      collect_sweep_runs() ranks 14 runs. The five without one are the 2026-07-27 and 2026-07-28 runs
+      lgx7mmmw, tgqsf4fv, viql2on2, kxzr2uyl and zpbwoszk; their checkpoints are deposited and can be
+      compared directly, but they carry no logged held-out loss.

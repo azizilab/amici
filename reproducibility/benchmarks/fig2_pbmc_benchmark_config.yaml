@@ -5,7 +5,7 @@
 #   sweep of benchmarks/train_amici_model.py (3 end penalties x 3 value L1 penalties x 7 seeds = 63 runs), which the
 #   published run also shows.
 # Published run: khushi-gpu-migrated:/home/khushidesai/amici_results; the files behind Fig. 2 (per-seed AUPRCs,
-#   AMICI models, length-scale plots) are copied to gs://justin-amici/semisyn/fig2_amici_results/ with md5s in
+#   AMICI models, length-scale plots) are deposited as semisyn/fig2_amici_results/ with md5s in
 #   fig2_manifest.txt. Recomputing the Mann-Whitney tests from them reproduces every p-value in the Fig. 2 caption.
 # Caveats: the run's input .h5ad files were not kept, and regenerating them gives different datasets
 #   (benchmarks/data/ shares 495 of 500 genes with the published seed-72 model); seeds 58 and 123 produce the same

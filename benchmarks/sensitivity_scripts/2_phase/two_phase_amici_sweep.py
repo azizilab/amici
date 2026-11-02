@@ -50,7 +50,10 @@ from amici.callbacks import AttentionPenaltyMonitor  # noqa: E402
 RUN_NAME = "two_phase_amici_sweep"
 DATASET_SEED = 42
 DATASET_NAME = "3ct_dataset_1int_2phase"
-GCS_DATASET_URI = "gs://justin-amici/semisyn/3ct_1int_2phase/3ct_dataset_1int_2phase.h5ad"
+# The archived copy of this dataset, named by its path in the deposit rather than by a staging URL.
+# Set AMICI_DEPOSIT to the root of a deposit to fetch it; without that the dataset is regenerated from
+# DATASET_SEED, which reproduces it.
+DEPOSIT_OBJECT = "semisyn/3ct_1int_2phase/3ct_dataset_1int_2phase.h5ad"
 
 LABELS_KEY = "leiden"
 SUBTYPE_KEY = "subtype"
@@ -243,8 +246,11 @@ def ensure_two_phase_dataset():
     """Load the archived two-phase dataset, copying or generating it if needed."""
     adata_path = os.path.join(DATA_DIR, f"{DATASET_NAME}.h5ad")
     if not os.path.exists(adata_path):
+        deposit = os.environ.get("AMICI_DEPOSIT", "").rstrip("/")
         try:
-            subprocess.run(["gsutil", "cp", GCS_DATASET_URI, adata_path], check=True)
+            if not deposit:
+                raise FileNotFoundError("AMICI_DEPOSIT is not set")
+            subprocess.run(["gsutil", "cp", f"{deposit}/{DEPOSIT_OBJECT}", adata_path], check=True)
         except (subprocess.CalledProcessError, FileNotFoundError):
             set_all_seeds(DATASET_SEED)
             generate_two_phase_dataset(adata_path)

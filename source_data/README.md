@@ -1,9 +1,9 @@
 # Source Data for the AMICI manuscript
 
 The Source Data workbooks are what the submission attaches: 14 workbooks and 5 companion zips, one per
-figure, deposited at `gs://justin-amici/source_data/`. The per-panel tables they were assembled from --
+figure, deposited under `source_data/` in the deposit. The per-panel tables they were assembled from --
 118 CSVs and the 14 `manifest.json` files that map each one to its sheet -- are deposited beside them
-under `gs://justin-amici/source_data/panels/`, one folder per figure. They are built artifacts, so
+under `source_data/panels/`, one folder per figure. They are built artifacts, so
 `output/` and `panels/` stay out of the branch (see [`.gitignore`](.gitignore)).
 
 This file is the record of where the numbers in each sheet came from. The exporters that produced them
@@ -24,7 +24,8 @@ gene-table and segmentation-test helpers.
 
 Tables longer than 150,000 rows go into the companion zip so each workbook stays a few MB.
 Every workbook opens with a `README` sheet giving the dataset and checkpoint provenance (paths, md5, W&B
-sweep/run, training config, Figshare and bucket locations) and a description of each panel sheet with units.
+sweep/run, training config, Figshare file ids and deposited object names) and a description of each
+panel sheet with units.
 Figure 1 is a schematic and has no Source Data.
 
 ## Reproducing
@@ -51,6 +52,10 @@ python -I source_data/box_stats.py             # legend values only; reads the p
 ```
 
 Datasets and checkpoints are listed with md5 sums and remote copies in [`checkpoints.yaml`](checkpoints.yaml).
+For a per-figure view that also covers the Extended Data items, see
+[`../reproducibility/figure_assets.yaml`](../reproducibility/figure_assets.yaml) and the folder per figure
+it deposits under `by_figure/`, each with a `fetch.sh` that places that figure's
+checkpoints and datasets where the analysis scripts look for them.
 The exporters reuse the cached all-cell-type ablation scores when present (they recompute them otherwise),
 and independently recompute every dot-plot receiver from the checkpoint; in all four datasets the fresh values
 equal the cached ones exactly. Run time on one A100 is roughly 5 min (Fig. 3, first run computes the cortex
@@ -58,13 +63,13 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 
 ## Checkpoint per figure
 
-| Figure | Dataset | Checkpoint (W&B sweep / run) | model.pt md5 | Remote copy |
+| Figure | Dataset | Checkpoint (W&B sweep / run) | model.pt md5 | Deposited as |
 | --- | --- | --- | --- | --- |
-| 2 | semisynthetic PBMC (10 seeds) and realistic breast cancer | per-seed `amici_*_best_model` from the original Snakemake run | in `fig2_manifest.txt` | gs://justin-amici/semisyn/fig2_amici_results/ (PBMC only) |
-| 3 | `cortex_processed_2025-04-28.h5ad` | `plm73bmg` / `xrtcnlt0` | `76eadfaa...` | Figshare 63409695; bucket |
-| 4 | `xenium_sample1_filtered_2025-05-01.h5ad` | `g3mucw4s` / `te7pkv3z` | `c118e838...` | Figshare 63409710; bucket |
-| 5 | `atera_breast_filtered_2026-07-22.h5ad` | `25xpxkuk` / `zhtraubt` | `f53e6ab5...` | bucket |
-| 6 | `human_tonsil_filtered_2026-07-25.h5ad` | `0f9rk0na` / `4303v0zu` | `e12cc392...` | bucket |
+| 2 | semisynthetic PBMC (10 seeds) and realistic breast cancer | per-seed `amici_*_best_model` from the original Snakemake run | in `fig2_manifest.txt` | `semisyn/fig2_amici_results/` (PBMC only) |
+| 3 | `cortex_processed_2025-04-28.h5ad` | `plm73bmg` / `xrtcnlt0` | `76eadfaa...` | Figshare 63409695; `cortex/...` in the deposit |
+| 4 | `xenium_sample1_filtered_2025-05-01.h5ad` | `g3mucw4s` / `te7pkv3z` | `c118e838...` | Figshare 63409710; `xenium/...` in the deposit |
+| 5 | `atera_breast_filtered_2026-07-22.h5ad` | `25xpxkuk` / `zhtraubt` | `f53e6ab5...` | `atera_breast/...` in the deposit |
+| 6 | `human_tonsil_filtered_2026-07-25.h5ad` | `0f9rk0na` / `4303v0zu` | `e12cc392...` | `human_tonsil/...` in the deposit |
 
 ## How each panel was checked against the manuscript
 
@@ -89,7 +94,7 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 The original benchmark run was found in `/home/khushidesai/amici_results` on khushi-gpu-migrated (the Spatial
 HCM connection). Its Fig. 2 files (per-seed AUPRC CSVs for every method, the ten per-seed AMICI models and
 best-seed files, the length-scale plots and the boxplots; 288 files, 342 MiB) were copied to
-gs://justin-amici/semisyn/fig2_amici_results/ with an md5 manifest (`fig2_manifest.txt`) and downloaded to
+`semisyn/fig2_amici_results/` in the deposit, with an md5 manifest (`fig2_manifest.txt`), and downloaded to
 `benchmarks/results_fig2_original/` (gitignored); every file matches the manifest.
 
 - **Fig. 2c-e** come straight from those AUPRC files. All ten PBMC seeds are complete, and the
@@ -117,7 +122,7 @@ gs://justin-amici/semisyn/fig2_amici_results/ with an md5 manifest (`fig2_manife
   records, and the best model is the one with the lowest test loss (14 heads, seed 42). Re-run outputs:
   AMICI's 30 runs in `benchmarks/results_realistic_rerun_april_family/` (the lowest-test-loss model, 14 heads and
   seed 42, is scored in `scores/run_329/`; that model, its scores and the sweep logs are also in
-  `gs://justin-amici/semisyn/fig2_realistic_april_sweep/`); GITIII at 3a3cc16 in
+  `semisyn/fig2_realistic_april_sweep/`); GITIII at 3a3cc16 in
   `../amici-3a3cc16/benchmarks/results/`; NicheDE in `benchmarks/results_realistic_rerun/`; NCEM in
   `benchmarks/results_cv/`. NicheDE and NCEM are deterministic and
   reproduce the published bars on this dataset (NicheDE sigma = 20: 0.2408 vs 0.2402; NCEM 0.2505 / 0.2441 / 0.2486

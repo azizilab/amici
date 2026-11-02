@@ -20,8 +20,10 @@ OUT_DIR = REPO / "source_data" / "output"
 PANEL_DIR = REPO / "source_data" / "panels"
 
 # Dataset and checkpoint used for each real-data figure. Paths are relative to the repository root.
-# md5 sums were taken from the files that generated the manuscript panels; the remote copies are the
-# Figshare record (doi:10.6084/m9.figshare.31927956, v1) and the lab bucket gs://justin-amici.
+# md5 sums were taken from the files that generated the manuscript panels. The remote copy is the
+# Figshare record (doi:10.6084/m9.figshare.31927956, v1); `object_model` and `object_data` name the
+# same files in the deposit, by the path they have in this repository, so the name holds whatever
+# copy of the deposit a reader has. No staging location is recorded, here or in the workbooks.
 CHECKPOINTS = {
     "cortex": {
         "figures": ["Fig. 3a-c", "Fig. S4"],
@@ -37,8 +39,8 @@ CHECKPOINTS = {
         "seed": 18,
         "figshare_model_file_id": 63409695,
         "figshare_data_file_id": 63409731,
-        "gcs_model": "gs://justin-amici/cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt",
-        "gcs_data": "gs://justin-amici/cortex/data/cortex_processed_2025-04-28.h5ad",
+        "object_model": "cortex/saved_models/cortex_18_sweep_plm73bmg_xrtcnlt0_params_2025-05-05/model.pt",
+        "object_data": "cortex/data/cortex_processed_2025-04-28.h5ad",
     },
     "xenium": {
         "figures": ["Fig. 4a-f", "Figs. S5c, S7, S9, S13-S18"],
@@ -54,8 +56,8 @@ CHECKPOINTS = {
         "seed": 18,
         "figshare_model_file_id": 63409710,
         "figshare_data_file_id": 63409728,
-        "gcs_model": "gs://justin-amici/xenium/saved_models/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt",
-        "gcs_data": "gs://justin-amici/xenium/data/xenium_sample1_filtered_2025-05-01.h5ad",
+        "object_model": "xenium/saved_models/xenium_18_sweep_g3mucw4s_te7pkv3z_params_2025-05-02/model.pt",
+        "object_data": "xenium/data/xenium_sample1_filtered_2025-05-01.h5ad",
     },
     "atera_breast": {
         "figures": ["Fig. 5a-c", "Fig. S38"],
@@ -71,8 +73,8 @@ CHECKPOINTS = {
         "seed": 38,
         "figshare_model_file_id": None,
         "figshare_data_file_id": None,
-        "gcs_model": None,
-        "gcs_data": "gs://justin-amici/atera_breast/data/atera_breast_filtered_2026-07-22.h5ad",
+        "object_model": "atera_breast/saved_models/atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28/model.pt",
+        "object_data": "atera_breast/data/atera_breast_filtered_2026-07-22.h5ad",
     },
     "human_tonsil": {
         "figures": ["Fig. 6a-d"],
@@ -88,8 +90,8 @@ CHECKPOINTS = {
         "seed": 40,
         "figshare_model_file_id": None,
         "figshare_data_file_id": None,
-        "gcs_model": None,
-        "gcs_data": None,
+        "object_model": "human_tonsil/saved_models/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt",
+        "object_data": "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad",
     },
 }
 
@@ -116,8 +118,8 @@ def verify_checkpoint(name, check_data=True):
     model_file = REPO / entry["model"] / "model.pt"
     if not model_file.exists():
         raise FileNotFoundError(
-            f"{model_file} is missing. Download it from {entry['gcs_model'] or 'the Figshare record'} "
-            "(see source_data/checkpoints.yaml)."
+            f"{model_file} is missing. Fetch {entry['object_model'] or 'it'} from the deposit or the "
+            "Figshare record (see source_data/checkpoints.yaml)."
         )
     got = md5sum(model_file)
     if got != entry["model_md5"]:
