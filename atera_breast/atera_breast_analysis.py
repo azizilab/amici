@@ -420,6 +420,49 @@ ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     save_dir=figures_dir,
 )
 
+# %% Fig. 5c: the Endothelial and CAF receivers
+# The block above is the Luminal DCIS third of Fig. 5c; receiver_ct is never reassigned, so the
+# other two dot plots of the panel had no code. Senders and n_top_genes are those of the published
+# panel. The bold gene labels the legend describes were applied by hand when the figure was
+# assembled -- redraw_fig5c.py recomputes them from the segmentation test instead.
+FIG5C_DOTPLOT_KWARGS = {
+    "color_by": "diff",
+    "size_by": "z_value",
+    "n_top_genes": 8,
+    "min_size_by": -10,
+    "step": 15,
+    "save_svg": True,
+    "save_png": True,
+    "save_dir": figures_dir,
+}
+
+# %% Fig. 5c: Endothelial receiver
+endothelial_receiver_ct = "Endothelial"
+endothelial_ablation_residuals = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type=endothelial_receiver_ct,
+    ablated_neighbor_ct_sub=["Pericytes"],
+    compute_z_value=True,
+)
+endothelial_ablation_residuals.plot_featurewise_contributions_dotplot(
+    cell_type=endothelial_receiver_ct,
+    **FIG5C_DOTPLOT_KWARGS,
+)
+
+# %% Fig. 5c: CAF receiver
+# Sender order sets the column order of the union of each sender's top genes.
+caf_receiver_ct = "CAFs"
+caf_ablation_residuals = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type=caf_receiver_ct,
+    ablated_neighbor_ct_sub=["Macrophages", "T_Cells"],
+    compute_z_value=True,
+)
+caf_ablation_residuals.plot_featurewise_contributions_dotplot(
+    cell_type=caf_receiver_ct,
+    **FIG5C_DOTPLOT_KWARGS,
+)
+
 # %% Compute counterfactual attention scores for a query cell type and attention head
 counterfactual_attention_patterns = model.get_counterfactual_attention_patterns(
     cell_type=receiver_ct,

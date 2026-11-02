@@ -359,6 +359,81 @@ ablation_ct_residuals.plot_featurewise_contributions_dotplot(
     save_png=True,
 )
 
+# %% Fig. 4c and 4e: dot plot settings
+# The block above is a head-4 ablation of one sender for one receiver, which is not what either
+# panel draws. Fig. 4c is three receivers, each over the same three senders and over all heads, and
+# the bottom of Fig. 4e is one receiver resolved per head, so each needs its own ablation. The bold
+# gene labels of Fig. 4c were applied by hand when the figure was assembled -- redraw_fig4c.py
+# recomputes them from the segmentation test instead.
+FIG4_SENDERS = ["CD4+_T_Cells", "CD8+_T_Cells", "Invasive_Tumor"]
+FIG4_DOTPLOT_KWARGS = {
+    "color_by": "diff",
+    "size_by": "z_value",
+    "n_top_genes": 10,
+    "min_size_by": -10,
+    "step": 5,
+    "save_svg": True,
+    "save_png": True,
+}
+
+
+def fig4c_dotplot(fig4c_receiver_ct):
+    """Draws one of the three Fig. 4c dot plots.
+
+    A receiver is not ablated against itself, so the sender it shares with FIG4_SENDERS is dropped;
+    the published panel leaves that row empty.
+    """
+    fig4c_ablation = model.get_neighbor_ablation_scores(
+        adata=adata,
+        cell_type=fig4c_receiver_ct,
+        ablated_neighbor_ct_sub=[ct for ct in FIG4_SENDERS if ct != fig4c_receiver_ct],
+        compute_z_value=True,
+    )
+    fig4c_ablation.plot_featurewise_contributions_dotplot(
+        cell_type=fig4c_receiver_ct,
+        **FIG4_DOTPLOT_KWARGS,
+    )
+    return fig4c_ablation
+
+
+# %% Fig. 4c: M1 macrophage receiver
+macrophage_ablation_residuals = fig4c_dotplot("Macrophages_1")
+
+# %% Fig. 4c: CD8 T cell receiver
+cd8_ablation_residuals = fig4c_dotplot("CD8+_T_Cells")
+
+# %% Fig. 4c: invasive tumor receiver
+tumor_ablation_residuals = fig4c_dotplot("Invasive_Tumor")
+
+# %% Fig. 4e bottom: CD4 -> CD8 T cell genes on head 4
+# Head-specific ablation: every other head is zeroed, then the sender is masked within this head, so
+# the contributions are the ones this head carries alone. The panel draws GNLY, CAVIN2, SELL and LTB
+# out of the genes selected here.
+cd8_head4_ablation_residuals = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type="CD8+_T_Cells",
+    head_idx=4,
+    ablated_neighbor_ct_sub=["CD4+_T_Cells"],
+    compute_z_value=True,
+)
+cd8_head4_ablation_residuals.plot_featurewise_contributions_dotplot(
+    cell_type="CD8+_T_Cells",
+    **FIG4_DOTPLOT_KWARGS,
+)
+
+# %% Fig. 4e bottom: CD4 -> CD8 T cell genes on head 5
+cd8_head5_ablation_residuals = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type="CD8+_T_Cells",
+    head_idx=5,
+    ablated_neighbor_ct_sub=["CD4+_T_Cells"],
+    compute_z_value=True,
+)
+cd8_head5_ablation_residuals.plot_featurewise_contributions_dotplot(
+    cell_type="CD8+_T_Cells",
+    **FIG4_DOTPLOT_KWARGS,
+)
+
 # %% Compute counterfactual attention scores for a query cell type and attention head
 counterfactual_attention_patterns = model.get_counterfactual_attention_patterns(
     cell_type=receiver_ct,

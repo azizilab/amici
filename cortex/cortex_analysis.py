@@ -290,6 +290,20 @@ ablation_residuals.plot_interaction_directed_graph(
     save_dir="./figures"
 )
 
+# %% Fig. 3b interaction graph
+# The published panel's nodes are Oligo, L4/5 IT, L2/3 IT, Astro and Sst, which is not the
+# cell_type_sub above: that list carries L6b, which the panel does not draw, and leaves out Sst,
+# whose dot plot is the other half of Fig. 3c. The edge threshold is the same 0.86 quantile.
+fig3b_cell_types = ["Oligo", "L4/5 IT", "L2/3 IT", "Astro", "Sst"]
+ablation_residuals.plot_interaction_directed_graph(
+    cell_type_sub=fig3b_cell_types,
+    significance_threshold=0.05,
+    weight_threshold=weight_threshold,
+    palette=CELL_TYPE_PALETTE,
+    save_svg=True,
+    save_dir="./figures"
+)
+
 # %% Compute explained variance scores
 expl_variance_scores = model.get_expl_variance_scores(
     adata,
@@ -350,6 +364,29 @@ ablation_residuals.plot_featurewise_contributions_dotplot(
     min_size_by=15,
     step=10,
     n_top_genes=8,
+    save_png=True,
+    save_svg=True,
+)
+
+# %% Fig. 3c: the Sst receiver
+# The block above is the Astrocyte half of Fig. 3c; target_ct is never reassigned, so the Sst half
+# of the panel had no code. Its senders are L2/3 IT and L4/5 IT, and n_top_genes=10 with
+# min_size_by=5 reproduces the published gene selection (so do n_top_genes=9 with min_size_by=6).
+# step only sets the spacing of the size legend.
+sst_receiver_ct = "Sst"
+sst_ablation_residuals = model.get_neighbor_ablation_scores(
+    adata=adata,
+    cell_type=sst_receiver_ct,
+    ablated_neighbor_ct_sub=["L2/3 IT", "L4/5 IT"],
+    compute_z_value=True,
+)
+sst_ablation_residuals.plot_featurewise_contributions_dotplot(
+    cell_type=sst_receiver_ct,
+    color_by="diff",
+    size_by="z_value",
+    min_size_by=5,
+    step=10,
+    n_top_genes=10,
     save_png=True,
     save_svg=True,
 )
