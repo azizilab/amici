@@ -47,6 +47,13 @@ DATASETS = {
             AMICI_DIR,
             "atera_breast/figures/atera_breast_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
         ),
+        "data": os.path.join(AMICI_DIR, "atera_breast/data/atera_breast_filtered_2026-07-22.h5ad"),
+        "model": os.path.join(
+            AMICI_DIR,
+            "atera_breast/saved_models/atera_breast_sweep_2026-07-22_model_2026-07-28",
+            "atera_breast_33_sweep_25xpxkuk_zhtraubt_params_2026-07-28",
+        ),
+        "labels_key": "celltype_train_grouped",
     },
     "human_tonsil": {
         "title": "CosMx human tonsil",
@@ -54,6 +61,15 @@ DATASETS = {
             AMICI_DIR,
             "human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
         ),
+        # The published 1000-gene model, which is the one this cache and ED 9f come from -- not the
+        # no-ribosomal retrain that human_tonsil_analysis.py now loads.
+        "data": os.path.join(AMICI_DIR, "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad"),
+        "model": os.path.join(
+            AMICI_DIR,
+            "human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26",
+            "human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26",
+        ),
+        "labels_key": "celltype_manual_fine",
     },
 }
 
