@@ -102,6 +102,27 @@ figure_6:
     gcs: not deposited
   derived_caches:
     all_cell_type_ablation: human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
+  no_ribo_retrain:
+    status: >-
+      Seed-40 retrain without RPL21/22/32/34/37, UBA52, FAU and MALAT1 (992 genes) at the hyperparameters of the
+      model above; human_tonsil/human_tonsil_analysis.py loads it. The published Fig. 6 panels and their Source
+      Data are still from the 1000-gene model above.
+    preprocessing: human_tonsil/human_tonsil_no_ribo_retrain.py  # drops the eight genes from the counts, renormalizes to the median total (424)
+    data: human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad
+    data_md5: 5deb0af78f2b9b98276428d2df19be04
+    train_md5: 4e5ee69620a487d0d622c7cdca17c276  # human_tonsil_filtered_no_ribo_train_2026-07-25.h5ad
+    test_md5: 107bf86c043fda820aa9f18c4f67de76  # human_tonsil_filtered_no_ribo_test_2026-07-25.h5ad
+    model: human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt
+    model_md5: b06237db3d38002ee7fd4da74197c5b2
+    remote:
+      # Uploaded 2026-11-02. The full and train files are composite objects, which the bucket stores with a
+      # crc32c and no md5; their crc32c matched the local files, and the model's and test file's md5 matched.
+      gcs_model: gs://justin-amici/human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt
+      gcs_data: gs://justin-amici/human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad
+      gcs_train: gs://justin-amici/human_tonsil/data/human_tonsil_filtered_no_ribo_train_2026-07-25.h5ad
+      gcs_test: gs://justin-amici/human_tonsil/data/human_tonsil_filtered_no_ribo_test_2026-07-25.h5ad
+    derived_caches:
+      all_cell_type_ablation: human_tonsil/figures/human_tonsil_no_ribo_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
 
 # Checkpoints used only by supplementary figures, identified while auditing Figshare v1.
 supplementary:
