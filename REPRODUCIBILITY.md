@@ -260,8 +260,8 @@ Primary Xenium breast cancer analysis. Generates spatial distributions, interact
 - **Figure 4a**: Spatial scatter plots of both Xenium replicates (`visualize_spatial_distribution()`)
 - **Figure 4b**: Directed interaction networks — full and immune-tumor subset (`plot_interaction_directed_graph()`)
 - **Figure 4c**: Downstream gene dot plots for M1 macrophages, CD8 T cells, invasive tumor (`plot_featurewise_contributions_dotplot()`)
-- **Figure 4d** (top): Violin plot of inferred length scales per sender → receiver → head, restricted to heads with median radius in `(0, 50]` µm (`plot_length_scale_distribution()` with `attention_threshold=0.1`). Rows are ordered by **ascending median length scale**, so for CD4 T cells → CD8 T cells head 5 is the shorter-range head and head 4 the longer-range one
-- **Figure 4d** (bottom): Head-resolved neighbor contributions for the CD4 T cell → CD8 T cell pair on heads 4 and 5 (`get_neighbor_ablation_scores(..., head_idx=...)`)
+- **Figure 4e** (top): Violin plot of inferred length scales per sender → receiver → head, restricted to heads with median radius in `(0, 50]` µm (`plot_length_scale_distribution()` with `attention_threshold=0.1`). Rows are ordered by **ascending median length scale**, so for CD4 T cells → CD8 T cells head 5 is the shorter-range head and head 4 the longer-range one
+- **Figure 4e** (bottom): Head-resolved neighbor contributions for the CD4 T cell → CD8 T cell pair on heads 4 and 5 (`get_neighbor_ablation_scores(..., head_idx=...)`)
 - **Fig S5c**: Explained variance by attention head (`plot_explained_variance_barplot()`)
 - **Fig S7**: Volcano plots of neighbor contribution vs Wald statistic per receiver cell type
 
@@ -269,14 +269,14 @@ Primary Xenium breast cancer analysis. Generates spatial distributions, interact
 
 Spatial attention pattern analysis for the Xenium dataset. Generates proximity scores, attention heatmaps, and gene expression spatial plots using `AMICIAblationModule` and `AMICIAttentionModule`.
 
-- **Figure 4e**: Four-panel spatial analysis — proximity to the nearest CD8 T cell and to the nearest *attending* CD8 T cell (`proximity_spatial_plot_*_any_sender_type` / `*_high_senders`), total attention from CD8 T cells to invasive tumor on the max-variance head (`empirical_attention_spatial_plot_*_max_var_head`), and ESR1 expression in invasive tumor (`gene_expression_ESR1_Invasive_Tumor`)
+- **Figure 4d**: Four-panel spatial analysis — proximity to the nearest CD8 T cell and to the nearest *attending* CD8 T cell (`proximity_spatial_plot_*_any_sender_type` / `*_high_senders`), total attention from CD8 T cells to invasive tumor on the max-variance head (`empirical_attention_spatial_plot_*_max_var_head`), and ESR1 expression in invasive tumor (`gene_expression_ESR1_Invasive_Tumor`)
 - **Fig S9**: AGR3 subpopulation spatial analysis (attention + gene expression)
 
 ### [`xenium/xenium_subtyping_analysis.py`](xenium/xenium_subtyping_analysis.py)
 
 Receiver-subpopulation analysis for the CD8+ T cell → invasive tumor pair, implementing the "Identification of Interacting Receiver Subpopulations" Methods section: PCA + KMeans over counterfactual attention profiles, spatial sender/receiver plots, sender DE between the recovered clusters, and head-specific featurewise contribution dot plots (`plot_featurewise_contributions_dotplot()` with a `head_idx`). Outputs land in `figures/{receiver_ct}_from_{sender_ct}/`.
 
-No numbered manuscript panel is generated directly by this script; it is the supporting subpopulation analysis behind Figure 4e and Fig S9, and its head-specific dot-plot routine is the same one used for the head-resolved gene panels.
+No numbered manuscript panel is generated directly by this script; it is the supporting subpopulation analysis behind Figure 4d and Fig S9, and its head-specific dot-plot routine is the same one used for the head-resolved gene panels.
 
 ### [`benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py`](benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py)
 

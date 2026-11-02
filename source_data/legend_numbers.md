@@ -1,4 +1,4 @@
-# Numbers for the Fig. 4d, 6d and 2c-e legends
+# Numbers for the Fig. 4e, 6d and 2c-e legends
 
 Everything below was recomputed on 2026-10-22 from the checkpoints in
 [`checkpoints.yaml`](checkpoints.yaml) and from the original benchmark run in
@@ -7,14 +7,14 @@ Everything below was recomputed on 2026-10-22 from the checkpoints in
 The editor's AIP checklist (NBT-BC69009C) asks for three things in these legends, and
 [What the glyphs show](#what-the-glyphs-show) below answers all three:
 
-- *n* as a precise value, with the unit of study defined, in 2d, 2e, 4d and 6d;
+- *n* as a precise value, with the unit of study defined, in 2d, 2e, 4e and 6d;
 - box plots defined in terms of minima, maxima, centre, bounds of box and whiskers, and percentile, in
-  2c-e, 4d and 6d;
+  2c-e, 4e and 6d;
 - the statistical test named in 2c-e, with its sidedness and its multiple-comparison adjustment.
 
-## What *n* means in Fig. 4d and 6d
+## What *n* means in Fig. 4e and 6d
 
-Each violin (4d) or box (6d) is one **sender cell per observation**: the length scale is evaluated once
+Each violin (4e) or box (6d) is one **sender cell per observation**: the length scale is evaluated once
 per candidate sender cell, from that cell's own counterfactual attention profile
 (`AMICICounterfactualAttentionModule._calculate_length_scales`). The candidate set for a
 sender → receiver pair is every cell of the sender type that appears in at least one 50-nearest-neighbor
@@ -29,7 +29,7 @@ Two consequences worth knowing before wording the legend:
   not in any receiver neighborhood. The gap is largest for CD8 T → Invasive Tumor (7,116 of 18,268 CD8 T
   cells), where the receiver type is large and the sender type is concentrated elsewhere in the tissue.
 
-## Fig. 4d (top) — Xenium, 13 violins, top to bottom
+## Fig. 4e (top) — Xenium, 13 violins, top to bottom
 
 Ascending median, i.e. the published row order. Median is in µm, attention threshold 0.1.
 
@@ -49,10 +49,10 @@ Ascending median, i.e. the published row order. Median is in µm, attention thre
 | 12 | Invasive tumor → M1 macrophages (head 5) | **49,386** | 11.07 | 20,179 | 56,599 |
 | 13 | M2 macrophages → M1 macrophages (head 5) | **5,073** | 11.65 | 20,179 | 5,231 |
 
-Full per-cell values: `panels/Fig4/Fig4d_length_scales.csv` (210,711 rows = the 13 row counts above);
-per-violin statistics: `panels/Fig4/Fig4d_length_scale_summary.csv`.
+Full per-cell values: `panels/Fig4/Fig4e_length_scales.csv` (210,711 rows = the 13 row counts above);
+per-violin statistics: `panels/Fig4/Fig4e_length_scale_summary.csv`.
 
-## Fig. 4d (bottom) — no violins
+## Fig. 4e (bottom) — no violins
 
 The bottom panel is the head-resolved CD4 T → CD8 T dot plot (4 genes × heads 4 and 5), so it has no
 per-cell distribution. If the legend needs counts for it, they are the ones behind the ablation:
@@ -74,8 +74,8 @@ Full per-cell values: `panels/Fig6/Fig6d_length_scales.csv` (39,818 rows); per-b
 
 ## What the glyphs show
 
-Every box and violin in Figs. 2c-e, 4d and 6d is drawn with library defaults, which in all three cases
-is the Tukey convention: the centre line (or, in 4d, the white dot) is the **median**, the box spans
+Every box and violin in Figs. 2c-e, 4e and 6d is drawn with library defaults, which in all three cases
+is the Tukey convention: the centre line (or, in 4e, the white dot) is the **median**, the box spans
 the **25th to 75th percentile**, and the whiskers reach the most extreme observation still within
 **1.5 x IQR** of the nearer box edge. Observations outside the whiskers are *outliers*, not the minimum
 and maximum of the data. The three panels differ in what they draw outside the box:
@@ -83,11 +83,11 @@ and maximum of the data. The three panels differ in what they draw outside the b
 | Panel | Call | Outside the box |
 | --- | --- | --- |
 | 2c-e | `matplotlib.axes.Axes.boxplot(..., patch_artist=True)` in `benchmarks/benchmark_utils.plot_boxplots` | outliers as fliers, plus **all 10 per-dataset values overlaid as points and joined across methods**, so every observation is visible |
-| 4d (top) | `seaborn.violinplot` (seaborn 0.13.2 defaults: `inner="box"`, `bw_method="scott"`, `bw_adjust=1`, `cut=2`, `gridsize=100`, `density_norm="area"`) in `xenium/xenium_analysis.py` | a Gaussian kernel density estimate, each violin scaled to equal area, extended 2 bandwidths past the data and clipped to the 0-50 µm axis; **no outliers are drawn** |
+| 4e (top) | `seaborn.violinplot` (seaborn 0.13.2 defaults: `inner="box"`, `bw_method="scott"`, `bw_adjust=1`, `cut=2`, `gridsize=100`, `density_norm="area"`) in `xenium/xenium_analysis.py` | a Gaussian kernel density estimate, each violin scaled to equal area, extended 2 bandwidths past the data and clipped to the 0-50 µm axis; **no outliers are drawn** |
 | 6d | `seaborn.boxplot(..., linewidth=0.9, fliersize=0.8, width=0.65)` in `human_tonsil/human_tonsil_analysis.py` | outliers as points (`fliersize=0.8`) |
 
-The 4d inner box is `matplotlib.cbook.boxplot_stats`, i.e. the same Tukey box as 2c-e and 6d, so the
-whisker ends in 4d are 1.5 x IQR limits and not the extremes of the violin, whose tails run past them.
+The 4e inner box is `matplotlib.cbook.boxplot_stats`, i.e. the same Tukey box as 2c-e and 6d, so the
+whisker ends in 4e are 1.5 x IQR limits and not the extremes of the violin, whose tails run past them.
 
 ### Minima, maxima, centre, bounds and whiskers, per glyph
 
@@ -95,7 +95,7 @@ Recomputed on 2026-10-28 from the exported per-cell and per-dataset tables with
 `matplotlib.cbook.boxplot_stats`, i.e. from the same numbers the panels were drawn from. Figures and
 Source Data are unchanged; these are the values a legend or a reviewer would ask for.
 
-**Fig. 4d (top)** — length scale in µm, 13 violins in published (ascending-median) order. `min` and `max`
+**Fig. 4e (top)** — length scale in µm, 13 violins in published (ascending-median) order. `min` and `max`
 are the data extremes, which the violin tails show and the inner box does not.
 
 | Row | Interaction | n | Min | Whisker low | Q1 | Median | Q3 | Whisker high | Max | Outliers |
@@ -169,19 +169,19 @@ same ten.
 > for the [7 in 2c / 2 in 2d / 2 in 2e] baseline comparisons in the panel; exact corrected P values,
 > U statistics and effect sizes for every comparison are in the Source Data.
 
-**Figs. 4d and 6d.** One tissue section each (Xenium breast cancer replicate 1; CosMx human tonsil), so
+**Figs. 4e and 6d.** One tissue section each (Xenium breast cancer replicate 1; CosMx human tonsil), so
 the observations are cells within a single section and not independent biological replicates.
 
 > Each observation is one sender cell; n is the number of sender cells of that type lying in at least one
-> 50-nearest-neighbor neighborhood of a receiver cell of that type (4d: n = 4,679-49,386 per violin, see
+> 50-nearest-neighbor neighborhood of a receiver cell of that type (4e: n = 4,679-49,386 per violin, see
 > Source Data; 6d: n = 14,190 Tfh cells and n = 5,719 follicular dendritic cells per box). The two heads of
 > a given sender → receiver pair are evaluated on the same sender cells. Data are from one tissue section.
-> Violins (4d) are Gaussian kernel density estimates scaled to equal area; the inner box and the boxes in
-> 6d show the median (white dot in 4d, centre line in 6d), the 25th-75th percentile (box bounds) and the
+> Violins (4e) are Gaussian kernel density estimates scaled to equal area; the inner box and the boxes in
+> 6d show the median (white dot in 4e, centre line in 6d), the 25th-75th percentile (box bounds) and the
 > most extreme value within 1.5 x the interquartile range of the box (whiskers). Outliers are drawn in 6d
-> and omitted in 4d. Per-glyph minima, maxima, quartiles and whisker limits are in the Source Data.
+> and omitted in 4e. Per-glyph minima, maxima, quartiles and whisker limits are in the Source Data.
 
-The per-violin n is in `Fig4d_length_scale_summary.csv`.
+The per-violin n is in `Fig4e_length_scale_summary.csv`.
 
 ## How the counts were verified
 

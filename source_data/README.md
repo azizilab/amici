@@ -16,7 +16,7 @@ gene-table and segmentation-test helpers.
 | Output | Contents |
 | --- | --- |
 | `output/Source_Data_Fig3.xlsx` | Fig. 3a-c (MERFISH cortex) |
-| `output/Source_Data_Fig4.xlsx` + `Source_Data_Fig4_large_tables.zip` | Fig. 4a-f (Xenium breast cancer); the per-cell tables of 4a, 4d (length scales) and 4f (hubs) are CSVs in the zip |
+| `output/Source_Data_Fig4.xlsx` + `Source_Data_Fig4_large_tables.zip` | Fig. 4a-f (Xenium breast cancer); the per-cell tables of 4a, 4e (length scales) and 4f (hubs) are CSVs in the zip |
 | `output/Source_Data_Fig5.xlsx` + `Source_Data_Fig5_large_tables.zip` | Fig. 5a-c (Atera breast cancer); the 5a cell map is a CSV in the zip |
 | `output/Source_Data_Fig6.xlsx` + `Source_Data_Fig6_large_tables.zip` | Fig. 6a-d (CosMx tonsil); the 6a cell map is a CSV in the zip |
 | `output/Source_Data_Fig2.xlsx` | Fig. 2a-j (semisynthetic benchmarks), see below |
@@ -74,8 +74,8 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 | 3c | gene selection for Astrocytes (n_top 8, min z 15) and Sst (n_top 10, min z 5) | exact |
 | 4c | published genes vs the ranked top genes per sender | published genes are the top-ranked genes in order, truncated; TIGIT (rank 6, CD4 -> CD8) is omitted |
 | 4c | bold genes vs the segmentation test | 18/19 reproduced; C15orf48 differs |
-| 4d | violin rows and their ascending-median order | exact (13 rows) |
-| 4e | head with the largest attention variance | head 2, as published |
+| 4d | head with the largest attention variance | head 2, as published |
+| 4e | violin rows and their ascending-median order | exact (13 rows) |
 | 4f | hub labels vs `hub_analysis_cache/hub_cluster_assignments.csv` | identical (ARI 1.0) |
 | 5b | Ward-clustered row and column order | exact |
 | 5c | gene selection (n_top 8, min z -10) | exact for all three receivers |
