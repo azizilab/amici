@@ -202,7 +202,7 @@ Four standalone scripts bin receiver cells by surface-to-surface distance to the
 - [`cortex/cortex_empirical_distance_expression.py`](cortex/cortex_empirical_distance_expression.py) — MERFISH cortex (2 µm bins, 6 µm smoothing bandwidth)
 - [`xenium/xenium_empirical_distance_expression.py`](xenium/xenium_empirical_distance_expression.py) — Xenium breast cancer, both replicates pooled (1 µm bins, 5 µm bandwidth)
 - [`atera_breast/atera_breast_empirical_distance_expression.py`](atera_breast/atera_breast_empirical_distance_expression.py) — Atera breast cancer (1 µm bins, 5 µm bandwidth)
-- [`human_tonsil/human_tonsil_empirical_distance_expression.py`](human_tonsil/human_tonsil_empirical_distance_expression.py) — CosMx human tonsil (1 µm bins, 5 µm bandwidth), taking its interactions and genes from the Figure 6c dot plots. Note that `obsm["spatial"]` holds CosMx pixels while `obs["cell_radius"]` is in micrometres, so the script converts the coordinates with the 0.12028 µm/px pixel size before subtracting radii.
+- [`human_tonsil/human_tonsil_empirical_distance_expression.py`](human_tonsil/human_tonsil_empirical_distance_expression.py) — CosMx human tonsil (1 µm bins, 5 µm bandwidth), reading the 992-gene no-ribosomal dataset and taking its interactions and genes from the Figure 6c dot plots drawn from it. Note that `obsm["spatial"]` holds CosMx pixels while `obs["cell_radius"]` is in micrometres, so the script converts the coordinates with the 0.12028 µm/px pixel size before subtracting radii.
 
 All four bin out to 50 µm, drop bins holding fewer than 10 cells, and share the smoothing and statistics code in [`benchmarks/distance_profile_utils.py`](benchmarks/distance_profile_utils.py) (see below). Each writes, into its own `figures/empirical_distance_expression/` directory, a profile figure, a z-scored profile figure, a per-dataset monotonicity summary figure and two CSVs (`*_distance_binned_expression.csv`, `*_distance_monotonicity.csv`). **None of those per-dataset figures is a manuscript panel**; they are intermediates for inspecting one dataset at a time.
 
@@ -213,7 +213,7 @@ Assembles the supplementary figure from the eight CSVs written by the four scrip
 - **Fig S40a**: Distance profile for one example pair — raw per-bin means faint in the background, the weighted local-linear smoother and its 95% band bold on top, and genes that fail the monotonic decay test dashed. The pair is set by `EXAMPLE_DATASET` / `EXAMPLE_INTERACTION` in the script, currently CosMx human tonsil, Fibroblast → CD4 T cell.
 - **Fig S40b**: Every sender-receiver pair in all four datasets, one row per pair and one dot per downstream gene placed at that gene's cell-level Spearman ρ, filled when the gene passes the monotonic decay test and hollow when it does not. Row labels give passing over testable, dot colour gives the dataset, and rows are ordered by median ρ within each dataset. Pairs with no testable gene are dropped rather than drawn as an empty row.
 
-At the current settings the figure reports **76/97** testable gene-pair combinations passing the test, and every gene × interaction is testable (see `testable` below).
+At the current settings the figure reports **66/99** testable gene-pair combinations passing the test, and every gene × interaction is testable (see `testable` below).
 
 #### Smoothing and monotonicity quantification ([`benchmarks/distance_profile_utils.py`](benchmarks/distance_profile_utils.py))
 
@@ -431,15 +431,16 @@ Stability of attention scores across models trained over varying hyperparameters
 
 ## Human Tonsil (CosMx) Analysis
 
-**Base data**: CosMx 1000-gene panel human tonsil. The preprocessed dataset and trained model are available on Figshare (see [Data and Model Artifacts](#data-and-model-artifacts)).
+**Base data**: CosMx 1000-gene panel human tonsil. The reported model is a retrain on 992 of those genes: the panel carries five RPL genes, `UBA52` (RPL40), `FAU` (RPS30) and `MALAT1`, which were dropped and the counts renormalized before refitting. The preprocessed datasets and trained models are available on Figshare (see [Data and Model Artifacts](#data-and-model-artifacts)).
 
 Prerequisites (run in order):
 
 1. [`human_tonsil/human_tonsil_preprocess.py`](human_tonsil/human_tonsil_preprocess.py) — Filters unlabeled annotations, normalizes counts, and performs a spatial train/test split.
-2. [`human_tonsil/human_tonsil_train.py`](human_tonsil/human_tonsil_train.py) — Trains the AMICI model. Sweep config: [`human_tonsil/human_tonsil_sweep.yaml`](human_tonsil/human_tonsil_sweep.yaml), launched via [`human_tonsil/run_human_tonsil_sweep.sh`](human_tonsil/run_human_tonsil_sweep.sh).
-3. [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) — Loads the trained model and generates the tonsil figures.
+2. [`human_tonsil/human_tonsil_train.py`](human_tonsil/human_tonsil_train.py) — Trains the AMICI model on the full 1000-gene panel. Sweep config: [`human_tonsil/human_tonsil_sweep.yaml`](human_tonsil/human_tonsil_sweep.yaml), launched via [`human_tonsil/run_human_tonsil_sweep.sh`](human_tonsil/run_human_tonsil_sweep.sh).
+3. [`human_tonsil/human_tonsil_no_ribo_retrain.py`](human_tonsil/human_tonsil_no_ribo_retrain.py) — Writes the 992-gene `human_tonsil_filtered_no_ribo_*` datasets and refits at the hyperparameters step 2 selected, into `saved_models/human_tonsil_no_ribo_retrain/seed_40`. This is the model Figure 6 reports.
+4. [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) — Loads the step 3 retrain and generates the tonsil figures into `figures/human_tonsil_no_ribo_analysis/`.
 
-[`human_tonsil/human_tonsil_empirical_distance_expression.py`](human_tonsil/human_tonsil_empirical_distance_expression.py) is model-free and needs only step 1. It contributes the tonsil profiles to [Fig S40](#model-free-test-of-the-monotone-distance-assumption-fig-s40), including the Fibroblast → CD4 T cell pair shown in full in panel a.
+[`human_tonsil/human_tonsil_empirical_distance_expression.py`](human_tonsil/human_tonsil_empirical_distance_expression.py) is model-free: it reads the 992-gene dataset that step 3 writes but none of its weights, so it needs steps 1 and 3 and no trained model. It contributes the tonsil profiles to [Fig S40](#model-free-test-of-the-monotone-distance-assumption-fig-s40), including the Fibroblast → CD4 T cell pair shown in full in panel a.
 
 ### [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py)
 

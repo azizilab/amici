@@ -441,12 +441,12 @@ figures:
     note: >-
       8d and 8h are spatial maps. 8a needs a rerun. 8e-g and 8i are two-phase and unimodal
       semisynthetic studies that generate their data and train their models internally. 8j reads the
-      tonsil dataset directly and needs no checkpoint. 8k reads figures/monotonicity/monotonicity_by_pair.csv,
+      no-ribosomal tonsil dataset directly and needs no checkpoint. 8k reads figures/monotonicity/monotonicity_by_pair.csv,
       which benchmarks/make_monotonicity_figure.py writes from the per-dataset analyses.
     assets:
       - {ref: xenium_main_data, panels: "8b, 8c"}
       - {ref: xenium_main_model, panels: "8b, 8c"}
-      - {ref: tonsil_main_data, panels: "8j"}
+      - {ref: tonsil_no_ribo_data, panels: "8j"}
 
   - id: ed9
     title: Extended Data Fig. 9 - attention variants, neighbor occlusion, negative controls
@@ -483,8 +483,8 @@ figures:
       - {ref: xenium_stromal_model, panels: "10h, 10i"}
       - {ref: atera_main_data, panels: "10d, 10e"}
       - {ref: atera_main_model, panels: "10d, 10e"}
-      - {ref: tonsil_main_data, panels: "10f, 10g"}
-      - {ref: tonsil_main_model, panels: "10f, 10g"}
+      - {ref: tonsil_no_ribo_data, panels: "10f, 10g"}
+      - {ref: tonsil_no_ribo_model, panels: "10f, 10g"}
 
 # Assets shared by several figures, referenced above as {ref: <name>}. The staging script merges a
 # catalog entry with the per-figure `panels` and `note` overrides, and uploads each object once.

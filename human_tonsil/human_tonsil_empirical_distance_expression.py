@@ -5,7 +5,8 @@ distance to their nearest sender and mean expression of the AMICI-implicated gen
 plotted per bin. Uses only cell positions, cell-type labels, and measured expression.
 
 The interactions and downstream genes are the ones shown in the tonsil downstream-impact
-dot plot produced by human_tonsil_analysis.py.
+dot plot produced by human_tonsil_analysis.py, so this script reads the same 992-gene
+no-ribosomal dataset that script does.
 """
 
 import os
@@ -32,7 +33,7 @@ from distance_profile_utils import (  # noqa: E402
     plot_profiles,
 )
 
-DATA_PATH = os.path.join(SCRIPT_DIR, "data/human_tonsil_filtered_2026-07-25.h5ad")
+DATA_PATH = os.path.join(SCRIPT_DIR, "data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad")
 OUTPUT_DIR = os.path.join(SCRIPT_DIR, "figures/empirical_distance_expression")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -52,21 +53,24 @@ MIN_CELLS_PER_BIN = 10
 # Gaussian kernel SD for the local-linear smoother drawn over the bin means, in um.
 SMOOTHING_BANDWIDTH = 5.0
 
+# Union of each sender's top 10 genes on the Fig. 6c dot plots, in the order the dot plots
+# draw them. Both GC B interactions share one gene axis there, so both share one list here.
 GC_B_GENES = [
-    "CLU",
     "MARCKSL1",
-    "CD22",
-    "MS4A1",
-    "RGS13",
     "BASP1",
-    "SRGN",
-    "MALAT1",
-    "CXCL13",
-    "RPL32",
-    "VCAM1",
-    "PTGDS",
+    "MS4A1",
+    "CD22",
+    "RGS13",
+    "HLA-DRA",
+    "P2RX5",
+    "RACK1",
+    "CD37",
+    "CSK",
+    "TPT1",
+    "VPREB3",
+    "CD74",
 ]
-CD4_T_GENES = ["CCL21", "CCL19", "VIM", "TPT1", "RPL32", "RPL34", "DCN", "PTGDS", "CXCL14", "CXCL12"]
+CD4_T_GENES = ["TPT1", "KLF2", "TCF7", "RACK1", "PLAC8", "CCR7", "BTG1", "NACA", "SELL", "CXCR4"]
 
 INTERACTIONS = [
     {"sender": "Follicular dendritic cell", "receiver": "GC B cell (resting)", "genes": GC_B_GENES},

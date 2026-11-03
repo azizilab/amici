@@ -40,9 +40,10 @@ DATASETS = [
     ("Atera breast cancer", "atera_breast/figures/empirical_distance_expression", "atera_breast", 5.0),
 ]
 
-# The pair shown in full in panels (a) and (b). This one carries both clear monotone
-# decays and three genes the test declines, so the example shows the call working in
-# both directions rather than only where the assumption holds.
+# The pair shown in full in panels (a) and (b). Since the tonsil moved to the 992-gene
+# no-ribosomal panel this pair declines 9 of its 10 genes: the receiver genes dip in the
+# receivers that abut a fibroblast and peak 18-33 um out, so the example now shows a
+# unimodal profile the monotonic class does not represent rather than a mix of calls.
 EXAMPLE_DATASET = "CosMx human tonsil"
 EXAMPLE_INTERACTION = "Fibroblast → CD4 T cell"
 
