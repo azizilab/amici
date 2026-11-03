@@ -14,17 +14,20 @@ Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 
 ## Redrawn panels
 
-Four panels differ from what the analysis scripts draw, so each has a companion script that redraws it.
+Five panels differ from what the analysis scripts draw, so each has a companion script that redraws it.
 For the three dot plots the analysis script still produces the panel itself -- the dots, their colour and
 size, the gene selection and the layout -- and the redraw script only recomputes the bold gene labels,
-which were applied by hand when the figure was assembled. None of them needs a model or a GPU: they read
-the cached ablation scores and the per-panel Source Data.
+which were applied by hand when the figure was assembled. Extended Data Fig. 2h is the exception: its
+redraw replaces the whole panel, because the published render predated both the p < 0.05 threshold of the
+Methods and the segmentation result for C15orf48. None of them needs a model or a GPU: they read the
+cached ablation scores and the per-panel Source Data.
 
 | Panel | Drawn by | Redrawn by | What the redraw adds |
 | --- | --- | --- | --- |
 | Figure 4c | [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py) | [`xenium/redraw_fig4c.py`](xenium/redraw_fig4c.py) | Bold gene labels from the two-comparison segmentation test of the Methods; unbolds *C15orf48* |
 | Figure 5c | [`atera_breast/atera_breast_analysis.py`](atera_breast/atera_breast_analysis.py) | [`atera_breast/redraw_fig5c.py`](atera_breast/redraw_fig5c.py) | Bold gene labels; the published bolding matched the test for only 11 of 30 gene columns |
 | Figure 6c | [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) | [`human_tonsil/redraw_fig6c.py`](human_tonsil/redraw_fig6c.py) | Bold gene labels at the pixel-converted 20/100 µm thresholds |
+| ED 2h | [`xenium/segmentation_analysis.py`](xenium/segmentation_analysis.py) | [`xenium/redraw_ed2h.py`](xenium/redraw_ed2h.py) | The whole panel and its legend at the Methods' p < 0.05; the published render drew and labelled the line at 0.1 and showed *C15orf48* as passing, which contradicted Fig. 4c |
 | Fig S5b (ED 1i) | [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py) | [`xenium/redraw_fig_s5b.py`](xenium/redraw_fig_s5b.py) | Drops the 15 structurally zero self-pairs, giving the published 210 points and ρ = 0.64 rather than 225 and ρ = 0.582 |
 
 ## Benchmarks
@@ -339,7 +342,9 @@ Cross-replicate validation of AMICI interaction predictions.
 Cell segmentation artifact analysis. Validates that identified genes are not artifacts of segmentation errors using a Mann-Whitney U test.
 
 - **Fig S6a**: Interaction network including stromal cells (showing segmentation artifact dominance)
-- **Fig S6b**: Segmentation validation dot plot (Mann-Whitney U test for interaction-mediated genes)
+- **Fig S6b**: Segmentation validation dot plot (Mann-Whitney U test for interaction-mediated genes). The
+  assembled ED 2h panel is redrawn by [`xenium/redraw_ed2h.py`](xenium/redraw_ed2h.py), which carries the
+  published styling -- gene-only tick labels, no title or statistics box, the legend as its own object
 - **Fig S11**: ESR1 segmentation overlap between invasive tumor and DCIS 2
 
 ### [`xenium/segmentation_analysis_gitiii.py`](xenium/segmentation_analysis_gitiii.py)

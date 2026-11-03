@@ -309,7 +309,12 @@ figures:
       - xenium/xenium_lr_analysis.py (2d)
       - benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py (2g)
       - xenium/segmentation_analysis.py (2h)
+      - xenium/redraw_ed2h.py (2h panel and legend, as assembled)
     note: >-
+      2h is drawn by redraw_ed2h.py from the deposited Source Data, in the style the panel was
+      assembled in; segmentation_analysis.py computes the test and draws the script-default version of
+      the same plot. The published render predated the p < 0.05 of the Methods and the segmentation
+      result for C15orf48, and was replaced on 2026-11-03.
       2e and 2f are spatial maps. 2b and 2d need a rerun: both plot from memory. 2a is the only panel
       in the manuscript that uses the earlier April-2025 Xenium model and its stromal-cell dataset,
       which source_data/checkpoints.yaml does not list; both are deposited and listed here.
