@@ -41,9 +41,9 @@ DATASETS = [
 ]
 
 # The pair shown in full in panels (a) and (b). Since the tonsil moved to the 992-gene
-# no-ribosomal panel this pair declines 9 of its 10 genes: the receiver genes dip in the
-# receivers that abut a fibroblast and peak 18-33 um out, so the example now shows a
-# unimodal profile the monotonic class does not represent rather than a mix of calls.
+# no-ribosomal panel this pair declines 9 of its 10 genes, its receiver genes peaking
+# 18-33 um out rather than decaying from contact. Kept as the example anyway: the figure
+# makes its point in panel (b), where most genes across the four datasets do decay.
 EXAMPLE_DATASET = "CosMx human tonsil"
 EXAMPLE_INTERACTION = "Fibroblast → CD4 T cell"
 
