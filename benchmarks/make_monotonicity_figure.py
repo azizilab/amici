@@ -40,12 +40,16 @@ DATASETS = [
     ("Atera breast cancer", "atera_breast/figures/empirical_distance_expression", "atera_breast", 5.0),
 ]
 
-# The pair shown in full in panels (a) and (b). Since the tonsil moved to the 992-gene
+# The pair shown in full in the two panels. Since the tonsil moved to the 992-gene
 # no-ribosomal panel this pair declines 9 of its 10 genes, its receiver genes peaking
 # 18-33 um out rather than decaying from contact. Kept as the example anyway: the figure
-# makes its point in panel (b), where most genes across the four datasets do decay.
+# makes its point in the all-pairs panel, where most genes across the four datasets do decay.
 EXAMPLE_DATASET = "CosMx human tonsil"
 EXAMPLE_INTERACTION = "Fibroblast → CD4 T cell"
+
+# Panel letters as the figure carries them in Extended Data Fig. 8, whose earlier panels
+# come from other scripts. They are not "a"/"b" because this image is not a figure of its own.
+PANEL_LETTERS = ("j", "k")
 
 MAX_DISTANCE = 50.0
 CALLED_COLOR = "#2c6fb5"
@@ -250,7 +254,7 @@ def main():
     ax_b = fig.add_subplot(grid[1, 0])
     frame = plot_all_pairs(ax_b, per_dataset)
 
-    for ax, letter in ((ax_a, "a"), (ax_b, "b")):
+    for ax, letter in zip((ax_a, ax_b), PANEL_LETTERS, strict=True):
         ax.text(-0.07, 1.02, letter, transform=ax.transAxes, fontsize=14, fontweight="bold", va="bottom")
 
     total_called = int(frame["n_called"].sum())
