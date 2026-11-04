@@ -1,7 +1,7 @@
 """Source Data for the Extended Data figures.
 
 The editor asks for Source Data behind every graph in the Figures *and* the Extended Data items.
-`fig2_benchmarks.py` ... `fig6_tonsil.py` cover the main figures; this script covers ED 1-9.
+`fig2_benchmarks.py` ... `fig6_tonsil.py` cover the main figures; this script covers ED 1-10.
 
 Each ED panel is declared below with where its numbers live. Panels fall into three kinds:
 
@@ -178,8 +178,39 @@ ED5 = [
     Panel("j", "Spatial cross-validation AUPRCs", CACHE, ["benchmarks/results_cv"], "benchmarks snakemake pipeline"),
 ]
 
-# ED 6: model selection, attention stability, hyperparameter sensitivity
+# ED 6: the no-ribosomal tonsil retrain and the T zone fibroblast chemokines
 ED6 = [
+    Panel(
+        "a",
+        "Retrained tonsil model against the published 1000-gene model",
+        CACHE,
+        [
+            "human_tonsil/results/human_tonsil_no_ribo_retrain/compare_weights_old.csv",
+            "human_tonsil/results/human_tonsil_no_ribo_retrain/compare_weights_new.csv",
+            "human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
+            "human_tonsil/results/human_tonsil_no_ribo_retrain/all_cell_types_ablation_scores.pkl",
+        ],
+        "human_tonsil/human_tonsil_no_ribo_compare.py",
+        "the left sub-panel is the two interaction weight matrices the comparison writes out; the right one needs both models' cached ablation scores, which are the only record of the per-gene contributions it plots",
+    ),
+    Panel(
+        "b",
+        "Top genes between high- and low-attention fibroblasts",
+        CACHE,
+        ["human_tonsil/results/human_tonsil_fibroblast_attention/human_tonsil_fibroblast_de_high_vs_low_max_attention.csv"],
+        "human_tonsil/human_tonsil_fibroblast_attention_de.py",
+    ),
+    Panel(
+        "c",
+        "Attention a fibroblast receives from CD4 T cells, by group",
+        CACHE,
+        ["human_tonsil/results/human_tonsil_fibroblast_attention/human_tonsil_fibroblast_attention_scores.csv"],
+        "human_tonsil/human_tonsil_fibroblast_attention_de.py",
+    ),
+]
+
+# ED 7: model selection, attention stability, hyperparameter sensitivity
+ED7 = [
     Panel("a", "Atera model selection and attention stability", CACHE, ["atera_breast/results/attention_consistency"], "atera_breast/atera_breast_attention_consistency.py"),
     Panel("b", "Tonsil model selection and attention stability", CACHE, ["human_tonsil/results"], "human_tonsil/human_tonsil_attention_consistency.py"),
     Panel("c", "Jensen-Shannon divergence of held-out composition", CACHE, ["benchmarks/figures/test_region_composition_diagnostic/test_region_composition_jsd_summary.csv"], "benchmarks/sensitivity_scripts/test_region_composition_diagnostic.py"),
@@ -191,8 +222,8 @@ ED6 = [
     Panel("i", "Empirical null distribution of Wald statistics", RECOMPUTE, [], "xenium/xenium_null_z_distribution.py"),
 ]
 
-# ED 7: threshold sensitivity, hub stability, multi-scale interactions, monotonicity
-ED7 = [
+# ED 8: threshold sensitivity, hub stability, multi-scale interactions, monotonicity
+ED8 = [
     Panel("a", "Length scale vs attention threshold", RECOMPUTE, [], "benchmarks/length_scale_task/sensitivity_test.py", "plots per-sender-cell length scales from memory; nothing is written to disk"),
     Panel("b", "Hub grid search over cluster number", CACHE, ["xenium/data/xenium_sample1/hub_analysis_cache"], "xenium/xenium_niche_analysis.py"),
     Panel("c", "Hub grid search over quantile threshold", CACHE, ["xenium/data/xenium_sample1/hub_analysis_cache"], "xenium/xenium_niche_analysis.py"),
@@ -206,8 +237,8 @@ ED7 = [
     Panel("k", "Monotonic decay calls across all pairs", CACHE, ["figures/monotonicity/monotonicity_by_pair.csv"], "benchmarks/make_monotonicity_figure.py"),
 ]
 
-# ED 8: attention variants, neighbor occlusion, negative controls
-ED8 = [
+# ED 9: attention variants, neighbor occlusion, negative controls
+ED9 = [
     Panel("a", "Learned unimodal peak parameter", CACHE, ["benchmarks/sensitivity_scripts/results/unimodal_attention_analysis/unimodal_attention_length_scale_samples.csv"], "benchmarks/sensitivity_scripts/amici_variants"),
     Panel("b", "Attention-drop distance", CACHE, ["benchmarks/sensitivity_scripts/results/unimodal_attention_analysis/unimodal_attention_length_scale_samples.csv"], "benchmarks/sensitivity_scripts/amici_variants"),
     Panel("c", "Length scales from the unconstrained PE variant", CACHE, ["benchmarks/sensitivity_scripts/results/unconstrained_attention_analysis/unconstrained_attention_length_scale_samples.csv"], "benchmarks/sensitivity_scripts/amici_variants"),
@@ -229,8 +260,8 @@ ED8 = [
     Panel("i", "PR curves, realistic negative control", RECOMPUTE, [], "benchmarks/sensitivity_scripts/neutral_sampling_negative_control.py", "the script contains no to_csv call"),
 ]
 
-# ED 9: noise, multiple-testing family, spatial dependence, stromal exclusion
-ED9 = [
+# ED 10: noise, multiple-testing family, spatial dependence, stromal exclusion
+ED10 = [
     Panel("a", "AUPRC under coordinate and expression noise", CACHE, ["benchmarks/sensitivity_scripts/figures/coordinate_noise_gradient_sensitivity_sweep/coordinate_noise_sensitivity_all_runs.csv"], "benchmarks/sensitivity_scripts/coordinate_noise_sensitivity.py"),
     Panel("b", "Per-pair vs family-wide BH, Xenium", CACHE, ["benchmarks/sensitivity_scripts/results/family_wide_bh"], "benchmarks/sensitivity_scripts/family_wide_bh_interaction_networks.py"),
     Panel("c", "Block-jackknife retention, Xenium", CACHE, ["benchmarks/sensitivity_scripts/results/spatial_block_jackknife"], "benchmarks/sensitivity_scripts/spatial_block_jackknife_gene_significance.py"),
@@ -258,7 +289,10 @@ ED9 = [
     ),
 ]
 
-EXTENDED_DATA = {1: ED1, 2: ED2, 3: ED3, 4: ED4, 5: ED5, 6: ED6, 7: ED7, 8: ED8, 9: ED9}
+EXTENDED_DATA = {
+    1: ED1, 2: ED2, 3: ED3, 4: ED4, 5: ED5,
+    6: ED6, 7: ED7, 8: ED8, 9: ED9, 10: ED10,
+}
 
 
 def survey() -> None:
@@ -371,50 +405,61 @@ EXPORTS: dict[str, list[dict]] = {
             "dest": "ED5i_runtime.csv", "mode": "runtime_json"}],
     "5j": [{"glob": "benchmarks/results_cv/breast_cancer_42/*_task_scores.csv", "dest": "ED5j_spatial_cv_task_scores.csv", "key": "source", "mode": "concat"}],
     # ED 6
-    "6a": [{"src": "atera_breast/results/attention_consistency/atera_breast_attention_consistency_runs.csv", "dest": "ED6a_atera_attention_consistency_runs.csv"},
-           {"src": "atera_breast/results/attention_consistency/atera_breast_attention_consistency_correlations.csv", "dest": "ED6a_atera_attention_consistency_correlations.csv"}],
-    "6b": [{"src": "human_tonsil/results/attention_consistency/human_tonsil_attention_consistency_runs.csv", "dest": "ED6b_tonsil_attention_consistency_runs.csv"},
-           {"src": "human_tonsil/results/attention_consistency/human_tonsil_attention_consistency_correlations.csv", "dest": "ED6b_tonsil_attention_consistency_correlations.csv"}],
-    "6c": [{"src": "benchmarks/figures/test_region_composition_diagnostic/test_region_composition_jsd_summary.csv", "dest": "ED6c_test_region_jsd.csv"}],
-    "6d": [{"src": "benchmarks/figures/test_region_composition_diagnostic/test_region_cell_type_composition.csv", "dest": "ED6d_test_region_composition.csv"}],
-    "6e": [{"src": "benchmarks/sensitivity_scripts/results/value_penalty_analysis/value_penalty_analysis_auprc.csv", "dest": "ED6e_value_penalty_auprc.csv"},
-           {"src": "benchmarks/sensitivity_scripts/results/value_penalty_analysis/value_penalty_analysis_pr_curves.csv", "dest": "ED6e_value_penalty_pr_curves.csv"}],
-    "6f": [{"src": "benchmarks/sensitivity_scripts/results/attention_penalty_analysis/attention_penalty_analysis_auprc.csv", "dest": "ED6f_attention_penalty_auprc.csv"},
-           {"src": "benchmarks/sensitivity_scripts/results/attention_penalty_analysis/attention_penalty_analysis_pr_curves.csv", "dest": "ED6f_attention_penalty_pr_curves.csv"}],
-    "6g": [{"src": "benchmarks/sensitivity_scripts/results/head_analysis/head_analysis_auprc.csv", "dest": "ED6g_head_auprc.csv"},
-           {"src": "benchmarks/sensitivity_scripts/results/head_analysis/head_analysis_pr_curves.csv", "dest": "ED6g_head_pr_curves.csv"}],
-    "6h": [{"src": "benchmarks/sensitivity_scripts/results/neighbor_analysis/neighbor_analysis_auprc.csv", "dest": "ED6h_neighbor_auprc.csv"},
-           {"src": "benchmarks/sensitivity_scripts/results/neighbor_analysis/neighbor_analysis_pr_curves.csv", "dest": "ED6h_neighbor_pr_curves.csv"}],
+    "6a": [{"srcs": ["human_tonsil/results/human_tonsil_no_ribo_retrain/compare_weights_old.csv",
+                     "human_tonsil/results/human_tonsil_no_ribo_retrain/compare_weights_new.csv"],
+            "dest": "ED6a_interaction_strength_by_pair.csv", "mode": "weight_matrix_pairs"},
+           {"srcs": ["human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
+                     "human_tonsil/results/human_tonsil_no_ribo_retrain/all_cell_types_ablation_scores.pkl"],
+            "dest": "ED6a_gene_neighbour_contribution.csv", "mode": "ablation_pair_diff"}],
+    "6b": [{"src": "human_tonsil/results/human_tonsil_fibroblast_attention/human_tonsil_fibroblast_de_high_vs_low_max_attention.csv",
+            "dest": "ED6b_fibroblast_de_high_vs_low.csv"}],
+    "6c": [{"src": "human_tonsil/results/human_tonsil_fibroblast_attention/human_tonsil_fibroblast_attention_scores.csv",
+            "dest": "ED6c_fibroblast_attention_scores.csv", "mode": "fibroblast_attention_groups"}],
     # ED 7
-    "7b": [{"src": "xenium/data/xenium_sample1/hub_analysis_cache/hub_cluster_assignments.csv", "dest": "ED7b_hub_cluster_assignments.csv"}],
-    "7e": [{"src": "benchmarks/sensitivity_scripts/2_phase/results/two_phase_amici_sweep/two_phase_selected_head_length_scale_samples.csv", "dest": "ED7e_two_phase_head_length_scales.csv"},
-           {"src": "benchmarks/sensitivity_scripts/2_phase/results/two_phase_amici_sweep/two_phase_head_length_scale_summary.csv", "dest": "ED7e_two_phase_head_summary.csv"}],
-    "7f": [{"src": "benchmarks/sensitivity_scripts/2_phase/results/two_phase_amici_sweep/two_phase_task_scores.csv", "dest": "ED7f_two_phase_task_scores.csv"}],
-    "7g": [{"src": "benchmarks/sensitivity_scripts/unimodal_two_phase/results/unimodal_two_phase_baseline_sweep/unimodal_baseline_auprc_comparison.csv", "dest": "ED7g_unimodal_baseline_auprc.csv"}],
-    "7i": [{"src": "benchmarks/sensitivity_scripts/unimodal_two_phase/results/unimodal_two_phase_amici_sweep/unimodal_two_phase_length_scale_estimates.csv", "dest": "ED7i_unimodal_length_scales.csv"}],
-    "7j": [{"src": "human_tonsil/figures/empirical_distance_expression/human_tonsil_distance_binned_expression.csv", "dest": "ED7j_tonsil_distance_profiles.csv"}],
-    "7k": [{"src": "figures/monotonicity/monotonicity_by_pair.csv", "dest": "ED7k_monotonicity_by_pair.csv"}],
+    "7a": [{"src": "atera_breast/results/attention_consistency/atera_breast_attention_consistency_runs.csv", "dest": "ED7a_atera_attention_consistency_runs.csv"},
+           {"src": "atera_breast/results/attention_consistency/atera_breast_attention_consistency_correlations.csv", "dest": "ED7a_atera_attention_consistency_correlations.csv"}],
+    "7b": [{"src": "human_tonsil/results/attention_consistency/human_tonsil_attention_consistency_runs.csv", "dest": "ED7b_tonsil_attention_consistency_runs.csv"},
+           {"src": "human_tonsil/results/attention_consistency/human_tonsil_attention_consistency_correlations.csv", "dest": "ED7b_tonsil_attention_consistency_correlations.csv"}],
+    "7c": [{"src": "benchmarks/figures/test_region_composition_diagnostic/test_region_composition_jsd_summary.csv", "dest": "ED7c_test_region_jsd.csv"}],
+    "7d": [{"src": "benchmarks/figures/test_region_composition_diagnostic/test_region_cell_type_composition.csv", "dest": "ED7d_test_region_composition.csv"}],
+    "7e": [{"src": "benchmarks/sensitivity_scripts/results/value_penalty_analysis/value_penalty_analysis_auprc.csv", "dest": "ED7e_value_penalty_auprc.csv"},
+           {"src": "benchmarks/sensitivity_scripts/results/value_penalty_analysis/value_penalty_analysis_pr_curves.csv", "dest": "ED7e_value_penalty_pr_curves.csv"}],
+    "7f": [{"src": "benchmarks/sensitivity_scripts/results/attention_penalty_analysis/attention_penalty_analysis_auprc.csv", "dest": "ED7f_attention_penalty_auprc.csv"},
+           {"src": "benchmarks/sensitivity_scripts/results/attention_penalty_analysis/attention_penalty_analysis_pr_curves.csv", "dest": "ED7f_attention_penalty_pr_curves.csv"}],
+    "7g": [{"src": "benchmarks/sensitivity_scripts/results/head_analysis/head_analysis_auprc.csv", "dest": "ED7g_head_auprc.csv"},
+           {"src": "benchmarks/sensitivity_scripts/results/head_analysis/head_analysis_pr_curves.csv", "dest": "ED7g_head_pr_curves.csv"}],
+    "7h": [{"src": "benchmarks/sensitivity_scripts/results/neighbor_analysis/neighbor_analysis_auprc.csv", "dest": "ED7h_neighbor_auprc.csv"},
+           {"src": "benchmarks/sensitivity_scripts/results/neighbor_analysis/neighbor_analysis_pr_curves.csv", "dest": "ED7h_neighbor_pr_curves.csv"}],
     # ED 8
-    "8a": [{"src": "benchmarks/sensitivity_scripts/results/amici_variants/unimodal_peak_interaction_distances.csv", "dest": "ED8a_unimodal_peak_distances.csv"}],
-    "8b": [{"src": "benchmarks/sensitivity_scripts/results/unimodal_attention_analysis/unimodal_attention_length_scale_samples.csv", "dest": "ED8b_unimodal_attention_length_scales.csv"}],
-    "8c": [{"src": "benchmarks/sensitivity_scripts/results/unconstrained_attention_analysis/unconstrained_attention_length_scale_samples.csv", "dest": "ED8c_unconstrained_length_scales.csv"}],
-    "8d": [{"src": "benchmarks/sensitivity_scripts/results/amici_variants/amici_variant_task_scores.csv", "dest": "ED8d_variant_task_scores.csv"}],
-    "8e": [{"src": "benchmarks/sensitivity_scripts/figures/neighbor_occlusion_analysis/neighbor_occlusion_summary.csv", "dest": "ED8e_occlusion_auprc.csv"}],
-    "8g": [{"src": "benchmarks/sensitivity_scripts/results/matched_neighbor_occlusion_analysis/matched_occlusion_summary.csv", "dest": "ED8g_matched_occlusion_summary.csv"},
-           {"src": "benchmarks/sensitivity_scripts/results/matched_neighbor_occlusion_analysis/matched_occlusion_per_cell.csv", "dest": "ED8g_matched_occlusion_per_cell.csv"},
-           {"src": "benchmarks/sensitivity_scripts/results/matched_neighbor_occlusion_analysis/matched_occlusion_diagnostics.csv", "dest": "ED8g_matched_occlusion_distance_summary.csv", "mode": "occlusion_diagnostics"}],
+    "8b": [{"src": "xenium/data/xenium_sample1/hub_analysis_cache/hub_cluster_assignments.csv", "dest": "ED8b_hub_cluster_assignments.csv"}],
+    "8e": [{"src": "benchmarks/sensitivity_scripts/2_phase/results/two_phase_amici_sweep/two_phase_selected_head_length_scale_samples.csv", "dest": "ED8e_two_phase_head_length_scales.csv"},
+           {"src": "benchmarks/sensitivity_scripts/2_phase/results/two_phase_amici_sweep/two_phase_head_length_scale_summary.csv", "dest": "ED8e_two_phase_head_summary.csv"}],
+    "8f": [{"src": "benchmarks/sensitivity_scripts/2_phase/results/two_phase_amici_sweep/two_phase_task_scores.csv", "dest": "ED8f_two_phase_task_scores.csv"}],
+    "8g": [{"src": "benchmarks/sensitivity_scripts/unimodal_two_phase/results/unimodal_two_phase_baseline_sweep/unimodal_baseline_auprc_comparison.csv", "dest": "ED8g_unimodal_baseline_auprc.csv"}],
+    "8i": [{"src": "benchmarks/sensitivity_scripts/unimodal_two_phase/results/unimodal_two_phase_amici_sweep/unimodal_two_phase_length_scale_estimates.csv", "dest": "ED8i_unimodal_length_scales.csv"}],
+    "8j": [{"src": "human_tonsil/figures/empirical_distance_expression/human_tonsil_distance_binned_expression.csv", "dest": "ED8j_tonsil_distance_profiles.csv"}],
+    "8k": [{"src": "figures/monotonicity/monotonicity_by_pair.csv", "dest": "ED8k_monotonicity_by_pair.csv"}],
     # ED 9
-    "9a": [{"src": "benchmarks/sensitivity_scripts/figures/coordinate_noise_gradient_sensitivity_sweep/coordinate_noise_sensitivity_all_runs.csv", "dest": "ED9a_noise_sensitivity_runs.csv"}],
-    "9b": [{"src": "benchmarks/sensitivity_scripts/results/family_wide_bh/xenium_per_pair_counts.csv", "dest": "ED9b_xenium_family_wide_bh.csv"}],
-    "9c": [{"src": "benchmarks/sensitivity_scripts/results/spatial_block_jackknife/xenium_jackknife_500um_per_pair.csv", "dest": "ED9c_xenium_jackknife_500um.csv"}],
-    "9d": [{"src": "benchmarks/sensitivity_scripts/results/family_wide_bh/atera_breast_per_pair_counts.csv", "dest": "ED9d_atera_family_wide_bh.csv"}],
-    "9e": [{"src": "benchmarks/sensitivity_scripts/results/spatial_block_jackknife/atera_breast_jackknife_500um_per_pair.csv", "dest": "ED9e_atera_jackknife_500um.csv"}],
-    "9f": [{"src": "benchmarks/sensitivity_scripts/results/family_wide_bh/human_tonsil_per_pair_counts.csv", "dest": "ED9f_tonsil_family_wide_bh.csv"}],
-    "9g": [{"src": "benchmarks/sensitivity_scripts/results/spatial_block_jackknife/human_tonsil_jackknife_500um_per_pair.csv", "dest": "ED9g_tonsil_jackknife_500um.csv"}],
-    "9h": [{"src": "xenium/figures/stromal_bleeding_analysis/cache/with_without_stroma_edge_scores.csv", "dest": "ED9h_with_without_stroma_edges.csv"},
-           {"src": "xenium/figures/stromal_bleeding_analysis/cache/with_stroma_nonstromal_interaction_matrix.csv", "dest": "ED9h_with_stroma_matrix.csv"},
-           {"src": "xenium/figures/stromal_bleeding_analysis/cache/without_stroma_interaction_matrix.csv", "dest": "ED9h_without_stroma_matrix.csv"}],
-    "9i": [{"src": "xenium/figures/stromal_bleeding_analysis/cache/distance_matched_stromal_attention_null_metrics.csv", "dest": "ED9i_distance_matched_null.csv"}],
+    "9a": [{"src": "benchmarks/sensitivity_scripts/results/amici_variants/unimodal_peak_interaction_distances.csv", "dest": "ED9a_unimodal_peak_distances.csv"}],
+    "9b": [{"src": "benchmarks/sensitivity_scripts/results/unimodal_attention_analysis/unimodal_attention_length_scale_samples.csv", "dest": "ED9b_unimodal_attention_length_scales.csv"}],
+    "9c": [{"src": "benchmarks/sensitivity_scripts/results/unconstrained_attention_analysis/unconstrained_attention_length_scale_samples.csv", "dest": "ED9c_unconstrained_length_scales.csv"}],
+    "9d": [{"src": "benchmarks/sensitivity_scripts/results/amici_variants/amici_variant_task_scores.csv", "dest": "ED9d_variant_task_scores.csv"}],
+    "9e": [{"src": "benchmarks/sensitivity_scripts/figures/neighbor_occlusion_analysis/neighbor_occlusion_summary.csv", "dest": "ED9e_occlusion_auprc.csv"}],
+    "9g": [{"src": "benchmarks/sensitivity_scripts/results/matched_neighbor_occlusion_analysis/matched_occlusion_summary.csv", "dest": "ED9g_matched_occlusion_summary.csv"},
+           {"src": "benchmarks/sensitivity_scripts/results/matched_neighbor_occlusion_analysis/matched_occlusion_per_cell.csv", "dest": "ED9g_matched_occlusion_per_cell.csv"},
+           {"src": "benchmarks/sensitivity_scripts/results/matched_neighbor_occlusion_analysis/matched_occlusion_diagnostics.csv", "dest": "ED9g_matched_occlusion_distance_summary.csv", "mode": "occlusion_diagnostics"}],
+    # ED 10
+    "10a": [{"src": "benchmarks/sensitivity_scripts/figures/coordinate_noise_gradient_sensitivity_sweep/coordinate_noise_sensitivity_all_runs.csv", "dest": "ED10a_noise_sensitivity_runs.csv"}],
+    "10b": [{"src": "benchmarks/sensitivity_scripts/results/family_wide_bh/xenium_per_pair_counts.csv", "dest": "ED10b_xenium_family_wide_bh.csv"}],
+    "10c": [{"src": "benchmarks/sensitivity_scripts/results/spatial_block_jackknife/xenium_jackknife_500um_per_pair.csv", "dest": "ED10c_xenium_jackknife_500um.csv"}],
+    "10d": [{"src": "benchmarks/sensitivity_scripts/results/family_wide_bh/atera_breast_per_pair_counts.csv", "dest": "ED10d_atera_family_wide_bh.csv"}],
+    "10e": [{"src": "benchmarks/sensitivity_scripts/results/spatial_block_jackknife/atera_breast_jackknife_500um_per_pair.csv", "dest": "ED10e_atera_jackknife_500um.csv"}],
+    "10f": [{"src": "benchmarks/sensitivity_scripts/results/family_wide_bh/human_tonsil_per_pair_counts.csv", "dest": "ED10f_tonsil_family_wide_bh.csv"}],
+    "10g": [{"src": "benchmarks/sensitivity_scripts/results/spatial_block_jackknife/human_tonsil_jackknife_500um_per_pair.csv", "dest": "ED10g_tonsil_jackknife_500um.csv"}],
+    "10h": [{"src": "xenium/figures/stromal_bleeding_analysis/cache/with_without_stroma_edge_scores.csv", "dest": "ED10h_with_without_stroma_edges.csv"},
+           {"src": "xenium/figures/stromal_bleeding_analysis/cache/with_stroma_nonstromal_interaction_matrix.csv", "dest": "ED10h_with_stroma_matrix.csv"},
+           {"src": "xenium/figures/stromal_bleeding_analysis/cache/without_stroma_interaction_matrix.csv", "dest": "ED10h_without_stroma_matrix.csv"}],
+    "10i": [{"src": "xenium/figures/stromal_bleeding_analysis/cache/distance_matched_stromal_attention_null_metrics.csv", "dest": "ED10i_distance_matched_null.csv"}],
 }
 
 
@@ -450,7 +495,7 @@ def _downsample_pr_curve(frame, points: int = PR_CURVE_POINTS):
 
 
 def _summarize_occlusion_diagnostics(source: str, destination: str) -> int:
-    """Summarise the per-edge matching diagnostics that ED 8g's right sub-panel shows.
+    """Summarise the per-edge matching diagnostics that ED 9g's right sub-panel shows.
 
     The raw table is one row per candidate neighbor edge (4.2 million rows, 250 MB). The panel plots
     the distance distribution per arm, so the distances are summarised per dataset and arm instead.
@@ -466,6 +511,126 @@ def _summarize_occlusion_diagnostics(source: str, destination: str) -> int:
     )
     summary.to_csv(destination, index=False)
     return len(summary)
+
+
+# The pairs ED 6a's right sub-panel shows, which are the pairs Fig. 6c draws.
+ED6A_PAIRS = [
+    ("CD4 T cell", "Fibroblast"),
+    ("GC B cell (resting)", "Tfh cell"),
+    ("GC B cell (resting)", "Follicular dendritic cell"),
+]
+
+# ED 6b and 6c split the fibroblasts at this quantile of the attention CD4 T cells assign them.
+FIBROBLAST_ATTENTION_QUANTILE = 0.9
+
+
+def _weight_matrices_to_pairs(sources: list[str], destination: str) -> int:
+    """Tidy both interaction weight matrices into the points ED 6a's left sub-panel plots.
+
+    Each matrix is senders (rows) against receivers (columns), holding the number of significant
+    positive downstream genes. The panel scatters the published model against the retrain over the
+    ordered cell-type pairs, so the diagonal -- a cell type against itself, which the analysis
+    leaves at zero -- is dropped, which is what makes the n = 380 the legend gives.
+    """
+    import pandas as pd
+
+    old, new = (pd.read_csv(source, index_col=0) for source in sources)
+    new = new.loc[old.index, old.columns]
+    rows = [
+        {
+            "sender": sender,
+            "receiver": receiver,
+            "n_significant_genes_original": old.loc[sender, receiver],
+            "n_significant_genes_retrained": new.loc[sender, receiver],
+        }
+        for sender in old.index
+        for receiver in old.columns
+        if sender != receiver
+    ]
+    table = pd.DataFrame(rows)
+    table.to_csv(destination, index=False)
+    return len(table)
+
+
+def _ablation_pair_diff(sources: list[str], destination: str) -> int:
+    """Per-gene neighbour contribution for ED 6a's three pairs, from both models' cached scores.
+
+    The caches are the only record of the per-gene values the right sub-panel plots: the comparison
+    script writes out the interaction counts and the gene rankings it checks, not the contributions
+    themselves. Each cache holds one row per (gene, receiver) and one `<sender>_diff` column per
+    sender, so a pair is that column over the receiver's rows. Genes are restricted to the 992 the
+    two models share, and a gene is significant for a pair on the criterion the Methods use
+    throughout: a positive contribution at BH-adjusted p < 0.05.
+    """
+    import numpy as np
+    import pandas as pd
+
+    from amici.interpretation._ablation_module import AMICIAblationModule
+
+    frames = {}
+    for label, source in zip(("original", "retrained"), sources, strict=True):
+        frame = AMICIAblationModule.load_object(source)._ablation_scores_df
+        frame = frame.astype({"gene": str})
+        frames[label] = frame
+
+    shared = sorted(set(frames["original"]["gene"]) & set(frames["retrained"]["gene"]))
+    threshold = -np.log10(0.05)
+    tables = []
+    for receiver, sender in ED6A_PAIRS:
+        rows = {
+            label: frame[frame["cell_type"] == receiver].set_index("gene").reindex(shared)
+            for label, frame in frames.items()
+        }
+        tables.append(
+            pd.DataFrame(
+                {
+                    "receiver": receiver,
+                    "sender": sender,
+                    "gene": shared,
+                    "neighbour_contribution_original": rows["original"][f"{sender}_diff"].to_numpy(),
+                    "neighbour_contribution_retrained": rows["retrained"][f"{sender}_diff"].to_numpy(),
+                    "significant_original": (
+                        (rows["original"][f"{sender}_diff"] > 0)
+                        & (rows["original"][f"{sender}_nl10_pval_adj"] > threshold)
+                    ).to_numpy(),
+                    "significant_retrained": (
+                        (rows["retrained"][f"{sender}_diff"] > 0)
+                        & (rows["retrained"][f"{sender}_nl10_pval_adj"] > threshold)
+                    ).to_numpy(),
+                }
+            )
+        )
+    table = pd.concat(tables, ignore_index=True)
+    table.to_csv(destination, index=False)
+    return len(table)
+
+
+def _fibroblast_attention_groups(source: str, destination: str) -> int:
+    """Add ED 6c's groups to the per-fibroblast attention scores.
+
+    The analysis writes one row per fibroblast and splits them as it draws, so the split is
+    recomputed here rather than read. It is taken over the fibroblasts a CD4 T cell both attends and
+    assigns a positive score, so that cells no receiver attends do not set the threshold, and the
+    high-interacting group is strictly above the quantile -- the same comparisons
+    `human_tonsil_fibroblast_attention_de.py` makes, which is what reproduces the legend's counts.
+    """
+    import pandas as pd
+
+    table = pd.read_csv(source)
+    split_on = (table["n_attending_receivers"] > 0) & (table["max_attention"] > 0)
+    threshold = table.loc[split_on, "max_attention"].quantile(FIBROBLAST_ATTENTION_QUANTILE)
+    table["group"] = pd.NA
+    table.loc[split_on, "group"] = "Low-interacting"
+    table.loc[split_on & (table["max_attention"] > threshold), "group"] = "High-interacting"
+    table["split_threshold"] = threshold
+    counts = table["group"].value_counts()
+    print(
+        f"    ED 6c groups: {counts.get('High-interacting', 0):,} high and "
+        f"{counts.get('Low-interacting', 0):,} low of {int(split_on.sum()):,} split, "
+        f"{len(table):,} fibroblasts in all (threshold {threshold:.4f})"
+    )
+    table.to_csv(destination, index=False)
+    return len(table)
 
 
 def _runtime_json_to_table(sources: list[str], destination: str) -> int:
@@ -517,13 +682,20 @@ def _export_one(spec: dict, out_dir: str) -> tuple[str, int]:
         table.to_csv(destination, index=False)
         return destination, len(table)
 
-    if spec.get("mode") == "runtime_json":
+    if spec.get("mode") in ("runtime_json", "weight_matrix_pairs", "ablation_pair_diff"):
         sources = [os.path.join(REPO_ROOT, src) for src in spec["srcs"]]
-        return destination, _runtime_json_to_table(sources, destination)
+        handler = {
+            "runtime_json": _runtime_json_to_table,
+            "weight_matrix_pairs": _weight_matrices_to_pairs,
+            "ablation_pair_diff": _ablation_pair_diff,
+        }[spec["mode"]]
+        return destination, handler(sources, destination)
 
     source = os.path.join(REPO_ROOT, spec["src"])
     if spec.get("mode") == "occlusion_diagnostics":
         return destination, _summarize_occlusion_diagnostics(source, destination)
+    if spec.get("mode") == "fibroblast_attention_groups":
+        return destination, _fibroblast_attention_groups(source, destination)
     if spec["dest"].endswith(".json"):
         import shutil
 
@@ -540,7 +712,7 @@ XLSX_SHEET_LIMIT = 31
 def _sheet_name(stem: str, taken: set[str]) -> str:
     """Name a workbook sheet after its CSV, inside Excel's 31-character limit.
 
-    Truncating the stem is not always enough: ``ED6a_atera_attention_consistency_runs`` and
+    Truncating the stem is not always enough: ``ED7a_atera_attention_consistency_runs`` and
     ``..._correlations`` cut to the same 31 characters, and two sheets of one name means the second
     table silently overwrites the first. The last word is what tells such a pair apart, so a stem
     whose truncation is already taken keeps that word and loses the characters before it instead.
@@ -596,16 +768,17 @@ def export() -> None:
                 3: "Extended Data Fig. 3: segmentation testing, length-scale uncertainty and hub selection",
                 4: "Extended Data Fig. 4: communication hubs against niche composition and graph baselines",
                 5: "Extended Data Fig. 5: CAF subpopulations, cell-type resolution, runtime and spatial cross-validation",
-                6: "Extended Data Fig. 6: model selection, attention stability and hyperparameter sensitivity",
-                7: "Extended Data Fig. 7: threshold sensitivity, hub stability, multi-scale interactions and monotonicity",
-                8: "Extended Data Fig. 8: attention variants, neighbor occlusion and negative controls",
-                9: "Extended Data Fig. 9: noise, multiple-testing family, spatial dependence and stromal exclusion",
+                6: "Extended Data Fig. 6: the tonsil model retrained without ribosomal-protein genes, and the T zone fibroblasts",
+                7: "Extended Data Fig. 7: model selection, attention stability and hyperparameter sensitivity",
+                8: "Extended Data Fig. 8: threshold sensitivity, hub stability, multi-scale interactions and monotonicity",
+                9: "Extended Data Fig. 9: attention variants, neighbor occlusion and negative controls",
+                10: "Extended Data Fig. 10: noise, multiple-testing family, spatial dependence and stromal exclusion",
             }
             shared = {
                 "ED 4e": "ED 4e (stromal cell types) is the same GSEA table as ED 4b, subset by cell-type group: sheet ED4b_gsea_results",
                 "ED 4f": "ED 4f (tumor cell types): sheet ED4b_gsea_results",
                 "ED 4g": "ED 4g (immune cell types): sheet ED4b_gsea_results",
-                "ED 7c": "ED 7c (quantile threshold grid) shares the hub assignments in sheet ED7b_hub_cluster_assignments",
+                "ED 8c": "ED 8c (quantile threshold grid) shares the hub assignments in sheet ED8b_hub_cluster_assignments",
             }
             sheets = []
             taken: set[str] = set()
@@ -627,7 +800,8 @@ def export() -> None:
                 )
                 readme.append([entry["panel"], f"Sheet {sheet_name}"])
             for panel_name, text in shared.items():
-                if panel_name.startswith(f"ED {number}"):
+                # "ED 1" is a prefix of "ED 10", so compare the number, not the prefix.
+                if panel_name.split()[1][:-1] == str(number):
                     readme.append([panel_name, text])
             with open(os.path.join(out_dir, "manifest.json"), "w") as handle:
                 json.dump({"figure": f"ED{number}", "provenance": {}, "readme": readme, "sheets": sheets}, handle, indent=2)

@@ -100,6 +100,10 @@ figure_5:
     all_cell_type_ablation: atera_breast/figures/atera_breast_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl
 
 figure_6:
+  # The 1000-gene model, which is no longer what Fig. 6 is drawn from: see no_ribo_retrain below.
+  # It is kept under this key because ED 6a sets the two models against each other, ED 7b, 10f and
+  # 10g are still drawn from it, and two sensitivity scripts point here for the panels as first
+  # published.
   dataset: human_tonsil (CosMx 1k)
   data: human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad
   data_md5: 8a7e318a95e517942fda74a584eeb597
@@ -126,8 +130,12 @@ figure_6:
   no_ribo_retrain:
     status: >-
       Seed-40 retrain without RPL21/22/32/34/37, UBA52, FAU and MALAT1 (992 genes) at the hyperparameters of the
-      model above; human_tonsil/human_tonsil_analysis.py loads it. The published Fig. 6 panels and their Source
-      Data are still from the 1000-gene model above.
+      model above; human_tonsil/human_tonsil_analysis.py loads it. Every panel of the published Fig. 6 comes from
+      it, as do Extended Data Fig. 6a-c, and their Source Data were rebuilt on it on 2026-11-04
+      (source_data/fig6_tonsil.py and source_data/extended_data.py, checkpoint key human_tonsil_no_ribo in
+      source_data/_common.py). Fig. 6d changed panel as well as model: it is now one head, head 4, over
+      fibroblast senders to CD4 T cell receivers, where the earlier 6d was heads 3 and 6 over GC B cell
+      (resting).
     preprocessing: human_tonsil/human_tonsil_no_ribo_retrain.py  # drops the eight genes from the counts, renormalizes to the median total (424)
     data: human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad
     data_md5: 5deb0af78f2b9b98276428d2df19be04

@@ -4,10 +4,18 @@ Panels
   6a  Spatial cell-type map with the held-out test region.
   6b  Interaction network for the cell types of interest and the germinal-center heatmap.
   6c  Downstream gene dot plots for GC B cell (resting) and CD4 T cell receivers.
-  6d  Head-resolved dot plots (heads 3 and 6) for GC B cell (resting) and the matching length-scale
-      distributions.
+  6d  Ablation dot plot for head 4 alone, fibroblast senders to CD4 T cell receivers, and the
+      effective pairwise radius distribution for that pair on that head.
 
-Checkpoint: wandb sweep 0f9rk0na, run 4303v0zu (see source_data/checkpoints.yaml).
+Checkpoint: the seed-40 retrain on 992 genes, after the five ribosomal-protein genes, UBA52, FAU and
+MALAT1 were dropped and the counts renormalized. Every panel of the published Fig. 6 comes from it
+(see the figure legend and source_data/checkpoints.yaml); the 1000-gene model the earlier version of
+this figure used is still recorded, because ED 6a sets the two against each other.
+
+Panel 6d is not the 6d of the earlier version. That one was two head-resolved dot plots, heads 3 and
+6, for GC B cell (resting) receivers. The retrain's 6d is a single head: head 4 is the one head whose
+fibroblast -> CD4 T cell radius sits in the tens of microns, and it is the head AMICI assigns CCR7,
+which is the pairing the earlier two-head version could not support.
 obsm["spatial"] is in CosMx pixels; lengths are converted with 0.12028 um/px as in
 human_tonsil/human_tonsil_analysis.py.
 Run from the repository root:  python source_data/fig6_tonsil.py
@@ -17,10 +25,12 @@ import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
 import scanpy as sc
+from scipy import sparse, stats
+from scipy.spatial import cKDTree
 
 import _common as C
 
-NAME = "human_tonsil"
+NAME = "human_tonsil_no_ribo"
 FIGURE = "Fig6"
 PIXEL_SIZE_UM = 0.12028
 
@@ -35,39 +45,105 @@ GRAPH_CELL_TYPES = [
     "Macrophage (C1Q+)",
 ]
 GC_SUBSET = ["GC B cell (resting)", "GC B cell (cycling)", "Follicular dendritic cell", "Macrophage (GPNMB+)"]
-PUBLISHED_GC_ROWS = ["Follicular dendritic cell", "Macrophage (GPNMB+)", "GC B cell (resting)", "GC B cell (cycling)"]
+# Read off the published panel: the column labels are all four in the text layer, the row labels all
+# but "GC B cell (cycling)", whose slot between the first and third rows leaves it the only option.
+PUBLISHED_GC_ROWS = ["GC B cell (resting)", "GC B cell (cycling)", "Follicular dendritic cell", "Macrophage (GPNMB+)"]
 PUBLISHED_GC_COLS = ["GC B cell (resting)", "GC B cell (cycling)", "Follicular dendritic cell", "Macrophage (GPNMB+)"]
 
 GC_B = "GC B cell (resting)"
+CD4_T = "CD4 T cell"
 # Sender order of the dot-plot calls; it sets the column order of the union of top genes.
 GC_SENDERS = ["Tfh cell", "Follicular dendritic cell"]
+CD4_T_SENDERS = ["Fibroblast"]
 # adata.obsm["spatial"] is CenterX/Y_global_px, CosMx global pixels rather than microns, so the
 # segmentation test's 20/100um thresholds have to be converted. The scale is the ratio of the pixel
 # and millimetre coordinates uns["fov_positions"] carries for every FOV.
 UM_PER_PX = 0.120281
+# Gene order as the published panels draw it, left to right along each dot plot's gene axis, read
+# out of the text layer of figures/Figure 6.pdf. MALAT1, RPL32 and RPL34, which the earlier lists
+# carried, are not in the 992-gene panel at all.
 DOTPLOTS = [
     {
         "receiver": GC_B,
         "senders": GC_SENDERS,
-        "genes": ["CLU", "MARCKSL1", "CD22", "MS4A1", "RGS13", "BASP1", "SRGN", "MALAT1", "CXCL13", "RPL32", "VCAM1", "PTGDS"],
+        "genes": ["MARCKSL1", "BASP1", "MS4A1", "CD22", "RGS13", "HLA-DRA", "P2RX5", "RACK1", "CD37",
+                  "CSK", "TPT1", "VPREB3", "CD74"],
     },
     {
-        "receiver": "CD4 T cell",
-        "senders": ["Fibroblast"],
-        "genes": ["CCL21", "CCL19", "VIM", "TPT1", "RPL32", "RPL34", "DCN", "PTGDS", "CXCL14", "CXCL12"],
+        "receiver": CD4_T,
+        "senders": CD4_T_SENDERS,
+        "genes": ["TPT1", "KLF2", "TCF7", "RACK1", "PLAC8", "CCR7", "BTG1", "NACA", "SELL", "CXCR4"],
     },
 ]
 DOT_N_TOP_GENES = 10
 DOT_MIN_SIZE_BY = -10
 
+# 6d is one head over one pair, so the head dot plot and the length scales share a receiver and a
+# sender with each other rather than with 6c.
+HEAD_DOTPLOT_RECEIVER = CD4_T
+HEAD_DOTPLOT_SENDERS = CD4_T_SENDERS
 HEAD_DOTPLOTS = {
-    3: ["CLU", "MARCKSL1", "CD74", "SRGN", "BASP1", "MS4A1", "PFN1", "HLA-DRA", "CXCL13", "CD22"],
-    6: ["IL32", "CXCL13", "MALAT1", "CLU", "SRGN", "VCAM1", "VIM"],
+    4: ["KLF2", "CCR7", "TPT1", "PLAC8", "SELL", "TCF7", "CXCR4", "NACA", "NOSIP", "NELL2"],
 }
-HEAD_LABELS = {3: "Long-range interaction (head 3)", 6: "Short-range interaction (head 6)"}
-HIGHLIGHTED_RED = {"CXCL13", "VCAM1"}
-LENGTH_SCALE_HEADS = [3, 6]
-LENGTH_SCALE_CACHE = "human_tonsil/figures/human_tonsil_analysis/human_tonsil_all_heads_length_scale_distribution_um.csv"
+HEAD_LABELS = {4: "Chemokine-range interaction (head 4)"}
+HIGHLIGHTED_RED = {"CCR7"}
+LENGTH_SCALE_HEADS = [4]
+LENGTH_SCALE_CACHE = "human_tonsil/figures/human_tonsil_no_ribo_analysis/fig6d/fig6d_head_4_length_scale_distribution_um.csv"
+
+
+def select_dotplot_genes_drawn(adata, labels_key, ablation_df, receiver, senders, n_top, min_size_by, panel):
+    """The gene selection the panel actually draws: the top `n_top` that survive the segmentation filter.
+
+    `C.select_dotplot_genes` takes the top genes by neighbour contribution, which is what
+    `plot_featurewise_contributions_dotplot` does on its own. The analysis calls it with
+    `exclude_segmentation_flagged_genes=True` and `segmentation_compare_near_senders=True`, so flagged
+    genes are dropped before the top `n_top` is taken, and the published lists cannot be reproduced
+    without that step. Three one-sided comparisons have to pass at p < 0.05: receivers bordering a
+    sender against distant senders and against distant receivers, which are the two the Methods
+    describe, and against the senders those receivers border, which is the third.
+
+    The third is what keeps fibroblast *CCL19* and *CCL21* out of the CD4 T cell panel. Both beat the
+    two distant groups -- T-zone fibroblasts express them and distant fibroblasts do not -- but not
+    the fibroblasts the receivers touch, so the panel reads them as spillover from the sender rather
+    than as a receiver program, and the whole of Fig. 6c is receiver genes.
+    """
+    labels = adata.obs[labels_key].astype(str).to_numpy()
+    coords = np.asarray(adata.obsm["spatial"], dtype=float) * UM_PER_PX
+    sub = ablation_df[ablation_df["cell_type"] == receiver]
+    selected, dropped = {}, {}
+
+    for sender in senders:
+        candidates = sub[
+            (sub[f"{sender}_diff"] > 0)
+            & (sub[f"{sender}_z_value"] > min_size_by)
+            & (sub[f"{sender}_nl10_pval_adj"] > -np.log10(0.05))
+        ].sort_values(f"{sender}_diff", ascending=False)
+        genes = candidates["gene"].astype(str).tolist()
+
+        r_idx, s_idx = np.flatnonzero(labels == receiver), np.flatnonzero(labels == sender)
+        r_dist = cKDTree(coords[s_idx]).query(coords[r_idx], k=1)[0]
+        s_dist = cKDTree(coords[r_idx]).query(coords[s_idx], k=1)[0]
+        near_r, far_r = r_idx[r_dist <= 20], r_idx[r_dist >= 100]
+        near_s, far_s = s_idx[s_dist <= 20], s_idx[s_dist >= 100]
+        block = adata[:, genes].X
+        block = block.toarray() if sparse.issparse(block) else np.asarray(block)
+
+        keep = []
+        for j, gene in enumerate(genes):
+            values = block[:, j]
+            p = [
+                stats.mannwhitneyu(values[near_r], values[group], alternative="greater")[1]
+                for group in (far_s, far_r, near_s)
+            ]
+            if max(p) < 0.05:
+                keep.append(gene)
+        selected[sender] = keep[:n_top]
+        dropped[sender] = [g for g in genes[:n_top] if g not in keep]
+        print(
+            f"  {panel} {receiver} <- {sender}: {len(genes)} candidates, {len(keep)} pass all three "
+            f"comparisons; the unfiltered top {n_top} loses {dropped[sender]}"
+        )
+    return selected
 
 
 def main():
@@ -114,7 +190,9 @@ def main():
     seg_pairs = []
     for spec in DOTPLOTS:
         receiver, senders = spec["receiver"], spec["senders"]
-        selected = C.select_dotplot_genes(abl_df, receiver, senders, DOT_N_TOP_GENES, DOT_MIN_SIZE_BY)
+        selected = select_dotplot_genes_drawn(
+            adata, labels_key, abl_df, receiver, senders, DOT_N_TOP_GENES, DOT_MIN_SIZE_BY, "6c"
+        )
         union = []
         for sender in senders:
             union += [g for g in selected[sender] if g not in union]
@@ -161,19 +239,25 @@ def main():
     head_tables = []
     for head, genes in HEAD_DOTPLOTS.items():
         head_abl = model.get_neighbor_ablation_scores(
-            adata=adata, cell_type=GC_B, head_idx=head, ablated_neighbor_ct_sub=GC_SENDERS, compute_z_value=True
+            adata=adata,
+            cell_type=HEAD_DOTPLOT_RECEIVER,
+            head_idx=head,
+            ablated_neighbor_ct_sub=HEAD_DOTPLOT_SENDERS,
+            compute_z_value=True,
         )
         head_df = head_abl._ablation_scores_df
-        for n_top in [5, 8, 10, 12]:
-            for min_size in [-10, 0, 5, 10]:
-                sel = C.select_dotplot_genes(head_df, GC_B, GC_SENDERS, n_top, min_size)
-                union = []
-                for sender in GC_SENDERS:
-                    union += [g for g in sel[sender] if g not in union]
-                if union == genes:
-                    print(f"  6d head {head}: published genes reproduced with n_top_genes={n_top}, min_size_by={min_size}")
-        tab = C.receiver_gene_table(head_df, GC_B, GC_SENDERS, head=head)
-        table = C.dotplot_panel(tab, GC_B, GC_SENDERS, genes, HEAD_LABELS[head])
+        # The analysis draws this one by spreading the same dotplot_kwargs, so the segmentation
+        # exclusion applies here as well as in 6c.
+        selected = select_dotplot_genes_drawn(
+            adata, labels_key, head_df, HEAD_DOTPLOT_RECEIVER, HEAD_DOTPLOT_SENDERS,
+            DOT_N_TOP_GENES, DOT_MIN_SIZE_BY, f"6d head {head}",
+        )
+        union = []
+        for sender in HEAD_DOTPLOT_SENDERS:
+            union += [g for g in selected[sender] if g not in union]
+        C.check_gene_list(f"6d head {head} (union of senders)", union, genes)
+        tab = C.receiver_gene_table(head_df, HEAD_DOTPLOT_RECEIVER, HEAD_DOTPLOT_SENDERS, head=head)
+        table = C.dotplot_panel(tab, HEAD_DOTPLOT_RECEIVER, HEAD_DOTPLOT_SENDERS, genes, HEAD_LABELS[head])
         table["highlighted_red_in_figure"] = table["gene"].isin(HIGHLIGHTED_RED)
         head_tables.append(table)
     head_dots = pd.concat(head_tables, ignore_index=True).rename(
@@ -181,13 +265,16 @@ def main():
     )
 
     # ---- 6d: length-scale distributions ------------------------------------------------------------
-    cf = model.get_counterfactual_attention_patterns(cell_type=GC_B, adata=adata)
+    cf = model.get_counterfactual_attention_patterns(cell_type=HEAD_DOTPLOT_RECEIVER, adata=adata)
     ls = cf._calculate_length_scales(
-        head_idxs=LENGTH_SCALE_HEADS, sender_types=GC_SENDERS, attention_threshold=0.1, sample_threshold=0.01
+        head_idxs=LENGTH_SCALE_HEADS,
+        sender_types=HEAD_DOTPLOT_SENDERS,
+        attention_threshold=0.1,
+        sample_threshold=0.01,
     )
     ls = ls.rename(columns={"length_scale": "length_scale_px", "neighbor_idx": "sender_cell_id", "sender_type": "sender"})
     ls["length_scale_um"] = ls["length_scale_px"] * PIXEL_SIZE_UM
-    ls.insert(0, "receiver", GC_B)
+    ls.insert(0, "receiver", HEAD_DOTPLOT_RECEIVER)
     cache = C.REPO / LENGTH_SCALE_CACHE
     if cache.exists():
         old = pd.read_csv(cache).rename(columns={"neighbor_idx": "sender_cell_id", "sender_type": "sender"})
@@ -246,15 +333,16 @@ def main():
         },
         {
             "sheet": "Fig6d_head_dotplots",
-            "description": "Head-resolved dot plots for GC B cell (resting): neighbor contribution with only the "
-            "given head active (colour) and its Wald statistic (size). highlighted_red_in_figure marks genes "
-            "set in red in the figure.",
+            "description": "Head-resolved dot plot for CD4 T cell receivers and fibroblast senders: neighbor "
+            "contribution with only head 4 active (colour) and its Wald statistic (size). "
+            "highlighted_red_in_figure marks CCR7, the gene set in red in the figure.",
             "df": head_dots,
         },
         {
             "sheet": "Fig6d_length_scales",
-            "description": "Per-sender-cell length scale for GC B cell (resting) receivers on heads 3 and 6 "
-            "(attention threshold 0.1), in CosMx pixels and um.",
+            "description": "Per-sender-cell effective pairwise radius for CD4 T cell receivers and fibroblast "
+            "senders on head 4 (attention threshold 0.1), in CosMx pixels and um. One row per sender cell, "
+            "which is one point of the box plot.",
             "df": ls,
         },
         {

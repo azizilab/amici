@@ -77,7 +77,7 @@ CHECKPOINTS = {
         "object_data": "atera_breast/data/atera_breast_filtered_2026-07-22.h5ad",
     },
     "human_tonsil": {
-        "figures": ["Fig. 6a-d"],
+        "figures": ["ED 6a", "ED 7b", "ED 10f", "ED 10g"],
         "data": "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad",
         "data_md5": "8a7e318a95e517942fda74a584eeb597",
         "model": "human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/"
@@ -93,12 +93,34 @@ CHECKPOINTS = {
         "object_model": "human_tonsil/saved_models/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt",
         "object_data": "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad",
     },
+    # The 992-gene retrain every Fig. 6 panel comes from. The 1000-gene entry above stays rather than
+    # being replaced: ED 6a sets the two models against each other, and ED 7b, 10f and 10g are still
+    # drawn from the published one.
+    "human_tonsil_no_ribo": {
+        "figures": ["Fig. 6a-d", "ED 6a-c"],
+        "data": "human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad",
+        "data_md5": "5deb0af78f2b9b98276428d2df19be04",
+        "model": "human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40",
+        "model_md5": "b06237db3d38002ee7fd4da74197c5b2",
+        # Trained by human_tonsil_no_ribo_retrain.py at the hyperparameters of the sweep below rather
+        # than as a run within it, so the sweep is recorded and there is no run id.
+        "wandb_sweep": "0f9rk0na (hyperparameters only)",
+        "wandb_run": "not a sweep run; see human_tonsil/human_tonsil_no_ribo_retrain.py",
+        "config": "reproducibility/human_tonsil_config.yaml",
+        "labels_key": "celltype_manual_fine",
+        "seed": 40,
+        "figshare_model_file_id": None,
+        "figshare_data_file_id": None,
+        "object_model": "human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt",
+        "object_data": "human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad",
+    },
 }
 
 ABLATION_CACHES = {
     "xenium": "xenium/figures/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
     "atera_breast": "atera_breast/figures/atera_breast_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
     "human_tonsil": "human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
+    "human_tonsil_no_ribo": "human_tonsil/figures/human_tonsil_no_ribo_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
     "cortex": "cortex/figures/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
 }
 

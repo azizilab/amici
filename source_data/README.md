@@ -1,17 +1,14 @@
 # Source Data for the AMICI manuscript
 
-The Source Data workbooks are what the submission attaches: 14 workbooks and 5 companion zips, one per
+The Source Data workbooks are what the submission attaches: 15 workbooks and 5 companion zips, one per
 figure, deposited under `source_data/` in the deposit. The per-panel tables they were assembled from --
-118 CSVs and the 14 `manifest.json` files that map each one to its sheet -- are deposited beside them
+122 CSVs and the 15 `manifest.json` files that map each one to its sheet -- are deposited beside them
 under `source_data/panels/`, one folder per figure. They are built artifacts, so
 `output/` and `panels/` stay out of the branch (see [`.gitignore`](.gitignore)).
 
-This file is the record of where the numbers in each sheet came from. The exporters that produced them
-were removed from the branch once the workbooks were final, and [Reproducing](#reproducing) says how to
-get them back. Each one verified the dataset and `model.pt` by md5, recomputed every plotted quantity,
-checked it against the published panel and wrote per-panel CSVs, which `build_workbooks.py` assembled
-into one workbook per figure. `_common.py` stays, because `xenium/ed2c_volcano_bolding.py` imports its
-gene-table and segmentation-test helpers.
+This file is the record of where the numbers in each sheet came from. Each exporter verifies the dataset
+and `model.pt` by md5, recomputes every plotted quantity, checks it against the published panel and
+writes per-panel CSVs, which `build_workbooks.py` assembles into one workbook per figure.
 
 | Output | Contents |
 | --- | --- |
@@ -30,15 +27,14 @@ Figure 1 is a schematic and has no Source Data.
 
 ## Reproducing
 
-The exporters are no longer in the branch. Find the commit that removed them and restore the ones you
-need first:
+The exporters are in the branch. They were taken out in b1c513d once the workbooks were final, on the
+understanding that they would not be needed again, and were restored on 2026-11-04 because they were:
+Extended Data Fig. 6 was inserted and shifted four figures' worth of panel numbering, and Fig. 6 moved
+to the 992-gene retrain. Restoring them from b1c513d now would bring back the old numbering, so the
+corrected versions are kept here rather than in history alone. `_common.py` was never removed, because
+`xenium/ed2c_volcano_bolding.py` imports its gene-table and segmentation-test helpers.
 
-```bash
-git log --diff-filter=D --oneline -- source_data   # the commit that removed them
-git show <commit>^:source_data/extended_data.py > source_data/extended_data.py
-```
-
-Then, from the repository root:
+From the repository root:
 
 ```bash
 conda activate amici            # /opt/conda/envs/amici on the AMICI VM
@@ -59,7 +55,8 @@ checkpoints and datasets where the analysis scripts look for them.
 The exporters reuse the cached all-cell-type ablation scores when present (they recompute them otherwise),
 and independently recompute every dot-plot receiver from the checkpoint; in all four datasets the fresh values
 equal the cached ones exactly. Run time on one A100 is roughly 5 min (Fig. 3, first run computes the cortex
-cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
+cache), 10 min (Fig. 5), 20 min (Fig. 4) and 25 min (Fig. 6, which runs the segmentation test over every
+candidate gene of four sender-receiver pairs to reproduce the gene selection).
 
 ## Checkpoint per figure
 
@@ -69,7 +66,7 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 | 3 | `cortex_processed_2025-04-28.h5ad` | `plm73bmg` / `xrtcnlt0` | `76eadfaa...` | Figshare 63409695; `cortex/...` in the deposit |
 | 4 | `xenium_sample1_filtered_2025-05-01.h5ad` | `g3mucw4s` / `te7pkv3z` | `c118e838...` | Figshare 63409710; `xenium/...` in the deposit |
 | 5 | `atera_breast_filtered_2026-07-22.h5ad` | `25xpxkuk` / `zhtraubt` | `f53e6ab5...` | `atera_breast/...` in the deposit |
-| 6 | `human_tonsil_filtered_2026-07-25.h5ad` | `0f9rk0na` / `4303v0zu` | `e12cc392...` | `human_tonsil/...` in the deposit |
+| 6 | `human_tonsil_filtered_no_ribo_2026-07-25.h5ad` | seed-40 retrain at the `0f9rk0na` hyperparameters, not a sweep run | `b06237db...` | `human_tonsil/...` in the deposit |
 
 ## How each panel was checked against the manuscript
 
@@ -85,9 +82,11 @@ cache), 10 min (Figs. 5 and 6) and 20 min (Fig. 4).
 | 5b | Ward-clustered row and column order | exact |
 | 5c | gene selection (n_top 8, min z -10) | exact for all three receivers |
 | 5c | bold genes vs the segmentation test | 12/30 reproduced |
-| 6b | Ward-clustered GC heatmap order | exact |
-| 6c | gene selection (n_top 10, min z -10) | exact for both receivers |
-| 6d | head 3 (n_top 10) and head 6 (n_top 5) gene selection; length scales vs the cached CSV | exact; length scales equal to 2e-13 um |
+| 6b | Ward-clustered GC heatmap order | exact, rows and columns |
+| 6c | gene selection (n_top 10, min z -10) after the segmentation exclusion | exact for both receivers, in order |
+| 6c | the same selection without the exclusion | neither list reproduces; the CD4 T cell panel comes out as *CCL21*, *CCL19* and the other fibroblast chemokines, which beat both distant groups of the Methods test but not the senders the receivers border |
+| 6c | bold genes vs the segmentation test | 13/13 and 10/10, which is the legend's "gene names are therefore all in bold" |
+| 6d | head-4 gene selection; length scales vs the cached CSV | exact; 39,273 of 39,273 sender cells matched to 2e-13 um, median 26.6 um against the 27 um the legend gives |
 
 ## Figure 2
 
@@ -158,17 +157,18 @@ Inventory of Supporting Information (one line per file):
 - Source Data ED Fig. 3 | Source_Data_ED3.xlsx, Source_Data_ED3_large_tables.zip | Numerical data underlying Extended Data Fig. 3b-j
 - Source Data ED Fig. 4 | Source_Data_ED4.xlsx | Numerical data underlying Extended Data Fig. 4b-h
 - Source Data ED Fig. 5 | Source_Data_ED5.xlsx, Source_Data_ED5_large_tables.zip | Numerical data underlying Extended Data Fig. 5c, d, h-j
-- Source Data ED Fig. 6 | Source_Data_ED6.xlsx | Numerical data underlying Extended Data Fig. 6a-h
-- Source Data ED Fig. 7 | Source_Data_ED7.xlsx | Numerical data underlying Extended Data Fig. 7b, c, e-g, i-k
-- Source Data ED Fig. 8 | Source_Data_ED8.xlsx | Numerical data underlying Extended Data Fig. 8a-e, g
-- Source Data ED Fig. 9 | Source_Data_ED9.xlsx | Numerical data underlying Extended Data Fig. 9a-i
+- Source Data ED Fig. 6 | Source_Data_ED6.xlsx | Numerical data underlying Extended Data Fig. 6a-c
+- Source Data ED Fig. 7 | Source_Data_ED7.xlsx | Numerical data underlying Extended Data Fig. 7a-h
+- Source Data ED Fig. 8 | Source_Data_ED8.xlsx | Numerical data underlying Extended Data Fig. 8b, c, e-g, i-k
+- Source Data ED Fig. 9 | Source_Data_ED9.xlsx | Numerical data underlying Extended Data Fig. 9a-e, g
+- Source Data ED Fig. 10 | Source_Data_ED10.xlsx | Numerical data underlying Extended Data Fig. 10a-i
 
-Extended Data panels with no numerical graph, and so no Source Data: 1a, 1b, 2e, 2f, 4a, 5a, 5b, 7d, 7h
+Extended Data panels with no numerical graph, and so no Source Data: 1a, 1b, 2e, 2f, 4a, 5a, 5b, 8d, 8h
 (architecture schematics and spatial maps).
 
 Extended Data panels whose numbers were never written to disk, and which therefore need their analysis
-rerun before they can be exported: 1d, 1e, 2b, 2d, 3a, 5e-g, 6i, 7a, 8f, 8h, 8i. That leaves 61 of the
-74 graph panels exported; `extended_data.py --survey` names the script to rerun for each of the 13.
+rerun before they can be exported: 1d, 1e, 2b, 2d, 3a, 5e-g, 7i, 8a, 9f, 9h, 9i. That leaves 64 of the
+77 graph panels exported; `extended_data.py --survey` names the script to rerun for each of the 13.
 
 With `extended_data.py` restored, `--survey` prints the current coverage and `--export` rewrites the
 Extended Data panel CSVs.
