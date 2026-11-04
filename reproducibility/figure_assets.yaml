@@ -53,7 +53,7 @@ figures:
       3ct_dataset_2way_{seed}.h5ad inputs were not kept, so those panels are reproducible from the
       deposited scores and models but not retrainable from the original data. 2f-j come from the
       realistic re-run; 2h-j are kept as published, and 2g is redrawn from the re-run model. See the
-      Figure 2 section of source_data/README.md.
+      Figure 2 section of SOURCE_DATA.md.
     assets:
       - kind: checkpoint
         object: semisyn/fig2_amici_results/

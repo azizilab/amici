@@ -3,12 +3,10 @@
 This document maps scripts and workflows in this repository to the figures they generate in the AMICI manuscript.
 
 **The `S` numbers below are the pre-condensation supplementary numbering (Fig. S1-S40).** The submitted
-manuscript condenses those panels into nine multi-panel Extended Data items, which it labels Fig. S1-S9,
-so an `S` number here and an `S` number in the paper are different figures. The Extended Data items and
-their panels are enumerated in `source_data/extended_data.py`, which is no longer in the branch; see
-[`source_data/README.md`](source_data/README.md) for the panel inventory, for how to restore that script
-and for where the built workbooks are deposited. Renumbering this guide against the submitted figures is
-still to do.
+manuscript condenses those panels into ten multi-panel Extended Data figures, so an `S` number here and
+an Extended Data number in the paper are different figures. `source_data/extended_data.py` enumerates the
+Extended Data panels and the script behind each; [`SOURCE_DATA.md`](SOURCE_DATA.md) says what the
+deposited workbooks contain. Renumbering this guide against the submitted figures is still to do.
 
 Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 

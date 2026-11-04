@@ -385,7 +385,7 @@ def readme_for(index, figures):
             "  7a, 7e-i, 8, 9a) generate their datasets and train their models inside the script, so there",
             "  is no checkpoint to deposit; the manifest names the script instead.",
             "- **Panels that need a rerun.** Thirteen Extended Data panels never had their numbers written",
-            "  to disk. `source_data/README.md` lists them and names the script to rerun for each.",
+            "  to disk. `SOURCE_DATA.md` lists them and names the script to rerun for each.",
             "",
             "Provenance for the main-figure checkpoints - W&B sweep and run ids, verified md5 sums, Figshare",
             "file ids, training configs - is in `source_data/checkpoints.yaml` in the repository.",
