@@ -157,14 +157,21 @@ def pbmc_task_panels(results, seeds, task, allow_incomplete):
     summary = []
     for name in methods:
         vals = wide[name].to_numpy()
+        box = C.box_statistics(vals)
         entry = {
             "method": name,
-            "n_datasets": len(vals),
-            "median": np.median(vals),
-            "q1": np.percentile(vals, 25),
-            "q3": np.percentile(vals, 75),
-            "min": vals.min(),
-            "max": vals.max(),
+            "n_datasets": box["n"],
+            "median": box["median"],
+            "q1": box["q1"],
+            "q3": box["q3"],
+            "min": box["min"],
+            "max": box["max"],
+            # The legend defines the whiskers and the points drawn beyond them; with ten datasets per
+            # group they usually reach the extremes, but a group with an outlier would not say so
+            # from min and max alone.
+            "whisker_low": box["whisker_low"],
+            "whisker_high": box["whisker_high"],
+            "n_outliers": box["n_outliers"],
         }
         if name != "AMICI":
             # scipy returns the U of the first sample, i.e. U of AMICI over this baseline; it runs from 0 to
@@ -557,7 +564,7 @@ def main():
             notes.append("NicheDE with sigma = 200 and 500 does not reproduce (re-run about 0.07-0.08 higher).")
         if "CGCom" in missing:
             notes.append(
-                "CGCom was not re-run: its attention scores overflow on this dataset (source_data/README.md, issue 2)."
+                "CGCom was not re-run: its attention scores overflow on this dataset (see SOURCE_DATA.md, Figure 2)."
             )
         panels.append(
             {

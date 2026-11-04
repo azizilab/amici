@@ -89,6 +89,8 @@ HEAD_LABELS = {4: "Chemokine-range interaction (head 4)"}
 HIGHLIGHTED_RED = {"CCR7"}
 LENGTH_SCALE_HEADS = [4]
 LENGTH_SCALE_CACHE = "human_tonsil/figures/human_tonsil_no_ribo_analysis/fig6d/fig6d_head_4_length_scale_distribution_um.csv"
+# The axis the published box plot is drawn to; human_tonsil_analysis.py passes 50 um / the pixel size.
+AXIS_CLIP_UM = 50.0
 
 
 def select_dotplot_genes_drawn(adata, labels_key, ablation_df, receiver, senders, n_top, min_size_by, panel):
@@ -283,12 +285,9 @@ def main():
             f"  6d length scales vs {cache.name}: {len(both)}/{len(ls)} rows matched, max |diff| = "
             f"{np.abs(both['length_scale_um'] - both['length_scale_um_cached']).max():.2e} um"
         )
-    ls_summary = (
-        ls.groupby(["head_idx", "sender"])["length_scale_um"]
-        .describe(percentiles=[0.25, 0.5, 0.75])
-        .reset_index()
-        .rename(columns={"count": "n_sender_cells", "50%": "median", "25%": "q1", "75%": "q3"})
-    )
+    ls_summary = C.box_statistics_frame(
+        ls, ["head_idx", "sender"], "length_scale_um", axis_clip=AXIS_CLIP_UM
+    ).rename(columns={"n": "n_sender_cells"})
     print(ls_summary.to_string(index=False))
 
     panels = [
@@ -347,7 +346,10 @@ def main():
         },
         {
             "sheet": "Fig6d_length_scale_summary",
-            "description": "Box-plot statistics (um) of each box in Fig. 6d.",
+            "description": "Box-plot statistics (um) of the box in Fig. 6d, on the convention its legend states: "
+            "whisker_low and whisker_high are the most extreme radii within 1.5x the interquartile range of "
+            "the nearer box edge, and n_outliers counts the cells drawn individually beyond them. axis_clip "
+            "is the axis limit the panel is drawn to and n_beyond_axis_clip the cells past it.",
             "df": ls_summary,
         },
     ]

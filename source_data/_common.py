@@ -262,6 +262,61 @@ def dotplot_panel(gene_table, receiver, senders, genes, panel_label, extra=None)
     return out
 
 
+def box_statistics(values, axis_clip=None):
+    """Every number the legends promise for one box or violin, on the Tukey convention they state.
+
+    The legends define the whiskers as reaching the most extreme observation within 1.5 times the
+    interquartile range of the nearer box edge, with anything past them drawn individually. That makes
+    the whisker ends data points rather than q1 - 1.5*IQR and q3 + 1.5*IQR, which is what a reader
+    checking the panel against the sheet would measure, so they are reported as such and the count
+    beyond them is given alongside.
+
+    ``axis_clip`` records the axis limit the panel is drawn to, so a reader can tell a tail that runs
+    off the panel from one that is not there; it does not affect any statistic.
+    """
+    import numpy as np
+
+    v = np.asarray(values, dtype=float)
+    v = v[np.isfinite(v)]
+    q1, median, q3 = np.percentile(v, [25, 50, 75])
+    iqr = q3 - q1
+    lo_fence, hi_fence = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    inside = v[(v >= lo_fence) & (v <= hi_fence)]
+    whisker_low = float(inside.min()) if inside.size else float(v.min())
+    whisker_high = float(inside.max()) if inside.size else float(v.max())
+    stats = {
+        "n": int(v.size),
+        "mean": float(v.mean()),
+        "std": float(v.std(ddof=1)) if v.size > 1 else float("nan"),
+        "min": float(v.min()),
+        "q1": float(q1),
+        "median": float(median),
+        "q3": float(q3),
+        "max": float(v.max()),
+        "whisker_low": whisker_low,
+        "whisker_high": whisker_high,
+        "n_outliers_below": int((v < whisker_low).sum()),
+        "n_outliers_above": int((v > whisker_high).sum()),
+        "n_outliers": int(((v < whisker_low) | (v > whisker_high)).sum()),
+    }
+    if axis_clip is not None:
+        stats["axis_clip"] = float(axis_clip)
+        stats["n_beyond_axis_clip"] = int((v > axis_clip).sum())
+    return stats
+
+
+def box_statistics_frame(frame, group_cols, value_col, axis_clip=None):
+    """box_statistics for every group, as a tidy table in the group order given."""
+    import pandas as pd
+
+    rows = []
+    for key, group in frame.groupby(group_cols, sort=False):
+        keys = key if isinstance(key, tuple) else (key,)
+        rows.append({**dict(zip(group_cols, keys, strict=True)),
+                     **box_statistics(group[value_col], axis_clip=axis_clip)})
+    return pd.DataFrame(rows)
+
+
 def check_gene_list(label, computed, published):
     """Report whether a recomputed gene selection matches the published panel."""
     match = list(computed) == list(published)

@@ -5,9 +5,9 @@ Panels
   4b  Directed interaction graphs: all cell types (left) and the immune/tumor subset (right).
   4c  Downstream gene dot plots for M1 macrophage, CD8 T cell and invasive tumor receivers, with the
       segmentation-artifact test that decides which genes are bold.
-  4d  Length-scale distributions per sender -> receiver (head) and the head-resolved CD4 -> CD8 dot plot.
-  4e  Invasive tumor cells of replicate 1: proximity to any / attending CD8 T cell, total CD8 attention on
+  4d  Invasive tumor cells of replicate 1: proximity to any / attending CD8 T cell, total CD8 attention on
       the maximum-variance head, and ESR1 expression.
+  4e  Length-scale distributions per sender -> receiver (head) and the head-resolved CD4 -> CD8 dot plot.
   4f  Communication hub assignments and the hub sender/receiver compositions shown as Sankey diagrams.
 
 Checkpoint: wandb sweep g3mucw4s, run te7pkv3z (see source_data/checkpoints.yaml).
@@ -97,7 +97,7 @@ SEGMENTATION_PAIRS = [
     ("CD8+_T_Cells", "Invasive_Tumor", ["AGR3", "ESR1", "SERPINA3"]),
 ]
 
-# Panel 4d (top): interactions and heads of xenium_analysis.py.
+# Panel 4e (top): interactions and heads of xenium_analysis.py.
 LENGTH_SCALE_INTERACTIONS = {
     "CD8+_T_Cells": {"senders": ["Macrophages_2", "CD4+_T_Cells"], "head_idxs": [4, 5], "sample_threshold": 0.02},
     "Macrophages_1": {
@@ -124,13 +124,15 @@ PUBLISHED_VIOLIN_ORDER = [
     "Invasive_Tumor -> Macrophages_1 (head 5)",
     "Macrophages_2 -> Macrophages_1 (head 5)",
 ]
+# The axis the published violins are drawn to; xenium_analysis.py sets plt.xlim(0, 50).
+AXIS_CLIP_UM = 50.0
 
-# Panel 4d (bottom): head-resolved CD4 -> CD8 contributions.
+# Panel 4e (bottom): head-resolved CD4 -> CD8 contributions.
 HEAD_DOT_RECEIVER, HEAD_DOT_SENDER = "CD8+_T_Cells", "CD4+_T_Cells"
 HEAD_DOT_HEADS = [4, 5]
 HEAD_DOT_GENES = ["GNLY", "CAVIN2", "SELL", "LTB"]
 
-# Panel 4e: settings of xenium_spatial_analysis.py.
+# Panel 4d: settings of xenium_spatial_analysis.py.
 SPATIAL_RECEIVER, SPATIAL_SENDER, SPATIAL_SAMPLE = "Invasive_Tumor", "CD8+_T_Cells", "0"
 SPATIAL_SENDER_QUANTILE = 0.95
 SPATIAL_GENE = "ESR1"
@@ -234,7 +236,7 @@ def main():
     for col in ["receiver", "sender"]:
         dots[col] = dots[col].map(display)
 
-    # ---- 4d (top): length-scale violins ------------------------------------------------------------
+    # ---- 4e (top): length-scale violins ------------------------------------------------------------
     ls_dfs = []
     for receiver, cfg in LENGTH_SCALE_INTERACTIONS.items():
         cf = model.get_counterfactual_attention_patterns(cell_type=receiver, adata=adata)
@@ -258,7 +260,7 @@ def main():
         ls_dfs.append(kept)
     ls_df = pd.concat(ls_dfs, ignore_index=True)
     order = ls_df.groupby("interaction")["length_scale"].median().sort_values().index.tolist()
-    C.check_gene_list("4d violin rows (ascending median)", order, PUBLISHED_VIOLIN_ORDER)
+    C.check_gene_list("4e violin rows (ascending median)", order, PUBLISHED_VIOLIN_ORDER)
     rank = {k: i + 1 for i, k in enumerate(order)}
     ls_long = pd.DataFrame(
         {
@@ -273,14 +275,11 @@ def main():
             "length_scale_um": ls_df["length_scale"].values,
         }
     ).sort_values(["row_order_top_to_bottom", "sender_cell_id"])
-    ls_summary = (
-        ls_long.groupby(["row_order_top_to_bottom", "interaction"])["length_scale_um"]
-        .describe(percentiles=[0.25, 0.5, 0.75])
-        .reset_index()
-        .rename(columns={"count": "n_sender_cells", "50%": "median", "25%": "q1", "75%": "q3"})
-    )
+    ls_summary = C.box_statistics_frame(
+        ls_long, ["row_order_top_to_bottom", "interaction"], "length_scale_um", axis_clip=AXIS_CLIP_UM
+    ).rename(columns={"n": "n_sender_cells"})
 
-    # ---- 4d (bottom): head-resolved CD4 -> CD8 dot plot --------------------------------------------
+    # ---- 4e (bottom): head-resolved CD4 -> CD8 dot plot --------------------------------------------
     head_tables = []
     for head in HEAD_DOT_HEADS:
         head_abl = model.get_neighbor_ablation_scores(
@@ -300,7 +299,7 @@ def main():
     head_dots["receiver"] = head_dots["receiver"].map(display)
     head_dots["sender"] = head_dots["sender"].map(display)
 
-    # ---- 4e: replicate-1 invasive tumor spatial panels (xenium_spatial_analysis.py) ----------------
+    # ---- 4d: replicate-1 invasive tumor spatial panels (xenium_spatial_analysis.py) ----------------
     adata_s = adata[adata.obs["sample"] == SPATIAL_SAMPLE].copy()
     receiver_attention = model.get_attention_patterns(
         indices=(adata.obs[labels_key] == SPATIAL_RECEIVER) & (adata.obs["sample"] == SPATIAL_SAMPLE),
@@ -359,7 +358,7 @@ def main():
         .idxmax()
         .values[0]
     )
-    print(f"  4e max-variance head = {max_var_head} (published panel: head {PUBLISHED_MAX_VAR_HEAD})")
+    print(f"  4d max-variance head = {max_var_head} (published panel: head {PUBLISHED_MAX_VAR_HEAD})")
 
     receiver_adata = adata_s[adata_s.obs[labels_key] == SPATIAL_RECEIVER].copy()
     nn_idx = np.array(receiver_adata.obsm["_nn_idx"])
@@ -376,7 +375,7 @@ def main():
     esr1 = receiver_adata.X[:, receiver_adata.var_names.get_loc(SPATIAL_GENE)]
     esr1 = np.asarray(esr1.toarray() if sparse.issparse(esr1) else esr1).reshape(-1)
     rcoords = receiver_adata.obsm["spatial"]
-    spatial_4e = pd.DataFrame(
+    spatial_4d = pd.DataFrame(
         {
             "cell_id": receiver_adata.obs_names,
             "x_um": rcoords["X"].values,
@@ -389,7 +388,7 @@ def main():
             f"{SPATIAL_GENE}_expression": esr1,
         }
     )
-    spatial_4e = spatial_4e.replace({np.inf: np.nan})
+    spatial_4d = spatial_4d.replace({np.inf: np.nan})
     attending_df = pd.DataFrame(
         {
             "cd8_cell_id": sender_ids,
@@ -507,37 +506,41 @@ def main():
             "df": dots,
         },
         {
-            "sheet": "Fig4d_length_scales",
+            "sheet": "Fig4d",
+            "description": "Invasive tumor cells of replicate 1. Proximity score = 1/(1+exp(d/25-5)) of the "
+            "distance d (um) to the nearest CD8 T cell among the 50 nearest neighbors (0 if none); 'attending' "
+            f"CD8 T cells receive max attention above the {SPATIAL_SENDER_QUANTILE} quantile (sheet "
+            f"Fig4d_attending_CD8). Total attention is summed over CD8 neighbors on head {max_var_head}, the "
+            "head with the largest variance of attention to CD8 T cells. ESR1 is normalized expression.",
+            "df": spatial_4d,
+        },
+        {
+            "sheet": "Fig4d_attending_CD8",
+            "description": "CD8 T cells of replicate 1 with the maximum attention they receive from any invasive "
+            "tumor receiver, and whether they pass the attending threshold.",
+            "df": attending_df,
+        },
+        {
+            "sheet": "Fig4e_length_scales",
             "description": "Per-sender-cell effective pairwise radius (length scale, um) for each sender -> receiver "
             "(head) row of the violin plot, attention threshold 0.1, heads with median in (0, 50] um. "
             "row_order_top_to_bottom follows ascending median.",
             "df": ls_long,
         },
         {
-            "sheet": "Fig4d_length_scale_summary",
-            "description": "Summary statistics of each violin in Fig. 4d (um).",
+            "sheet": "Fig4e_length_scale_summary",
+            "description": "Statistics of each violin and its inner box in Fig. 4e (um), on the convention "
+            "the legend states: whisker_low and whisker_high are the most extreme radii within 1.5x the "
+            "interquartile range of the nearer box edge, and n_outliers counts the cells beyond them. "
+            "axis_clip is the axis limit the panel is drawn to and n_beyond_axis_clip the cells past it, "
+            "which the violins do not show.",
             "df": ls_summary,
         },
         {
-            "sheet": "Fig4d_head_dotplot",
+            "sheet": "Fig4e_head_dotplot",
             "description": "Head-resolved CD4 T cell -> CD8 T cell dot plot: neighbor contribution with only the "
             "given head active (colour, scale +/-0.01) and its Wald statistic (size).",
             "df": head_dots,
-        },
-        {
-            "sheet": "Fig4e",
-            "description": "Invasive tumor cells of replicate 1. Proximity score = 1/(1+exp(d/25-5)) of the "
-            "distance d (um) to the nearest CD8 T cell among the 50 nearest neighbors (0 if none); 'attending' "
-            f"CD8 T cells receive max attention above the {SPATIAL_SENDER_QUANTILE} quantile (sheet "
-            f"Fig4e_attending_CD8). Total attention is summed over CD8 neighbors on head {max_var_head}, the "
-            "head with the largest variance of attention to CD8 T cells. ESR1 is normalized expression.",
-            "df": spatial_4e,
-        },
-        {
-            "sheet": "Fig4e_attending_CD8",
-            "description": "CD8 T cells of replicate 1 with the maximum attention they receive from any invasive "
-            "tumor receiver, and whether they pass the attending threshold.",
-            "df": attending_df,
         },
         {
             "sheet": "Fig4f_hubs",
@@ -564,8 +567,8 @@ def main():
         ("Fig. 4a", "Sheet Fig4a"),
         ("Fig. 4b", "Sheets Fig4b and Fig4b_full_matrix"),
         ("Fig. 4c", "Sheet Fig4c"),
-        ("Fig. 4d", "Sheets Fig4d_length_scales, Fig4d_length_scale_summary, Fig4d_head_dotplot"),
-        ("Fig. 4e", "Sheets Fig4e and Fig4e_attending_CD8"),
+        ("Fig. 4d", "Sheets Fig4d and Fig4d_attending_CD8"),
+        ("Fig. 4e", "Sheets Fig4e_length_scales, Fig4e_length_scale_summary, Fig4e_head_dotplot"),
         ("Fig. 4f", "Sheets Fig4f_hubs, Fig4f_sankey_flows, Fig4f_hub_summary"),
     ]
     C.save_panels(
