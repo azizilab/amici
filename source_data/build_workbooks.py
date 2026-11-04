@@ -29,8 +29,8 @@ PROVENANCE_FIELDS = [
     ("config", "Training configuration"),
     ("figshare_model_file_id", "Figshare file id of model.pt (doi:10.6084/m9.figshare.31927956)"),
     ("figshare_data_file_id", "Figshare file id of the dataset"),
-    ("gcs_model", "Bucket copy of model.pt"),
-    ("gcs_data", "Bucket copy of the dataset"),
+    ("object_model", "Deposited object name of model.pt"),
+    ("object_data", "Deposited object name of the dataset"),
 ]
 
 
