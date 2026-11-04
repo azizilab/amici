@@ -305,6 +305,8 @@ figures:
       - benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py (2g)
       - xenium/segmentation_analysis.py (2h)
     note: >-
+      2h was replaced on 2026-11-03: the published render predated the p < 0.05 of the Methods and
+      the segmentation result for C15orf48.
       2e and 2f are spatial maps. 2b and 2d need a rerun: both plot from memory. 2a is the only panel
       in the manuscript that uses the earlier April-2025 Xenium model and its stromal-cell dataset,
       which source_data/checkpoints.yaml does not list; both are deposited and listed here.
