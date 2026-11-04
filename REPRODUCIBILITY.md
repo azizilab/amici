@@ -10,21 +10,6 @@ deposited workbooks contain. Renumbering this guide against the submitted figure
 
 Figures 1, S1 are schematics/diagrams and were not generated from data scripts.
 
-## Redrawn panels
-
-Four panels differ from what the analysis scripts draw, so each has a companion script that redraws it.
-For the three dot plots the analysis script still produces the panel itself -- the dots, their colour and
-size, the gene selection and the layout -- and the redraw script only recomputes the bold gene labels,
-which were applied by hand when the figure was assembled. None of them needs a model or a GPU: they read
-the cached ablation scores and the per-panel Source Data.
-
-| Panel | Drawn by | Redrawn by | What the redraw adds |
-| --- | --- | --- | --- |
-| Figure 4c | [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py) | [`xenium/redraw_fig4c.py`](xenium/redraw_fig4c.py) | Bold gene labels from the two-comparison segmentation test of the Methods; unbolds *C15orf48* |
-| Figure 5c | [`atera_breast/atera_breast_analysis.py`](atera_breast/atera_breast_analysis.py) | [`atera_breast/redraw_fig5c.py`](atera_breast/redraw_fig5c.py) | Bold gene labels; the published bolding matched the test for only 11 of 30 gene columns |
-| Figure 6c | [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) | [`human_tonsil/redraw_fig6c.py`](human_tonsil/redraw_fig6c.py) | Bold gene labels at the pixel-converted 20/100 µm thresholds |
-| Fig S5b (ED 1i) | [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py) | [`xenium/redraw_fig_s5b.py`](xenium/redraw_fig_s5b.py) | Drops the 15 structurally zero self-pairs, giving 210 points and ρ = 0.55 where the analysis script gives 225 and ρ = 0.582. The panel as first published reported ρ = 0.64 over 210 points, which neither the script nor the redraw reproduces; the paper now reports ρ = 0.55, which is the redraw's value and the one in the Source Data |
-
 ## Benchmarks
 
 **Base data**: The semisynthetic datasets are generated from the [Fresh 68k PBMCs (Donor A)](https://www.10xgenomics.com/datasets/fresh-68-k-pbm-cs-donor-a-1-standard-1-1-0) dataset, downloaded programmatically via `scvi.data.dataset_10x(dataset_name="fresh_68k_pbmc_donor_a")`.
@@ -272,7 +257,7 @@ Primary Xenium breast cancer analysis. Generates spatial distributions, interact
 
 - **Figure 4a**: Spatial scatter plots of both Xenium replicates (`visualize_spatial_distribution()`)
 - **Figure 4b**: Directed interaction networks — full and immune-tumor subset (`plot_interaction_directed_graph()`)
-- **Figure 4c**: Downstream gene dot plots for M1 macrophages, CD8 T cells and invasive tumor, one `plot_featurewise_contributions_dotplot()` block each, every receiver drawn over the same three senders (CD4 T cells, CD8 T cells, invasive tumor; a receiver is not ablated against itself) and over all heads. The bold gene labels are not produced here: see [`xenium/redraw_fig4c.py`](xenium/redraw_fig4c.py)
+- **Figure 4c**: Downstream gene dot plots for M1 macrophages, CD8 T cells and invasive tumor, one `plot_featurewise_contributions_dotplot()` block each, every receiver drawn over the same three senders (CD4 T cells, CD8 T cells, invasive tumor; a receiver is not ablated against itself) and over all heads. Genes passing the segmentation artifact test are bolded by the dot plot itself (`mark_segmentation_passing_genes`)
 - **Figure 4e** (top): Violin plot of inferred length scales per sender → receiver → head, restricted to heads with median radius in `(0, 50]` µm (`plot_length_scale_distribution()` with `attention_threshold=0.1`). Rows are ordered by **ascending median length scale**, so for CD4 T cells → CD8 T cells head 5 is the shorter-range head and head 4 the longer-range one
 - **Figure 4e** (bottom): Head-resolved neighbor contributions for the CD4 T cell → CD8 T cell pair on heads 4 and 5 (`get_neighbor_ablation_scores(..., head_idx=...)`)
 - **Fig S5c**: Explained variance by attention head (`plot_explained_variance_barplot()`)
@@ -413,7 +398,7 @@ Primary Atera breast cancer analysis. Generates the spatial overview, interactio
 
 - **Figure 5a**: Spatial scatter plot colored by cell type with the held-out test region boxed (`visualize_spatial_distribution()`)
 - **Figure 5b**: Interaction strength heatmap for all cell-type pairs
-- **Figure 5c**: Downstream gene dot plots for the Endothelial receiver (sender Pericytes), the CAF receiver (senders Macrophages and T cells) and the Luminal DCIS receiver (senders Myoepithelial and CAFs), one `plot_featurewise_contributions_dotplot()` block each at `n_top_genes=8`. The bold gene labels are not produced here: see [`atera_breast/redraw_fig5c.py`](atera_breast/redraw_fig5c.py)
+- **Figure 5c**: Downstream gene dot plots for the Endothelial receiver (sender Pericytes), the CAF receiver (senders Macrophages and T cells) and the Luminal DCIS receiver (senders Myoepithelial and CAFs), one `plot_featurewise_contributions_dotplot()` block each at `n_top_genes=8`. Genes passing the segmentation artifact test are bolded by the dot plot itself (`mark_segmentation_passing_genes`)
 - **Fig S38a–b**: CAF subclustering (UMAP, EMILIN1/C3 expression, spatial distribution)
 - **Fig S38c**: Log fold change for the top DEGs between high-attention senders of each CAF population
 
@@ -446,7 +431,7 @@ Primary human tonsil analysis. Generates the spatial overview, interaction netwo
 
 - **Figure 6a**: Spatial scatter plot colored by cell type with the held-out test region boxed (`visualize_spatial_distribution()`)
 - **Figure 6b**: Interaction network for cell types of interest, and the germinal center interaction heatmap
-- **Figure 6c**: Downstream gene dot plots for the GC B cell (resting) receiver (senders Tfh cell and follicular dendritic cell) and the CD4 T cell receiver (sender Fibroblast), one `plot_featurewise_contributions_dotplot()` block each, with the 20/100 µm segmentation thresholds converted from CosMx pixels. The bold gene labels are not produced here: see [`human_tonsil/redraw_fig6c.py`](human_tonsil/redraw_fig6c.py)
+- **Figure 6c**: Downstream gene dot plots for the GC B cell (resting) receiver (senders Tfh cell and follicular dendritic cell) and the CD4 T cell receiver (sender Fibroblast), one `plot_featurewise_contributions_dotplot()` block each, with the 20/100 µm segmentation thresholds converted from CosMx pixels. Genes flagged by the segmentation artifact test are dropped by the dot plot itself (`exclude_segmentation_flagged_genes`)
 - **Figure 6d**: The head-4 fibroblast → CD4 T cell interaction — that head's own ablation dot plot, where *CCR7* is the receiver gene, beside its effective pairwise radius distribution for fibroblast senders (median ≈ 27 µm). Both come from the `Fig. 6d` block, which writes into `figures/fig6d/`
 
 ### [`human_tonsil/human_tonsil_attention_consistency.py`](human_tonsil/human_tonsil_attention_consistency.py)

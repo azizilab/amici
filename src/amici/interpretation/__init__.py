@@ -1,4 +1,4 @@
-from ._ablation_module import AMICIAblationModule
+from ._ablation_module import AMICIAblationModule, segmentation_test_table
 from ._attention_module import AMICIAttentionModule
 from ._counterfactual_attention_module import AMICICounterfactualAttentionModule
 from ._explained_variance_module import AMICIExplainedVarianceModule
@@ -8,4 +8,5 @@ __all__ = [
     "AMICICounterfactualAttentionModule",
     "AMICIExplainedVarianceModule",
     "AMICIAblationModule",
+    "segmentation_test_table",
 ]

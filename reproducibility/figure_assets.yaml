@@ -135,7 +135,6 @@ figures:
       - xenium/xenium_subtyping_analysis.py (4d, supporting subpopulation analysis)
       - xenium/xenium_niche_analysis.py (4f)
       - xenium/segmentation_analysis.py (the test behind 4c's bold genes)
-      - xenium/redraw_fig4c.py (4c bold gene labels)
     note: >-
       4c is three dot plots, one block per receiver - M1 macrophages, CD8 T cells and invasive tumor
       - each drawn over the same three senders (CD4 T cells, CD8 T cells, invasive tumor; a receiver
@@ -144,7 +143,7 @@ figures:
       resolved per head, one block for head 4 and one for head 5; the panel draws GNLY, CAVIN2, SELL
       and LTB out of the genes those blocks select. Both panels' blocks are newer than the published
       figure. The bold gene labels of 4c were applied by hand at assembly, so no main-script block
-      produces them; redraw_fig4c.py recomputes them from the segmentation test.
+      bolds them through the segmentation artifact test of the Methods.
     assets:
       - kind: dataset
         object: xenium/data/xenium_sample1_filtered_2025-05-01.h5ad
@@ -181,13 +180,11 @@ figures:
     scripts:
       - atera_breast/atera_breast_analysis.py (5a, 5b, 5c)
       - atera_breast/atera_breast_segmentation_analysis.py (the test behind 5c's bold genes)
-      - atera_breast/redraw_fig5c.py (5c bold gene labels)
     note: >-
       5c is three dot plots, one block per receiver: Endothelial (sender Pericytes), CAFs
       (Macrophages and T cells) and Luminal DCIS (Myoepithelial and CAFs). The first two blocks are
       newer than the published figure; only the Luminal DCIS dot plot had code. The bold gene labels
-      were applied by hand at assembly, so no main-script block produces them; redraw_fig5c.py
-      recomputes them from the segmentation test.
+      are bolded by the dot plot itself, through the segmentation artifact test of the Methods.
     assets:
       - kind: dataset
         object: atera_breast/data/atera_breast_filtered_2026-07-22.h5ad
@@ -225,7 +222,6 @@ figures:
     panels: 6a-d
     scripts:
       - human_tonsil/human_tonsil_analysis.py (6a, 6b, 6c, 6d)
-      - human_tonsil/redraw_fig6c.py (6c bold gene labels)
     note: >-
       Every panel comes from the no-ribosomal retrain, not the published 1000-gene model. 6a is drawn
       from the dataset alone; the held-out model-selection region it marks is the test split. 6b-d
@@ -250,7 +246,6 @@ figures:
       - benchmarks/train_cgcom_model.py, train_ncem_model.py, train_gitiii_model.py (1d, 1e)
       - cortex/cortex_analysis.py (1g)
       - xenium/xenium_replicate_validation.py (1h)
-      - xenium/redraw_fig_s5b.py (1i)
     note: >-
       1a and 1b are schematics. 1d and 1e need a rerun: the published run kept only PR curves, not the
       per-method interaction scores or the baseline loss curves.
@@ -305,7 +300,7 @@ figures:
     scripts:
       - xenium/xenium_stromal_bleeding_analysis.py (2a)
       - xenium/xenium_analysis.py (2b)
-      - xenium/ed2c_volcano_bolding.py (2c)
+      - xenium/xenium_analysis.py (2c volcano labels and bolding)
       - xenium/xenium_lr_analysis.py (2d)
       - benchmarks/sensitivity_scripts/xenium_adjusted_cd8_tumor_effect.py (2g)
       - xenium/segmentation_analysis.py (2h)

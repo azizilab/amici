@@ -12,6 +12,7 @@ import distinctipy
 
 from scvi import REGISTRY_KEYS
 from amici import AMICI
+from amici.interpretation import segmentation_test_table
 from amici.interpretation._ablation_module import AMICIAblationModule
 from amici.interpretation import (
     AMICICounterfactualAttentionModule,
@@ -362,9 +363,7 @@ ablation_ct_residuals.plot_featurewise_contributions_dotplot(
 # %% Fig. 4c and 4e: dot plot settings
 # The block above is a head-4 ablation of one sender for one receiver, which is not what either
 # panel draws. Fig. 4c is three receivers, each over the same three senders and over all heads, and
-# the bottom of Fig. 4e is one receiver resolved per head, so each needs its own ablation. The bold
-# gene labels of Fig. 4c were applied by hand when the figure was assembled -- redraw_fig4c.py
-# recomputes them from the segmentation test instead.
+# the bottom of Fig. 4e is one receiver resolved per head, so each needs its own ablation.
 FIG4_SENDERS = ["CD4+_T_Cells", "CD8+_T_Cells", "Invasive_Tumor"]
 FIG4_DOTPLOT_KWARGS = {
     "color_by": "diff",
@@ -374,6 +373,10 @@ FIG4_DOTPLOT_KWARGS = {
     "step": 5,
     "save_svg": True,
     "save_png": True,
+    # Bold the genes that pass the segmentation artifact test of the Methods, which is what the
+    # published panel marks. The thresholds are the library defaults, 20 and 100 um at p < 0.05.
+    "mark_segmentation_passing_genes": True,
+    "segmentation_adata": adata,
 }
 
 
@@ -632,6 +635,17 @@ plt.tight_layout()
 plt.savefig(f"figures/xenium_sample1_proseg_length_scales_comparison_boxplot_interaction_colors.svg")
 plt.show()
 
+
+# %% ED 2c tables
+os.makedirs(VOLCANO_DIR, exist_ok=True)
+pd.concat([all_dots for all_dots, _ in volcano_tables], ignore_index=True).to_csv(
+    f"{VOLCANO_DIR}/ed2c_volcano_all_genes.csv", index=False
+)
+pd.concat([labeled for _, labeled in volcano_tables], ignore_index=True).to_csv(
+    f"{VOLCANO_DIR}/ed2c_labeled_genes.csv", index=False
+)
+print(f"wrote the ED 2c volcano tables to {VOLCANO_DIR}")
+
 # %% Plot the expression of a gene of interest and for a cell type of interest on the spatial plot
 gene = "GNLY"
 cell_type = "Endothelial"
@@ -656,6 +670,15 @@ scatter.get_legend().remove()
 plt.show()
 
 # %% For each receiver cell type, plot volcano plot with the diff on x and z values on y
+# ED 2c is these volcanoes for the immune and tumor receivers, labeled and bolded. The panel shows
+# the immune/tumor subset of Fig. 4b (right), each receiver over the other members of that subset.
+VOLCANO_N_TOP = 10
+VOLCANO_SUBSET = [
+    "Invasive_Tumor", "DCIS_1", "DCIS_2", "Macrophages_2", "Macrophages_1",
+    "CD8+_T_Cells", "CD4+_T_Cells", "B_Cells", "IRF7+_DCs", "LAMP3+_DCs",
+]
+VOLCANO_DIR = "figures/ed2c_volcano"
+volcano_tables = []
 for receiver_ct in adata.obs[labels_key].unique():
     print(f"Computing ablation scores for {receiver_ct}")
     ablation_scores = model.get_neighbor_ablation_scores(
@@ -708,6 +731,39 @@ for receiver_ct in adata.obs[labels_key].unique():
     plt.savefig(f"figures/diff_vs_zvalue_scatter_{receiver_ct}.svg", dpi=300, bbox_inches="tight")
     plt.show()
     print(f"Plotted volcano plot for {receiver_ct}")
+
+    # The ED 2c panel labels the top dots of each receiver and prints in bold those that pass the
+    # segmentation artifact test. Both are written out here so the panel has Source Data.
+    if receiver_ct not in VOLCANO_SUBSET:
+        continue
+    scores = ablation_scores._ablation_scores_df
+    long = pd.concat(
+        [
+            pd.DataFrame(
+                {
+                    "receiver": receiver_ct,
+                    "sender": sender_ct,
+                    "gene": scores["gene"].astype(str),
+                    "neighbor_contribution": scores[f"{sender_ct}_diff"],
+                    "wald_z": scores[f"{sender_ct}_z_value"],
+                }
+            )
+            for sender_ct in VOLCANO_SUBSET
+            if sender_ct != receiver_ct
+        ],
+        ignore_index=True,
+    )
+    labeled = long.nlargest(VOLCANO_N_TOP, "neighbor_contribution").copy()
+    labeled["rank_in_panel"] = range(1, len(labeled) + 1)
+    passing = segmentation_test_table(
+        labeled.groupby("sender")["gene"].apply(list).to_dict(), receiver_ct, adata, labels_key
+    )
+    labeled = labeled.merge(passing, on=["receiver", "sender", "gene"], how="left")
+    # A gene can be labeled twice in one subplot, once per sender; the published panel bolds both
+    # labels when it passes for either, so the bolding is taken over the receiver.
+    labeled["passes_segmentation"] = labeled["p_max"] < 0.05
+    labeled["bold_in_figure"] = labeled.groupby("gene")["passes_segmentation"].transform("any")
+    volcano_tables.append((long.assign(labeled=long.index.isin(labeled.index)), labeled))
     
     
 

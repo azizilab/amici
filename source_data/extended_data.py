@@ -99,10 +99,11 @@ ED1 = [
         "Correlation of interaction strengths between sections",
         CACHE,
         [
-            "xenium/figures/replicate_validation/Fig_S5b_redraw_points.csv",
-            "xenium/figures/replicate_validation/Fig_S5b_redraw_stats.csv",
+            "xenium/figures/replicate_validation/rep1_interaction_weight_matrix.csv",
+            "xenium/figures/replicate_validation/rep2_interaction_weight_matrix.csv",
         ],
-        "xenium/redraw_fig_s5b.py",
+        "xenium/xenium_replicate_validation.py",
+        "the scatter of the two matrices ED 1h exports, over the ordered pairs of distinct cell types",
     ),
 ]
 
@@ -110,7 +111,7 @@ ED1 = [
 ED2 = [
     Panel("a", "Interaction network including stromal cells", CACHE, ["xenium/figures/stromal_bleeding_analysis/cache/interaction_weight_matrix.csv"], "xenium/xenium_stromal_bleeding_analysis.py"),
     Panel("b", "Maximum explained variance per head and cell type", RECOMPUTE, [], "xenium/xenium_analysis.py"),
-    Panel("c", "Volcano plots per receiver cell type", CACHE, ["xenium/figures/ed2c_volcano_bolding"], "xenium/ed2c_volcano_bolding.py"),
+    Panel("c", "Volcano plots per receiver cell type", CACHE, ["xenium/figures/ed2c_volcano"], "xenium/xenium_analysis.py"),
     Panel("d", "Ligand-receptor overlap dot plot", RECOMPUTE, [], "xenium/xenium_lr_analysis.py"),
     Panel("e", "AGR3 subpopulation attention and expression", IMAGE),
     Panel("f", "ESR1 expression and attention maps", IMAGE),
@@ -374,12 +375,16 @@ EXPORTS: dict[str, list[dict]] = {
     "1g": [{"src": "source_data/panels/Fig3/Fig3b_full_matrix.csv", "dest": "ED1g_cortex_interaction_matrix.csv"}],
     "1h": [{"src": "xenium/figures/replicate_validation/rep1_interaction_weight_matrix.csv", "dest": "ED1h_replicate1_interaction_matrix.csv"},
            {"src": "xenium/figures/replicate_validation/rep2_interaction_weight_matrix.csv", "dest": "ED1h_replicate2_interaction_matrix.csv"}],
-    "1i": [{"src": "xenium/figures/replicate_validation/Fig_S5b_redraw_points.csv", "dest": "ED1i_replicate_correlation_points.csv"},
-           {"src": "xenium/figures/replicate_validation/Fig_S5b_redraw_stats.csv", "dest": "ED1i_replicate_correlation_stats.csv"}],
+    "1i": [{"srcs": ["xenium/figures/replicate_validation/rep1_interaction_weight_matrix.csv",
+                     "xenium/figures/replicate_validation/rep2_interaction_weight_matrix.csv"],
+            "dest": "ED1i_replicate_correlation_points.csv", "mode": "replicate_pairs"},
+           {"srcs": ["xenium/figures/replicate_validation/rep1_interaction_weight_matrix.csv",
+                     "xenium/figures/replicate_validation/rep2_interaction_weight_matrix.csv"],
+            "dest": "ED1i_replicate_correlation_stats.csv", "mode": "replicate_stats"}],
     # ED 2
     "2a": [{"src": "xenium/figures/stromal_bleeding_analysis/cache/interaction_weight_matrix.csv", "dest": "ED2a_interaction_matrix_with_stroma.csv"}],
-    "2c": [{"src": "xenium/figures/ed2c_volcano_bolding/ed2c_labeled_genes.csv", "dest": "ED2c_labeled_genes.csv"},
-           {"src": "xenium/figures/ed2c_volcano_bolding/ed2c_volcano_all_genes.csv", "dest": "ED2c_volcano_all_genes.csv"}],
+    "2c": [{"src": "xenium/figures/ed2c_volcano/ed2c_labeled_genes.csv", "dest": "ED2c_labeled_genes.csv"},
+           {"src": "xenium/figures/ed2c_volcano/ed2c_volcano_all_genes.csv", "dest": "ED2c_volcano_all_genes.csv"}],
     "2g": [{"src": "benchmarks/sensitivity_scripts/figures/xenium_adjusted_cd8_tumor_effect/cd8_tumor_adjusted_coefficients.csv", "dest": "ED2g_adjusted_coefficients.csv"},
            {"src": "benchmarks/sensitivity_scripts/figures/xenium_adjusted_cd8_tumor_effect/cd8_tumor_adjusted_spatial_values.csv", "dest": "ED2g_adjusted_spatial_values.csv"},
            {"src": "benchmarks/sensitivity_scripts/figures/xenium_adjusted_cd8_tumor_effect/cd8_tumor_adjustment_summary.csv", "dest": "ED2g_adjustment_summary.csv"}],
@@ -643,6 +648,33 @@ def _fibroblast_attention_groups(source: str, destination: str) -> int:
     return len(table)
 
 
+def _replicate_pairs(sources, destination, stats_only=False):
+    """ED 1i: the two replicate interaction matrices as the points the panel scatters.
+
+    The matrices are senders by receivers. A cell type against itself is structurally zero rather
+    than measured, so the diagonal is dropped, which is what makes the n = 210 ordered pairs the
+    legend gives rather than the 225 cells of the matrix.
+    """
+    import pandas as pd
+    from scipy import stats as sps
+
+    rep1, rep2 = (pd.read_csv(s, index_col=0) for s in sources)
+    rep2 = rep2.loc[rep1.index, rep1.columns]
+    rows = [
+        {"sender": s, "receiver": r, "replicate_1": rep1.loc[s, r], "replicate_2": rep2.loc[s, r]}
+        for s in rep1.index
+        for r in rep1.columns
+        if s != r
+    ]
+    table = pd.DataFrame(rows)
+    if stats_only:
+        rho, p = sps.spearmanr(table["replicate_1"], table["replicate_2"])
+        table = pd.DataFrame([{"panel": "ED 1i (diagonal dropped)", "n_pairs": len(table),
+                               "spearman_rho": rho, "spearman_pval": p}])
+    table.to_csv(destination, index=False)
+    return len(table)
+
+
 def _runtime_json_to_table(sources: list[str], destination: str) -> int:
     """Flatten the runtime benchmark JSONs into the table ED 5i plots.
 
@@ -692,12 +724,15 @@ def _export_one(spec: dict, out_dir: str) -> tuple[str, int]:
         table.to_csv(destination, index=False)
         return destination, len(table)
 
-    if spec.get("mode") in ("runtime_json", "weight_matrix_pairs", "ablation_pair_diff"):
+    if spec.get("mode") in ("runtime_json", "weight_matrix_pairs", "ablation_pair_diff",
+                            "replicate_pairs", "replicate_stats"):
         sources = [os.path.join(REPO_ROOT, src) for src in spec["srcs"]]
         handler = {
             "runtime_json": _runtime_json_to_table,
             "weight_matrix_pairs": _weight_matrices_to_pairs,
             "ablation_pair_diff": _ablation_pair_diff,
+            "replicate_pairs": _replicate_pairs,
+            "replicate_stats": lambda src, dest: _replicate_pairs(src, dest, stats_only=True),
         }[spec["mode"]]
         return destination, handler(sources, destination)
 

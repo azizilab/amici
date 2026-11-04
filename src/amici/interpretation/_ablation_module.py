@@ -27,6 +27,125 @@ if TYPE_CHECKING:
     from amici._model import AMICI
 
 
+def segmentation_test_table(
+    genes_by_sender,
+    receiver_type,
+    adata,
+    labels_key,
+    near_threshold=20.0,
+    far_threshold=100.0,
+    coord_obsm_key="spatial",
+    compare_near_senders=False,
+):
+    """Per-gene results of the segmentation artifact test, as a tidy table.
+
+    A gene is attributed to an interaction rather than to segmentation when expression in the
+    receivers that border a sender is significantly higher than in both distant senders and
+    distant receivers (one-sided Mann-Whitney U), so the reported ``p_max`` is the larger of the
+    two one-sided p-values and a gene passes when it falls below the threshold. The Methods
+    describe this as rejecting the null in both comparisons.
+
+    With ``compare_near_senders``, interacting receivers must also exceed the senders lying
+    within ``near_threshold`` of a receiver, and ``p_max`` is the largest of three. The two
+    comparisons above pass a gene that only the senders bordering the receiver express, such as
+    CCL19 and CCL21 from T-zone fibroblasts next to CD4 T cells in the tonsil: distant senders
+    and distant receivers both lack it, and spillover puts it in the interacting receivers.
+    Spillover leaves those receivers below the senders they border, which this comparison
+    detects.
+
+    Every cell of each group is used. The groups used to be subsampled to the smallest of them,
+    seeded by ``hash((sender, receiver))``, which did three kinds of damage: it tied each
+    comparison to a group it does not use, where a sender type that is sparse next to a
+    tissue-wide receiver leaves almost no distant senders and starves the near-vs-distant-receiver
+    test; it made the result depend on the draw; and because ``hash`` is salted per process, the
+    draw itself was not reproducible without PYTHONHASHSEED. Mann-Whitney U does not require
+    equal group sizes.
+
+    A pair whose groups are too small to test is returned with NaN p-values, so it never passes.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per sender and gene, with the group sizes, each comparison's p-value and
+        ``p_max``.
+    """
+    if adata is None:
+        raise ValueError("segmentation_adata must be provided to run the segmentation artifact test.")
+    if coord_obsm_key not in adata.obsm:
+        raise KeyError(f"{coord_obsm_key!r} not found in segmentation_adata.obsm.")
+    if labels_key not in adata.obs:
+        raise KeyError(f"{labels_key!r} not found in segmentation_adata.obs.")
+
+    labels = adata.obs[labels_key].astype(str)
+    receiver_mask = labels == str(receiver_type)
+    if receiver_mask.sum() == 0:
+        return pd.DataFrame()
+
+    coords = np.asarray(adata.obsm[coord_obsm_key])
+    receiver_coords = coords[receiver_mask.to_numpy()]
+    receiver_indices = np.flatnonzero(receiver_mask.to_numpy())
+    receiver_tree = cKDTree(receiver_coords)
+    rows = []
+
+    def dense_expression(cell_indices, gene_indices):
+        expression = adata.X[cell_indices][:, gene_indices]
+        return np.asarray(expression.toarray() if hasattr(expression, "toarray") else expression)
+
+    for sender_type, genes in genes_by_sender.items():
+        genes = [gene for gene in genes if gene in adata.var_names]
+        if len(genes) == 0:
+            continue
+
+        sender_mask = labels == str(sender_type)
+        if sender_mask.sum() == 0:
+            continue
+
+        gene_indices = [adata.var_names.get_loc(gene) for gene in genes]
+        sender_coords = coords[sender_mask.to_numpy()]
+        sender_indices = np.flatnonzero(sender_mask.to_numpy())
+        # Nearest-neighbour distances from KD-trees: the full receiver x sender distance matrix
+        # runs to tens of GB for tissue-wide cell types (18 GB for tonsil CD4 T cells x fibroblasts).
+        min_receiver_to_sender = cKDTree(sender_coords).query(receiver_coords, k=1)[0]
+        min_sender_to_receiver = receiver_tree.query(sender_coords, k=1)[0]
+        near_receiver_indices = receiver_indices[min_receiver_to_sender <= near_threshold]
+        far_receiver_indices = receiver_indices[min_receiver_to_sender >= far_threshold]
+        far_sender_indices = sender_indices[min_sender_to_receiver >= far_threshold]
+        near_sender_indices = sender_indices[min_sender_to_receiver <= near_threshold]
+
+        comparisons = [
+            ("p_near_vs_distant_senders", far_sender_indices),
+            ("p_near_vs_distant_receivers", far_receiver_indices),
+        ]
+        if compare_near_senders:
+            comparisons.append(("p_near_vs_bordering_senders", near_sender_indices))
+
+        sizes = {
+            "n_near_receivers": len(near_receiver_indices),
+            "n_distant_senders": len(far_sender_indices),
+            "n_distant_receivers": len(far_receiver_indices),
+        }
+        if compare_near_senders:
+            sizes["n_bordering_senders"] = len(near_sender_indices)
+
+        testable = len(near_receiver_indices) > 1 and all(len(idx) > 1 for _, idx in comparisons)
+        if testable:
+            near_expr = dense_expression(near_receiver_indices, gene_indices)
+            comparison_exprs = [(name, dense_expression(idx, gene_indices)) for name, idx in comparisons]
+
+        for idx, gene in enumerate(genes):
+            row = {"receiver": str(receiver_type), "sender": str(sender_type), "gene": str(gene), **sizes}
+            if testable:
+                for name, expr in comparison_exprs:
+                    row[name] = mannwhitneyu(near_expr[:, idx], expr[:, idx], alternative="greater")[1]
+            else:
+                for name, _ in comparisons:
+                    row[name] = np.nan
+            row["p_max"] = max(row[name] for name, _ in comparisons)
+            rows.append(row)
+
+    return pd.DataFrame(rows)
+
+
 @dataclass
 class AMICIAblationModule:
     _adata: AnnData | None = None
@@ -689,6 +808,10 @@ class AMICIAblationModule:
         if show:
             plt.show()
 
+    def segmentation_test_table(self, genes_by_sender, receiver_type, adata, **kwargs):
+        """:func:`segmentation_test_table` for this module's labels key."""
+        return segmentation_test_table(genes_by_sender, receiver_type, adata, self._labels_key, **kwargs)
+
     def _get_segmentation_passing_gene_pairs(
         self,
         genes_by_sender,
@@ -700,86 +823,24 @@ class AMICIAblationModule:
         coord_obsm_key="spatial",
         compare_near_senders=False,
     ):
-        """Return sender-gene pairs that pass the segmentation artifact test.
+        """Sender-gene pairs that pass the segmentation artifact test, i.e. are NOT artifacts.
 
-        A pair passes when expression in interacting receivers is significantly higher than in
-        both distant senders and distant receivers (both one-sided Mann-Whitney U p-values below
-        ``pval_threshold``), so its elevated expression is unlikely to be a segmentation artifact.
-        Pairs that pass are therefore the ones that are NOT potential artifacts; the Methods
-        describe this as rejecting the null hypothesis in both comparisons.
-
-        With ``compare_near_senders``, interacting receivers must also exceed the senders lying
-        within ``near_threshold`` of a receiver. The two comparisons above pass a gene that only
-        the senders bordering the receiver express, such as CCL19 and CCL21 from T-zone
-        fibroblasts next to CD4 T cells in the tonsil: distant senders and distant receivers both
-        lack it, and spillover puts it in the interacting receivers. Spillover leaves those
-        receivers below the senders they border, which this third comparison detects.
+        A thin filter over :meth:`segmentation_test_table`; see it for the comparisons. A pair whose
+        groups were too small to test has a NaN ``p_max`` and so does not pass.
         """
-        if adata is None:
-            raise ValueError("segmentation_adata must be provided to run the segmentation artifact test.")
-        if coord_obsm_key not in adata.obsm:
-            raise KeyError(f"{coord_obsm_key!r} not found in segmentation_adata.obsm.")
-        if self._labels_key not in adata.obs:
-            raise KeyError(f"{self._labels_key!r} not found in segmentation_adata.obs.")
-
-        labels = adata.obs[self._labels_key].astype(str)
-        receiver_mask = labels == str(receiver_type)
-        if receiver_mask.sum() == 0:
+        table = self.segmentation_test_table(
+            genes_by_sender,
+            receiver_type,
+            adata,
+            near_threshold=near_threshold,
+            far_threshold=far_threshold,
+            coord_obsm_key=coord_obsm_key,
+            compare_near_senders=compare_near_senders,
+        )
+        if len(table) == 0:
             return set()
-
-        coords = np.asarray(adata.obsm[coord_obsm_key])
-        receiver_coords = coords[receiver_mask.to_numpy()]
-        receiver_indices = np.flatnonzero(receiver_mask.to_numpy())
-        receiver_tree = cKDTree(receiver_coords)
-        passing_pairs = set()
-
-        def dense_expression(cell_indices, gene_indices):
-            expression = adata.X[cell_indices][:, gene_indices]
-            return np.asarray(expression.toarray() if hasattr(expression, "toarray") else expression)
-
-        for sender_type, genes in genes_by_sender.items():
-            genes = [gene for gene in genes if gene in adata.var_names]
-            if len(genes) == 0:
-                continue
-
-            sender_mask = labels == str(sender_type)
-            if sender_mask.sum() == 0:
-                continue
-
-            gene_indices = [adata.var_names.get_loc(gene) for gene in genes]
-            sender_coords = coords[sender_mask.to_numpy()]
-            sender_indices = np.flatnonzero(sender_mask.to_numpy())
-            # Nearest-neighbour distances from KD-trees: the full receiver x sender distance matrix
-            # runs to tens of GB for tissue-wide cell types (18 GB for tonsil CD4 T cells x fibroblasts).
-            min_receiver_to_sender = cKDTree(sender_coords).query(receiver_coords, k=1)[0]
-            min_sender_to_receiver = receiver_tree.query(sender_coords, k=1)[0]
-            near_receiver_indices = receiver_indices[min_receiver_to_sender <= near_threshold]
-            far_receiver_indices = receiver_indices[min_receiver_to_sender >= far_threshold]
-            far_sender_indices = sender_indices[min_sender_to_receiver >= far_threshold]
-            comparison_indices = [far_sender_indices, far_receiver_indices]
-            if compare_near_senders:
-                comparison_indices.append(sender_indices[min_sender_to_receiver <= near_threshold])
-            if len(near_receiver_indices) < 2 or any(len(indices) < 2 for indices in comparison_indices):
-                continue
-
-            # Every cell of each group is used. The three groups used to be subsampled to the
-            # smallest of them, seeded by ``hash((sender, receiver))``, which did three kinds of
-            # damage: it tied each comparison to a group it does not use, where a sender type that
-            # is sparse next to a tissue-wide receiver leaves almost no distant senders and starves
-            # the near-vs-distant-receiver test; it made the result depend on the draw; and because
-            # ``hash`` is salted per process, the draw itself was not reproducible without
-            # PYTHONHASHSEED. Mann-Whitney U does not require equal group sizes.
-            near_expr = dense_expression(near_receiver_indices, gene_indices)
-            comparison_exprs = [dense_expression(indices, gene_indices) for indices in comparison_indices]
-
-            for idx, gene in enumerate(genes):
-                pvals = [
-                    mannwhitneyu(near_expr[:, idx], comparison_expr[:, idx], alternative="greater")[1]
-                    for comparison_expr in comparison_exprs
-                ]
-                if max(pvals) < pval_threshold:
-                    passing_pairs.add((str(sender_type), str(gene)))
-        return passing_pairs
+        passing = table[table["p_max"] < pval_threshold]
+        return set(zip(passing["sender"], passing["gene"], strict=True))
 
     def _get_dotplot_top_genes(
         self,
