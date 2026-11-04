@@ -25,7 +25,7 @@ the cached ablation scores and the per-panel Source Data.
 | Figure 4c | [`xenium/xenium_analysis.py`](xenium/xenium_analysis.py) | [`xenium/redraw_fig4c.py`](xenium/redraw_fig4c.py) | Bold gene labels from the two-comparison segmentation test of the Methods; unbolds *C15orf48* |
 | Figure 5c | [`atera_breast/atera_breast_analysis.py`](atera_breast/atera_breast_analysis.py) | [`atera_breast/redraw_fig5c.py`](atera_breast/redraw_fig5c.py) | Bold gene labels; the published bolding matched the test for only 11 of 30 gene columns |
 | Figure 6c | [`human_tonsil/human_tonsil_analysis.py`](human_tonsil/human_tonsil_analysis.py) | [`human_tonsil/redraw_fig6c.py`](human_tonsil/redraw_fig6c.py) | Bold gene labels at the pixel-converted 20/100 µm thresholds |
-| Fig S5b (ED 1i) | [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py) | [`xenium/redraw_fig_s5b.py`](xenium/redraw_fig_s5b.py) | Drops the 15 structurally zero self-pairs, giving the published 210 points and ρ = 0.64 rather than 225 and ρ = 0.582 |
+| Fig S5b (ED 1i) | [`xenium/xenium_replicate_validation.py`](xenium/xenium_replicate_validation.py) | [`xenium/redraw_fig_s5b.py`](xenium/redraw_fig_s5b.py) | Drops the 15 structurally zero self-pairs, giving 210 points and ρ = 0.55 where the analysis script gives 225 and ρ = 0.582. The panel as first published reported ρ = 0.64 over 210 points, which neither the script nor the redraw reproduces; the paper now reports ρ = 0.55, which is the redraw's value and the one in the Source Data |
 
 ## Benchmarks
 

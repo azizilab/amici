@@ -1,10 +1,13 @@
 """Redraw Fig. S5b from the exported replicate interaction-weight matrices, diagonal dropped.
 
-The published panel reports rho = 0.64 over 210 points, which matches neither the value nor the point
-count that xenium_replicate_validation.py produces (rho = 0.582 over 225 points, because it flattens the
-full matrix and so plots the 15 structurally zero self-pairs). The code behind the published panel is not
-in the repository, so the panel is redrawn here from the committed method with the diagonal excluded:
-210 cell-type pairs, which is both the statistically correct set and the published point count.
+The panel as first published reported rho = 0.64 over 210 points, which matches neither the value nor the
+point count that xenium_replicate_validation.py produces (rho = 0.582 over 225 points, because it flattens
+the full matrix and so plots the 15 structurally zero self-pairs). The code behind that panel is not in the
+repository, so the panel is redrawn here from the committed method with the diagonal excluded: 210
+cell-type pairs, which is both the statistically correct set and the published point count.
+
+That gives rho = 0.5450 (p = 1.20e-17), which is what the manuscript now reports as rho = 0.55 and what the
+Source Data carries. The 0.64 of the first submission is not reproducible from any version of this code.
 
 Reads the matrices exported by the replicate rerun, so it needs no model and no GPU.
 """

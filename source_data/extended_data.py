@@ -135,7 +135,17 @@ ED3 = [
     Panel("f", "Length-scale bootstrap over sender cells", CACHE, ["benchmarks/sensitivity_scripts/figures/length_scale_uncertainty"], "benchmarks/sensitivity_scripts/length_scale_uncertainty.py"),
     Panel("g", "Length scales over 50 PBMC dataset replicates", CACHE, ["benchmarks/sensitivity_scripts/figures/length_scale_dataset_bootstrap_ci"], "benchmarks/sensitivity_scripts/length_scale_dataset_bootstrap_ci.py"),
     Panel("h", "Length scales over 10 realistic dataset replicates", CACHE, ["benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci"], "benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py"),
-    Panel("i", "Cell-type population counts, realistic dataset", CACHE, ["benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci"], "benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py"),
+    Panel(
+        "i",
+        "Cell-type population counts, realistic dataset",
+        CACHE,
+        ["benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci/realistic_cell_type_composition.csv"],
+        "benchmarks/sensitivity_scripts/realistic_length_scale_dataset_bootstrap_ci.py",
+        "plot_cell_type_composition writes this table; the per-seed datasets it reads were not kept, so it was "
+        "rebuilt from benchmarks/data/breast_cancer_42.h5ad, which carries the same cell positions and labels "
+        "(the composition is the Xenium tissue's and does not vary with the dataset seed). Every count and "
+        "percentage matches the labels drawn on the published panel.",
+    ),
     Panel("j", "Length scales under coordinate shuffling", CACHE, [
             "benchmarks/sensitivity_scripts/figures/length_scale_coordinate_0p3_shuffle_sensitivity",
             "benchmarks/sensitivity_scripts/figures/length_scale_coordinate_0p5_shuffle_sensitivity",
@@ -385,7 +395,7 @@ EXPORTS: dict[str, list[dict]] = {
            {"src": "benchmarks/sensitivity_scripts/figures/length_scale_dataset_bootstrap_ci/length_scale_dataset_bootstrap_ci.csv", "dest": "ED3g_pbmc_bootstrap_ci.csv"}],
     "3h": [{"src": "benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci/length_scale_samples.csv", "dest": "ED3h_realistic_replicate_samples.csv"},
            {"src": "benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci/realistic_length_scale_dataset_bootstrap_ci.csv", "dest": "ED3h_realistic_bootstrap_ci.csv"}],
-    "3i": [{"src": "benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci/length_scale_model_estimates.csv", "dest": "ED3i_realistic_model_estimates.csv"}],
+    "3i": [{"src": "benchmarks/sensitivity_scripts/figures/realistic_length_scale_dataset_bootstrap_ci/realistic_cell_type_composition.csv", "dest": "ED3i_realistic_cell_type_composition.csv"}],
     "3j": [{"glob": "benchmarks/sensitivity_scripts/figures/length_scale_coordinate_*_shuffle_sensitivity/*_estimates.csv",
             "dest": "ED3j_coordinate_shuffle_estimates.csv", "key": "source", "mode": "concat"}],
     # ED 4
