@@ -423,8 +423,7 @@ ablation_ct_residuals.plot_featurewise_contributions_dotplot(
 # %% Fig. 5c: the Endothelial and CAF receivers
 # The block above is the Luminal DCIS third of Fig. 5c; receiver_ct is never reassigned, so the
 # other two dot plots of the panel had no code. Senders and n_top_genes are those of the published
-# panel. The bold gene labels the legend describes were applied by hand when the figure was
-# assembled -- redraw_fig5c.py recomputes them from the segmentation test instead.
+# panel. The bold gene labels the legend describes come from mark_segmentation_passing_genes below.
 FIG5C_DOTPLOT_KWARGS = {
     "color_by": "diff",
     "size_by": "z_value",

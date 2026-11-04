@@ -77,7 +77,7 @@ CHECKPOINTS = {
         "object_data": "atera_breast/data/atera_breast_filtered_2026-07-22.h5ad",
     },
     "human_tonsil": {
-        "figures": ["Fig. 6a-d"],
+        "figures": ["ED 6a", "ED 7b", "ED 10f", "ED 10g"],
         "data": "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad",
         "data_md5": "8a7e318a95e517942fda74a584eeb597",
         "model": "human_tonsil/saved_models/human_tonsil_sweep_2026-07-25_model_2026-07-26/"
@@ -93,12 +93,34 @@ CHECKPOINTS = {
         "object_model": "human_tonsil/saved_models/human_tonsil_40_sweep_0f9rk0na_4303v0zu_params_2026-07-26/model.pt",
         "object_data": "human_tonsil/data/human_tonsil_filtered_2026-07-25.h5ad",
     },
+    # The 992-gene retrain every Fig. 6 panel comes from. The 1000-gene entry above stays rather than
+    # being replaced: ED 6a sets the two models against each other, and ED 7b, 10f and 10g are still
+    # drawn from the published one.
+    "human_tonsil_no_ribo": {
+        "figures": ["Fig. 6a-d", "ED 6a-c"],
+        "data": "human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad",
+        "data_md5": "5deb0af78f2b9b98276428d2df19be04",
+        "model": "human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40",
+        "model_md5": "b06237db3d38002ee7fd4da74197c5b2",
+        # Trained by human_tonsil_no_ribo_retrain.py at the hyperparameters of the sweep below rather
+        # than as a run within it, so the sweep is recorded and there is no run id.
+        "wandb_sweep": "0f9rk0na (hyperparameters only)",
+        "wandb_run": "not a sweep run; see human_tonsil/human_tonsil_no_ribo_retrain.py",
+        "config": "reproducibility/human_tonsil_config.yaml",
+        "labels_key": "celltype_manual_fine",
+        "seed": 40,
+        "figshare_model_file_id": None,
+        "figshare_data_file_id": None,
+        "object_model": "human_tonsil/saved_models/human_tonsil_no_ribo_retrain/seed_40/model.pt",
+        "object_data": "human_tonsil/data/human_tonsil_filtered_no_ribo_2026-07-25.h5ad",
+    },
 }
 
 ABLATION_CACHES = {
     "xenium": "xenium/figures/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
     "atera_breast": "atera_breast/figures/atera_breast_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
     "human_tonsil": "human_tonsil/figures/human_tonsil_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
+    "human_tonsil_no_ribo": "human_tonsil/figures/human_tonsil_no_ribo_analysis/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
     "cortex": "cortex/figures/cached_ablation_scores/all_cell_types_ablation_scores.pkl",
 }
 
@@ -238,6 +260,61 @@ def dotplot_panel(gene_table, receiver, senders, genes, panel_label, extra=None)
     if extra is not None:
         out = out.merge(extra, on=["receiver", "sender", "gene"], how="left")
     return out
+
+
+def box_statistics(values, axis_clip=None):
+    """Every number the legends promise for one box or violin, on the Tukey convention they state.
+
+    The legends define the whiskers as reaching the most extreme observation within 1.5 times the
+    interquartile range of the nearer box edge, with anything past them drawn individually. That makes
+    the whisker ends data points rather than q1 - 1.5*IQR and q3 + 1.5*IQR, which is what a reader
+    checking the panel against the sheet would measure, so they are reported as such and the count
+    beyond them is given alongside.
+
+    ``axis_clip`` records the axis limit the panel is drawn to, so a reader can tell a tail that runs
+    off the panel from one that is not there; it does not affect any statistic.
+    """
+    import numpy as np
+
+    v = np.asarray(values, dtype=float)
+    v = v[np.isfinite(v)]
+    q1, median, q3 = np.percentile(v, [25, 50, 75])
+    iqr = q3 - q1
+    lo_fence, hi_fence = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    inside = v[(v >= lo_fence) & (v <= hi_fence)]
+    whisker_low = float(inside.min()) if inside.size else float(v.min())
+    whisker_high = float(inside.max()) if inside.size else float(v.max())
+    stats = {
+        "n": int(v.size),
+        "mean": float(v.mean()),
+        "std": float(v.std(ddof=1)) if v.size > 1 else float("nan"),
+        "min": float(v.min()),
+        "q1": float(q1),
+        "median": float(median),
+        "q3": float(q3),
+        "max": float(v.max()),
+        "whisker_low": whisker_low,
+        "whisker_high": whisker_high,
+        "n_outliers_below": int((v < whisker_low).sum()),
+        "n_outliers_above": int((v > whisker_high).sum()),
+        "n_outliers": int(((v < whisker_low) | (v > whisker_high)).sum()),
+    }
+    if axis_clip is not None:
+        stats["axis_clip"] = float(axis_clip)
+        stats["n_beyond_axis_clip"] = int((v > axis_clip).sum())
+    return stats
+
+
+def box_statistics_frame(frame, group_cols, value_col, axis_clip=None):
+    """box_statistics for every group, as a tidy table in the group order given."""
+    import pandas as pd
+
+    rows = []
+    for key, group in frame.groupby(group_cols, sort=False):
+        keys = key if isinstance(key, tuple) else (key,)
+        rows.append({**dict(zip(group_cols, keys, strict=True)),
+                     **box_statistics(group[value_col], axis_clip=axis_clip)})
+    return pd.DataFrame(rows)
 
 
 def check_gene_list(label, computed, published):

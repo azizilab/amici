@@ -12,7 +12,7 @@ import pytorch_lightning as pl
 import scanpy as sc
 from matplotlib.colors import Normalize
 from scipy import sparse
-from scipy.spatial.distance import cdist
+from scipy.spatial import cKDTree
 from scipy.stats import mannwhitneyu
 from tqdm import tqdm
 from omnipath.interactions import import_intercell_network
@@ -32,7 +32,7 @@ SIGNIFICANCE_THRESHOLD = 2  # -log10(pval_adj) > 2 means p < 0.01
 DIFF_THRESHOLD = 0  # diff > 0 means positive neighbor contribution
 SEGMENTATION_NEAR_THRESHOLD = 20.0  # microns — receivers within this distance of a sender
 SEGMENTATION_FAR_THRESHOLD = 100.0  # microns — senders at least this far from all receivers
-SEGMENTATION_PVAL_THRESHOLD = 0.1  # Mann-Whitney U test threshold
+SEGMENTATION_PVAL_THRESHOLD = 0.05  # Mann-Whitney U test threshold, the p of the Methods
 
 # %% Load data and model
 adata = sc.read_h5ad(f"./data/xenium_sample1/xenium_sample1_filtered_{data_date}.h5ad")
@@ -177,10 +177,13 @@ lr_sig_df.sort_values(["interaction", "nl10_pval_adj"], ascending=[True, False])
 print(f"Saved {csv_path}")
 
 # %% Segmentation artifact test (Mann-Whitney U) — cached
-# For each (sender, receiver, gene) triple, test whether receiver expression near
-# senders is greater than sender expression far from receivers.  Genes that fail
-# to reject the null may reflect segmentation leakage rather than true interactions.
-seg_cache_path = os.path.join(CACHE_DIR, "lr_sig_df_with_seg.parquet")
+# The test of the Methods, which is the one the Extended Data Fig. 2d legend points at: expression on
+# receivers bordering a sender has to beat BOTH distant senders and distant receivers, and the reported
+# p is the larger of the two one-sided p-values. Until 2026-11-04 this script ran only the first of the
+# two comparisons, and at p < 0.1 rather than the 0.05 of the Methods, so it admitted genes the Methods
+# exclude. The distant-receiver comparison is what rejects a gene the receiver cell type expresses
+# everywhere, which the sender comparison alone cannot see.
+seg_cache_path = os.path.join(CACHE_DIR, "lr_sig_df_with_seg_two_sided_p05.parquet")
 
 if os.path.exists(seg_cache_path):
     print(f"\nLoading cached segmentation results from {seg_cache_path}")
@@ -191,58 +194,60 @@ else:
     X_dense = adata.X.toarray() if sparse.issparse(adata.X) else adata.X
     spatial = adata.obsm["spatial"]
 
-    seg_results = {}  # (sender, receiver, gene) -> mannwhitney p-value
-    tested_pairs_cache = {}  # (sender, receiver) -> {near_receiver_idx, far_sender_idx}
+    seg_results = {}  # (sender, receiver, gene) -> (p_vs_far_sender, p_vs_far_receiver)
+    tested_pairs_cache = {}  # (sender, receiver) -> near receivers, distant senders, distant receivers
 
     for _, row in tqdm(lr_sig_df.iterrows(), total=len(lr_sig_df), desc="Segmentation test"):
         sender, receiver, gene = row["sender"], row["receiver"], row["gene"]
         pair_key = (sender, receiver)
 
         if pair_key not in tested_pairs_cache:
-            sender_mask = adata.obs[labels_key] == sender
-            receiver_mask = adata.obs[labels_key] == receiver
-            sender_coords = spatial[sender_mask].values
-            receiver_coords = spatial[receiver_mask].values
+            sender_mask = (adata.obs[labels_key] == sender).to_numpy()
+            receiver_mask = (adata.obs[labels_key] == receiver).to_numpy()
+            sender_coords = spatial[sender_mask]
+            receiver_coords = spatial[receiver_mask]
+            sender_coords = sender_coords.values if hasattr(sender_coords, "values") else sender_coords
+            receiver_coords = receiver_coords.values if hasattr(receiver_coords, "values") else receiver_coords
 
-            # Near receivers: receivers within threshold of any sender
-            dist_r2s = cdist(receiver_coords, sender_coords)
-            near_mask = dist_r2s.min(axis=1) <= SEGMENTATION_NEAR_THRESHOLD
-            near_idx = np.where(receiver_mask)[0][near_mask]
+            # A KD-tree keeps this linear in memory; the full pairwise matrix is tens of GB for the
+            # abundant cell types, and both distances are needed now rather than one.
+            min_to_senders, _ = cKDTree(sender_coords).query(receiver_coords, k=1)
+            min_to_receivers, _ = cKDTree(receiver_coords).query(sender_coords, k=1)
+            near_idx = np.where(receiver_mask)[0][min_to_senders <= SEGMENTATION_NEAR_THRESHOLD]
+            far_r_idx = np.where(receiver_mask)[0][min_to_senders >= SEGMENTATION_FAR_THRESHOLD]
+            far_s_idx = np.where(sender_mask)[0][min_to_receivers >= SEGMENTATION_FAR_THRESHOLD]
 
-            # Far senders: senders at least threshold from all receivers
-            dist_s2r = cdist(sender_coords, receiver_coords)
-            far_mask = dist_s2r.min(axis=1) >= SEGMENTATION_FAR_THRESHOLD
-            far_idx = np.where(sender_mask)[0][far_mask]
-
-            # Both groups are used in full. Mann-Whitney U does not require equal group sizes, and
-            # subsampling to the smaller one made the p-value depend on the draw (see
+            # Every group is used in full. Mann-Whitney U does not require equal group sizes, and
+            # subsampling to the smallest made the p-value depend on the draw (see
             # source_data/_common.py).
-            tested_pairs_cache[pair_key] = {"near": near_idx, "far": far_idx}
+            tested_pairs_cache[pair_key] = {"near": near_idx, "far_s": far_s_idx, "far_r": far_r_idx}
 
         cache = tested_pairs_cache[pair_key]
-        near_idx, far_idx = cache["near"], cache["far"]
+        near_idx, far_s_idx, far_r_idx = cache["near"], cache["far_s"], cache["far_r"]
 
-        if len(near_idx) < 2 or len(far_idx) < 2:
-            seg_results[(sender, receiver, gene)] = np.nan
+        if min(len(near_idx), len(far_s_idx), len(far_r_idx)) < 2:
+            seg_results[(sender, receiver, gene)] = (np.nan, np.nan)
             continue
 
         gene_idx = adata.var_names.get_loc(gene)
         near_vals = X_dense[near_idx, gene_idx]
-        far_vals = X_dense[far_idx, gene_idx]
+        _, p_sender = mannwhitneyu(near_vals, X_dense[far_s_idx, gene_idx], alternative="greater")
+        _, p_receiver = mannwhitneyu(near_vals, X_dense[far_r_idx, gene_idx], alternative="greater")
+        seg_results[(sender, receiver, gene)] = (p_sender, p_receiver)
 
-        _, pval = mannwhitneyu(near_vals, far_vals, alternative="greater")
-        seg_results[(sender, receiver, gene)] = pval
-
-    lr_sig_df["seg_pval"] = lr_sig_df.apply(
-        lambda r: seg_results.get((r["sender"], r["receiver"], r["gene"]), np.nan), axis=1
+    pairs = lr_sig_df.apply(
+        lambda r: seg_results.get((r["sender"], r["receiver"], r["gene"]), (np.nan, np.nan)), axis=1
     )
+    lr_sig_df["seg_p_near_vs_far_sender"] = [p[0] for p in pairs]
+    lr_sig_df["seg_p_near_vs_far_receiver"] = [p[1] for p in pairs]
+    lr_sig_df["seg_pval"] = lr_sig_df[["seg_p_near_vs_far_sender", "seg_p_near_vs_far_receiver"]].max(axis=1)
     lr_sig_df["passes_seg_test"] = lr_sig_df["seg_pval"] < SEGMENTATION_PVAL_THRESHOLD
     lr_sig_df.to_parquet(seg_cache_path)
     print(f"Cached segmentation results to {seg_cache_path}")
 
 n_pass = lr_sig_df["passes_seg_test"].sum()
 n_total = lr_sig_df["passes_seg_test"].notna().sum()
-print(f"Segmentation test: {n_pass}/{n_total} gene-pair entries pass (p < {SEGMENTATION_PVAL_THRESHOLD})")
+print(f"Segmentation test: {n_pass}/{n_total} gene-pair entries pass (both comparisons at p < {SEGMENTATION_PVAL_THRESHOLD})")
 
 # Save CSV with segmentation results
 lr_sig_df.sort_values(["interaction", "nl10_pval_adj"], ascending=[True, False]).to_csv(
